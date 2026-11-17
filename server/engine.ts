@@ -226,6 +226,36 @@ export type Transition = {
   activates_owner?: boolean;
 };
 
+// Who may write this event type. `null` means the type is not a legal event, which is
+// a validation failure rather than a permission one.
+const UP_TO_REFERRAL: readonly Role[] = [
+  "coordination_staff",
+  "navigator",
+  "responsible_physician",
+];
+
+const EVENT_ROLES: Readonly<Record<string, readonly Role[]>> = {
+  colonoscopy_booked: UP_TO_REFERRAL,
+  pathology_ordered: UP_TO_REFERRAL,
+  pathology_received: UP_TO_REFERRAL,
+  closure_proposed: UP_TO_REFERRAL,
+  referral_rejected: UP_TO_REFERRAL,
+  // Backward paths and closure are clinical acts.
+  procedure_incomplete: ["responsible_physician"],
+  closure_confirmed: ["responsible_physician"],
+  case_closed: ["responsible_physician"],
+  reopened: ["responsible_physician"],
+};
+
+export function rolesForEvent(type: string): readonly Role[] | null {
+  return EVENT_ROLES[type] ?? null;
+}
+
+export function isValidOutcome(key: unknown): key is string {
+  return typeof key === "string" && OUTCOMES.some((outcome) => outcome.key === key);
+}
+
+
 // A human advances a case by naming an event; the event type selects the transition
 // and the server knows where the case is. The client never sends a stage.
 export const TRANSITIONS: Readonly<Record<string, Transition>> = {

@@ -78,6 +78,30 @@ CREATE TABLE IF NOT EXISTS extractions (
 
 CREATE UNIQUE INDEX IF NOT EXISTS extractions_by_text ON extractions (text_hash);
 
+-- The demo clock (TICKET-06). One row, so it survives a restart and every read measures
+-- deadlines against the same instant. now is demo time; day is the offset from day 0.
+CREATE TABLE IF NOT EXISTS clocks (
+  id   INTEGER PRIMARY KEY CHECK (id = 1),
+  now  TEXT NOT NULL,
+  day  INTEGER NOT NULL DEFAULT 0
+);
+
+-- One row per escalation that actually fired. The unique key is what makes tick()
+-- idempotent: a second tick at the same level cannot insert a second row.
+CREATE TABLE IF NOT EXISTS timers (
+  id        TEXT PRIMARY KEY,
+  case_id   TEXT NOT NULL REFERENCES cases(id),
+  stage     TEXT NOT NULL,
+  due_at    TEXT NOT NULL,
+  level     INTEGER NOT NULL,
+  role      TEXT NOT NULL,
+  status    TEXT NOT NULL DEFAULT 'fired',
+  fired_at  TEXT NOT NULL,
+  UNIQUE (case_id, stage, due_at, level)
+);
+
+CREATE INDEX IF NOT EXISTS timers_by_case ON timers (case_id, status);
+
 -- Append-only is enforced by the database, not by convention in code.
 CREATE TRIGGER IF NOT EXISTS events_no_update
 BEFORE UPDATE ON events

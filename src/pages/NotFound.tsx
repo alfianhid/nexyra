@@ -5,8 +5,8 @@ import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
 
 export default function NotFound() {
-  const { role } = useRole();
-  const register = useAsync(() => api.listCases(roleFor[role]), [role]);
+  const { role, clockVersion } = useRole();
+  const register = useAsync(() => api.listCases(roleFor[role]), [role, clockVersion]);
   const counts = register.data?.counts;
 
   return (

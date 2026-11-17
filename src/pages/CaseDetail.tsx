@@ -6,9 +6,13 @@ import { useAsync } from "../hooks/useAsync";
 
 export default function CaseDetail() {
   const { ref = "" } = useParams();
-  const { role } = useRole();
-  const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role]);
-  const verification = useAsync(() => api.getVerification(ref, roleFor[role]), [ref, role]);
+  const { role, clockVersion } = useRole();
+  const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role, clockVersion]);
+  const verification = useAsync(() => api.getVerification(ref, roleFor[role]), [
+    ref,
+    role,
+    clockVersion,
+  ]);
 
   if (detail.error) {
     if (detail.error instanceof ApiError && detail.error.code === "not_found") {

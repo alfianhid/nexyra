@@ -38,6 +38,20 @@ Details are in [`docs/submission.md`](../docs/submission.md).
 - Vitest is pinned to v2 because v5 requires Vite 6+ and the app is on Vite 5. Typescript for `server/` is a separate project (`tsconfig.server.json`) because the app's `tsconfig.json` covers `src/` only.
 - This machine's npm policy blocks dependency install scripts. `better-sqlite3` therefore needs `npm install-scripts approve better-sqlite3` followed by `npm rebuild better-sqlite3` after `npm install`, or it fails at runtime with "Could not locate the bindings file". Running the two commands on 18 Nov built the binding for Node 24.18.0 / win32-x64.
 
+### Decisions taken before Phase 6 (18 Nov)
+
+These settle every question the frontend would otherwise have to guess at. They are recorded here rather than discovered mid-session.
+
+- **The engine's rules live in `server/engine.ts` only.** `availableActions(caseRow, role)` produces both the payload's `available_actions` and the answer every guard uses. `server/caseView.ts` reads and formats; `server/events.ts` writes; neither decides.
+- **Closure needs no request body.** `CX-1003` is seeded with the outcome the engine proposed (`returned_to_routine_screening`) plus a `closure_proposed` event, so `POST /api/cases/{id}/closure/confirm` with only the actor header closes it. The optional `{ "final_outcome": ... }` body stays for a screen that lets the physician override; it is an extension of the contract, documented in `docs/api.md`.
+- **Confirmation finalises the case.** One `closure_confirmed` event moves it straight to `closed`. The `closure_confirmed` stage remains visible in the stage strip as the step between proposal and closure.
+- **Outreach is an event, not a transition.** `POST /api/cases/{case_id}/outreach` appends `outreach_attempted` and leaves the stage alone, so `outreach_attempts[]` and the timeline cannot disagree. `api.logOutreach(caseId, input, actor)` in `src/api/http.ts` maps to this endpoint; the client sends `outcome` and optionally `delay_reason`, and the server defaults `channel` to `call` because `OutreachInput` carries no channel.
+- **Actor mapping for the role picker** (ids are from `server/seed.ts`): `coordinator` → `act_001` / `coordination_staff` / "R. Haddad"; `physician` → `act_003` / `responsible_physician` / "Dr. Fulan"; `program_manager` → `act_004` / `program_manager` / "A. Al Suwaidi". `navigator` (`act_002`) stays unselectable.
+- **Reads keep accepting `?role=` until Phase 6 switches the client to the header.** A present-but-invalid header is always refused; it never falls back to the query parameter. Once `src/api/http.ts` sends the header, `GET /api/cases` and `GET /api/cases/{id}` can be tightened to require it without touching any page.
+- **`GET /api/cases/{id}/verification` takes no actor.** It is report text and citations, not a decision, and the contract does not guard it. A header sent anyway is still validated.
+- **Program view stays mock-shaped for the demo.** `GET /api/program/summary` is not built (Phase 8). `/programme` keeps reading the fixture programme through the same `NexyraApi` interface, so switching `api` to HTTP must not remove that call from the interface.
+
+
 ## Ticket list
 
 | ID | Title | Priority | Day | Assignee | Depends on |

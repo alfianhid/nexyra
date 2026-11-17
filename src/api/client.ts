@@ -1,8 +1,10 @@
 import type {
   Actor,
+  AdvanceResult,
   CaseDetailResponse,
   CaseFilter,
   CaseListResponse,
+  Clock,
   MutationResult,
   OutreachInput,
   ProgramSummary,
@@ -25,11 +27,13 @@ export class ApiError extends Error {
 }
 
 export interface NexyraApi {
+  getClock(): Promise<Clock>;
+  advanceClock(days: number | "next_deadline"): Promise<AdvanceResult>;
   listCases(role: Role, filter?: CaseFilter): Promise<CaseListResponse>;
   getCase(caseId: string, role: Role): Promise<CaseDetailResponse>;
   getVerification(caseId: string, role: Role): Promise<Verification>;
   getProgramme(role: Role): Promise<ProgramSummary>;
-  confirmClosure(caseId: string, actor: Actor): Promise<CaseDetailResponse>;
+  confirmClosure(caseId: string, actor: Actor, finalOutcome?: string): Promise<CaseDetailResponse>;
   reopenCase(caseId: string, actor: Actor): Promise<CaseDetailResponse>;
   logOutreach(caseId: string, input: OutreachInput, actor: Actor): Promise<MutationResult>;
 }

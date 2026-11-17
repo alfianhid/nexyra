@@ -24,6 +24,8 @@ type SeedCase = {
   owner_actor_id: string | null;
   stage: string;
   status: string;
+  // The outcome a closure was proposed with. Null until a closure is proposed.
+  final_outcome?: string | null;
   events: { id: string; type: string; actor_id: string; at: string; summary: string }[];
 };
 
@@ -89,6 +91,9 @@ const CASES: SeedCase[] = [
     owner_actor_id: "act_003",
     stage: "closure_proposed",
     status: "open",
+    // The engine proposed closure with this outcome; the physician's confirmation is
+    // what is missing, which is exactly what the three conditions test.
+    final_outcome: "returned_to_routine_screening",
     events: [
       {
         id: "e_1003_1",
@@ -111,6 +116,13 @@ const CASES: SeedCase[] = [
         at: "2026-11-17T09:14:00+07:00",
         summary: "2 findings extracted with citations; proposal reopen",
       },
+      {
+        id: "e_1003_4",
+        type: "closure_proposed",
+        actor_id: "act_system",
+        at: "2026-11-17T09:20:00+07:00",
+        summary: "Closure proposed: returned to routine screening",
+      },
     ],
   },
 ];
@@ -119,12 +131,20 @@ const REPORT_TEXT =
   "Procedure: colonoscopy. Preparation was inadequate. The cecum was not reached. " +
   "No polyp identified in the examined segment. Recommend repeat examination.";
 
+// Offsets are located in the text, never typed by hand: a citation that points at the
+// wrong sentence is worse than no citation, and a hardcoded offset silently rots.
+function offsetOf(quote: string): [number, number] {
+  const start = REPORT_TEXT.indexOf(quote);
+  if (start < 0) throw new Error(`Seed quote not found in report text: ${quote}`);
+  return [start, start + quote.length];
+}
+
 const CACHED_FIELDS = [
   {
     key: "adequate_prep",
     value: "no",
     quote: "Preparation was inadequate.",
-    quote_offset: [29, 59],
+    quote_offset: offsetOf("Preparation was inadequate."),
     source: "colonoscopy-report-15-11.pdf",
     read_at: "2026-11-17T09:14:00+07:00",
     validated: true,
@@ -133,7 +153,7 @@ const CACHED_FIELDS = [
     key: "complete_exam",
     value: "no",
     quote: "The cecum was not reached.",
-    quote_offset: [60, 87],
+    quote_offset: offsetOf("The cecum was not reached."),
     source: "colonoscopy-report-15-11.pdf",
     read_at: "2026-11-17T09:14:00+07:00",
     validated: true,
@@ -164,10 +184,10 @@ export function seed(): { actors: number; cases: number; events: number } {
   const upsertCase = db.prepare(
     `INSERT INTO cases (
        id, patient_name, patient_age, patient_language, pathway_id,
-       owner_actor_id, stage, status, stage_entered_at, created_at, updated_at
+       owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at
      ) VALUES (
        @id, @patient_name, @patient_age, @patient_language, @pathway_id,
-       @owner_actor_id, @stage, @status, @created_at, @created_at, @updated_at
+       @owner_actor_id, @stage, @status, @final_outcome, @created_at, @created_at, @updated_at
      )
      ON CONFLICT(id) DO UPDATE SET
        patient_name = excluded.patient_name,
@@ -176,6 +196,7 @@ export function seed(): { actors: number; cases: number; events: number } {
        owner_actor_id = excluded.owner_actor_id,
        stage = excluded.stage,
        status = excluded.status,
+       final_outcome = excluded.final_outcome,
        updated_at = excluded.updated_at`,
   );
 
@@ -229,6 +250,7 @@ export function seed(): { actors: number; cases: number; events: number } {
         owner_actor_id: c.owner_actor_id,
         stage: c.stage,
         status: c.status,
+        final_outcome: c.final_outcome ?? null,
         created_at: c.events[0]?.at ?? NOW,
         updated_at: NOW,
       });

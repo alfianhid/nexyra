@@ -5,8 +5,8 @@ import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
 
 export default function Programme() {
-  const { role } = useRole();
-  const summary = useAsync(() => api.getProgramme(roleFor[role]), [role]);
+  const { role, clockVersion } = useRole();
+  const summary = useAsync(() => api.getProgramme(roleFor[role]), [role, clockVersion]);
 
   if (summary.error) {
     return (

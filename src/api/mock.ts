@@ -11,6 +11,7 @@ import {
 import { ApiError, type NexyraApi } from "./client";
 import type {
   Actor,
+  AdvanceResult,
   CaseDetailResponse,
   CaseFilter,
   CaseListResponse,
@@ -34,6 +35,7 @@ const clock: Clock = {
   is_demo: true,
   day: 0,
   referral_limit_days: REFERRAL_LIMIT_DAYS,
+  label: "17 Nov 2026 · 11:42",
 };
 
 // Loading states should be real, so every call costs a short round trip.
@@ -228,6 +230,24 @@ function findCase(caseId: string): Case {
 }
 
 export const mockApi: NexyraApi = {
+  async getClock() {
+    return respond(clock);
+  },
+
+  // The fixtures carry no timers, so advancing the mock clock only moves the number.
+  async advanceClock(days) {
+    const next: Clock = {
+      ...clock,
+      day: days === "next_deadline" ? clock.day + 5 : clock.day + days,
+    };
+    return respond<AdvanceResult>({
+      clock: next,
+      escalations: 0,
+      cases_advanced: 0,
+      escalations_per_role: [],
+    });
+  },
+
   // Every role sees the same synthetic register in the prototype.
   async listCases(_role, filter) {
     const rows = cases.filter((c) => passesFilter(c, filter)).map(toSummary);
@@ -285,7 +305,7 @@ export const mockApi: NexyraApi = {
     });
   },
 
-  async confirmClosure(caseId, actor) {
+  async confirmClosure(caseId, actor, _finalOutcome) {
     const c = findCase(caseId);
     if (actor.role !== "responsible_physician") {
       throw new ApiError("role_not_permitted", "Only the responsible physician confirms closure.");

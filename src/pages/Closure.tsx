@@ -7,9 +7,13 @@ import { useAsync } from "../hooks/useAsync";
 
 export default function Closure() {
   const { ref = "" } = useParams();
-  const { role } = useRole();
-  const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role]);
-  const verification = useAsync(() => api.getVerification(ref, roleFor[role]), [ref, role]);
+  const { role, actor, clockVersion } = useRole();
+  const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role, clockVersion]);
+  const verification = useAsync(() => api.getVerification(ref, roleFor[role]), [
+    ref,
+    role,
+    clockVersion,
+  ]);
   // null means "not chosen yet": the select falls back to the case's own outcome.
   const [outcome, setOutcome] = useState<string | null>(null);
   const [decision, setDecision] = useState<"none" | "confirmed" | "returned">("none");
@@ -49,18 +53,26 @@ export default function Closure() {
   const fields = verification.data?.extraction.fields ?? [];
   const chosen = outcome ?? c.case.final_outcome ?? c.case.outcomes[0]?.key ?? "";
   const chosenLabel = c.case.outcomes.find((o) => o.key === chosen)?.label ?? chosen;
-  // The local role gate stays until Phase 6 swaps it for the payload's available_actions.
-  const isPhysician = role === "physician";
+  // The gate is the server's answer, not the picker's value: available_actions is computed
+  // by the engine from the caller's role and the case state (docs/api.md).
+  const isPhysician = c.available_actions.includes("confirm_closure");
   const citations = fields.length;
 
-  function confirm() {
+  async function confirm() {
     if (!isPhysician) return;
     if (citations === 0) {
       setError("This proposal carries no citation. A closure cannot be confirmed without evidence.");
       return;
     }
+    try {
+      await api.confirmClosure(c.case.case_id, actor, chosen);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "The decision could not be recorded.");
+      return;
+    }
     setError("");
     setDecision("confirmed");
+    detail.reload();
   }
 
   function returnProposal() {

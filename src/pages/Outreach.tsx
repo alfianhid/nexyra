@@ -3,21 +3,15 @@ import { Link, useParams } from "react-router-dom";
 import { Page, useRole } from "../components/Shell";
 import { api, ApiError } from "../api";
 import { roleFor } from "../api/roles";
-import type { OutreachAttempt, Role, Actor } from "../api/types";
+import type { OutreachAttempt } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 
 const channels: OutreachAttempt["channel"][] = ["call", "sms", "letter"];
 
-// Enough of an actor to satisfy the write's header until Phase 6 sends the real one.
-function actorFor(role: Role): Actor {
-  return { actor_id: `act_${role}`, role, display_name: role };
-}
-
 export default function Outreach() {
   const { ref = "" } = useParams();
-  const { role } = useRole();
-  const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role]);
-  const [logged, setLogged] = useState<OutreachAttempt[] | null>(null);
+  const { role, actor, clockVersion } = useRole();
+  const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role, clockVersion]);
   const [channel, setChannel] = useState<OutreachAttempt["channel"]>("call");
   const [result, setResult] = useState("");
   const [error, setError] = useState("");
@@ -52,7 +46,8 @@ export default function Outreach() {
   }
 
   const c = detail.data;
-  const attempts = logged ?? c.outreach_attempts;
+  // The ladder is a projection of the timeline, so the server's array is the only copy.
+  const attempts = c.outreach_attempts;
 
   const totalMinutes = attempts.reduce((sum, a) => sum + a.minutes, 0);
   const nextStep =
@@ -70,25 +65,18 @@ export default function Outreach() {
     try {
       await api.logOutreach(
         c.case.case_id,
-        { outcome: result.trim() },
-        actorFor(roleFor[role]),
+        { outcome: result.trim(), channel, minutes: channel === "call" ? 3 : 1 },
+        actor,
       );
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "The attempt could not be recorded.");
       return;
     }
     setError("");
-    setLogged([
-      ...attempts,
-      {
-        n: attempts.length + 1,
-        at: "17 Nov 11:42",
-        channel,
-        result: result.trim(),
-        minutes: channel === "call" ? 3 : 1,
-      },
-    ]);
     setResult("");
+    // Re-read the case: the ladder and the timeline come back from the server, so what
+    // the screen shows is what was actually recorded.
+    detail.reload();
   }
 
   return (

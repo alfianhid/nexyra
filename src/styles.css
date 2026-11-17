@@ -205,6 +205,37 @@ main {
   color: var(--ink);
 }
 
+/* Demo clock controls (TICKET-06). Same mono, uppercase register as the clock itself, so
+   they read as instrumentation rather than as actions on a case. */
+.clock-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.clock-actions button {
+  background: var(--ground);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.clock-actions button:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.clock-actions button:disabled {
+  color: #97a1ad;
+  border-color: #bcc6d3;
+  cursor: not-allowed;
+}
+
 .page {
   padding: 28px 36px 0;
   max-width: 1500px;

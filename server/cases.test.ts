@@ -103,7 +103,8 @@ describe("GET /api/cases/:case_id", () => {
     expect(status).toBe(200);
 
     expect(body.case.stage).toBe("closure_proposed");
-    expect(body.case.final_outcome).toBeNull();
+    // The engine proposed closure with this outcome; the physician's act is what is missing.
+    expect(body.case.final_outcome).toBe("returned_to_routine_screening");
     expect(body.case.outcomes).toHaveLength(3);
     expect(body.case.stage_due_label).toMatch(/^\d{1,2} [A-Z][a-z]{2} \d{2}:\d{2}$/);
 
@@ -112,7 +113,7 @@ describe("GET /api/cases/:case_id", () => {
       "current",
     );
 
-    expect(body.timeline).toHaveLength(3);
+    expect(body.timeline).toHaveLength(4);
     expect(body.documents).toHaveLength(1);
     expect(body.tasks[0].kind).toBe("confirm_closure");
     expect(body.verification).toEqual({ status: "ready", proposal: "reopen" });

@@ -287,7 +287,7 @@ function timelineFor(db: Db, caseId: string) {
          FROM events e
          LEFT JOIN actors a ON a.id = e.actor_id
         WHERE e.case_id = ?
-        ORDER BY e.occurred_at, e.id`,
+        ORDER BY e.occurred_at, e.rowid`,
     )
     .all(caseId) as EventRow[];
 
@@ -318,7 +318,7 @@ function outreachAttemptsFor(db: Db, caseId: string) {
     .prepare(
       `SELECT id, type, occurred_at, payload FROM events
         WHERE case_id = ? AND type = 'outreach_attempted'
-        ORDER BY occurred_at, id`,
+        ORDER BY occurred_at, rowid`,
     )
     .all(caseId) as { id: string; type: string; occurred_at: string; payload: string }[];
 
@@ -349,6 +349,70 @@ function verificationSummary(db: Db, caseId: string) {
     : { status: "pending", proposal: "needs_human_reading" };
 }
 
+// GET /api/cases/{case_id}/verification. No cached extraction means no report text to
+// cite, so the honest answer is "a human has to read this" rather than an empty claim.
+export function getVerification(db: Db, caseId: string) {
+  const row = caseRow(db, caseId);
+  if (!row) {
+    throw new HttpError(404, "not_found", `No case carries the reference ${caseId}.`);
+  }
+
+  const extraction = db
+    .prepare(
+      `SELECT x.id, x.document_id, x.prompt_version, x.model, x.fields, x.proposal,
+              x.proposal_reason, d.text
+         FROM extractions x
+         JOIN documents d ON d.id = x.document_id
+        WHERE x.case_id = ?
+        ORDER BY x.created_at DESC
+        LIMIT 1`,
+    )
+    .get(caseId) as
+    | {
+        id: string;
+        document_id: string;
+        prompt_version: string;
+        model: string;
+        fields: string;
+        proposal: string;
+        proposal_reason: string;
+        text: string;
+      }
+    | undefined;
+
+  if (!extraction) {
+    const document = documentsFor(db, caseId)[0];
+    return {
+      report: { document_id: document?.id ?? null, text: "" },
+      extraction: {
+        prompt_version: "v1",
+        model: null,
+        fields: [],
+        proposal: "needs_human_reading",
+        proposal_reason: "No report has been read for this case yet.",
+      },
+    };
+  }
+
+  let fields: unknown = [];
+  try {
+    fields = JSON.parse(extraction.fields);
+  } catch {
+    fields = [];
+  }
+
+  return {
+    report: { document_id: extraction.document_id, text: extraction.text },
+    extraction: {
+      prompt_version: extraction.prompt_version,
+      model: extraction.model,
+      fields,
+      proposal: extraction.proposal,
+      proposal_reason: extraction.proposal_reason,
+    },
+  };
+}
+
 export function getCaseDetail(db: Db, caseId: string, role: Role) {
   const row = caseRow(db, caseId);
   if (!row) {
@@ -359,8 +423,10 @@ export function getCaseDetail(db: Db, caseId: string, role: Role) {
   const currentOrder = stageOrder(row.stage);
   const entered = row.stage_entered_at ?? row.created_at;
   const definition = stageDefinition(row.stage);
+  // A stage with no SLA (or no definition) has no deadline to compute, so the label says
+  // when the case last moved: stage_entered_at is demo-clock time, unlike updated_at.
   const deadline =
-    definition?.sla_hours != null ? addHours(entered, definition.sla_hours) : row.updated_at;
+    definition?.sla_hours != null ? addHours(entered, definition.sla_hours) : entered;
 
   const tasks = taskRows(db).filter((task) => task.case_id === caseId);
 

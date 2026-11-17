@@ -50,11 +50,11 @@ function matches(c: CaseSummary, filter: Filter) {
 }
 
 export default function Worklist() {
-  const { role } = useRole();
+  const { role, clockVersion } = useRole();
   const [filter, setFilter] = useState<Filter>("all");
   const { data, error, loading } = useAsync(
     () => api.listCases(roleFor[role], serverFilter[filter]),
-    [role, filter],
+    [role, filter, clockVersion],
   );
   const rows = useMemo(
     () => (data?.cases ?? []).filter((c) => matches(c, filter)),
@@ -177,7 +177,9 @@ export default function Worklist() {
           <s className="due" />
           due within 48 hours
         </span>
-        <span>{rows.length} of {counts.open} shown</span>
+        {/* The grid carries closed rows too, so the denominator is the register this role
+            can see, not counts.open. */}
+        <span>{rows.length} of {data.cases.length} shown</span>
         <span className="right">Grid is the register · open a cell to act</span>
       </div>
     </Page>

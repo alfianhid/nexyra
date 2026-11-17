@@ -1,5 +1,9 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { actorFor } from "../api/actors";
+import { api } from "../api";
+import type { Actor } from "../api/types";
+import { useAsync } from "../hooks/useAsync";
 
 export type Role = "coordinator" | "physician" | "program_manager";
 
@@ -9,9 +13,22 @@ export const roleLabels: Record<Role, string> = {
   program_manager: "Program manager · A. Al Suwaidi",
 };
 
-const RoleContext = createContext<{ role: Role; setRole: (r: Role) => void }>({
+// The picker is the prototype's stand-in for the X-Nexyra-Actor header: it carries the
+// whole actor, so a page never has to invent an id or a display name.
+type RoleContextValue = {
+  role: Role;
+  setRole: (r: Role) => void;
+  actor: Actor;
+  // Bumped whenever the demo clock moves, so a page re-reads instead of showing data it
+  // fetched before the jump. It is a dependency, not a value the UI prints.
+  clockVersion: number;
+};
+
+const RoleContext = createContext<RoleContextValue>({
   role: "coordinator",
   setRole: () => {},
+  actor: actorFor("coordinator"),
+  clockVersion: 0,
 });
 
 export function useRole() {
@@ -20,9 +37,16 @@ export function useRole() {
 
 export function Shell() {
   const [role, setRole] = useState<Role>("coordinator");
+  const [clockVersion, setClockVersion] = useState(0);
+  const clock = useAsync(() => api.getClock(), [clockVersion]);
+
+  async function advance(days: number | "next_deadline") {
+    await api.advanceClock(days);
+    setClockVersion((v) => v + 1);
+  }
 
   return (
-    <RoleContext.Provider value={{ role, setRole }}>
+    <RoleContext.Provider value={{ role, setRole, actor: actorFor(role), clockVersion }}>
       <a href="#main" className="skip">
         Skip to content
       </a>
@@ -54,8 +78,20 @@ export function Shell() {
             </select>
           </div>
           <div className="clock">
-            <b>17 Nov 2026 · 11:42</b>
+            <b>{clock.data?.label ?? "17 Nov 2026 · 11:42"}</b>
             demo clock · UTC+7
+            <div className="clock-actions">
+              <button type="button" onClick={() => advance(1)} disabled={clock.loading}>
+                +1 day
+              </button>
+              <button
+                type="button"
+                onClick={() => advance("next_deadline")}
+                disabled={clock.loading}
+              >
+                Next deadline
+              </button>
+            </div>
           </div>
         </header>
         <main id="main">

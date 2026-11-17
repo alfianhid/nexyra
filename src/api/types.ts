@@ -18,6 +18,16 @@ export type Clock = {
   is_demo: boolean;
   day: number;
   referral_limit_days?: number;
+  // Display text from the server, e.g. "17 Nov 2026 · 11:42". The client prints it
+  // rather than deriving a date, the same rule as stage_due_label.
+  label?: string;
+};
+
+export type AdvanceResult = {
+  clock: Clock;
+  escalations: number;
+  cases_advanced: number;
+  escalations_per_role?: { role: Role; count: number }[];
 };
 
 export type CaseFilter = "late" | "unowned" | "awaiting_closure_confirmation";
@@ -130,6 +140,10 @@ export type DelayReason = "fear" | "transport" | "cost" | "language" | "other";
 export type OutreachInput = {
   outcome: string;
   delay_reason?: DelayReason;
+  // The server accepts these too (docs/api.md, POST /api/cases/{id}/outreach); the
+  // outreach screen already has a channel select, so it sends what it shows.
+  channel?: OutreachAttempt["channel"];
+  minutes?: number;
 };
 
 // docs/api.md fixes only the five keys of the program summary, not the shape of the

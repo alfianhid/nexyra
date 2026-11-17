@@ -192,9 +192,11 @@ Events that matched no case (`TICKET-08`), so they are visible instead of silent
 
 ### `GET /api/clock`
 
-`{ "now": "...", "is_demo": true, "day": 3, "referral_limit_days": 31 }`.
+`{ "now": "...", "is_demo": true, "day": 3, "referral_limit_days": 31, "label": "20 Nov 2026 · 11:42" }`.
 
 `referral_limit_days` is optional: the `clock` object embedded in a read response carries only `now`, `is_demo` and `day`. A client that needs the limit asks `/api/clock`.
+
+`label` is the header text, formatted by the server for the same reason `stage_due_label` is: the client prints it and never derives a date. The demo clock is stored, so it survives a restart.
 
 ## Writes
 
@@ -220,9 +222,30 @@ Clinician closure (`TICKET-05`, `TICKET-15`). Takes no body beyond the actor hea
 
 `details` is optional and present only where this document shows it; every other error carries `code` and `message` alone. A client that drops `details` is still correct, but must not re-derive the failed conditions itself.
 
+**Optional body.** The closure screen lets the physician pick the outcome, and that choice has to reach the server, so the endpoint accepts one optional field:
+
+```json
+{ "final_outcome": "returned_to_routine_screening" }
+```
+
+When it is absent the case's own recorded outcome is what the three conditions judge, so a caller that sends nothing still behaves as first described. An unknown key fails with `400 validation_failed` rather than being silently ignored.
+
+**It finalises the case.** The physician's confirmation is the act that closes it, so this endpoint writes one `closure_confirmed` event and moves the case straight to `closed`. The `closure_confirmed` stage exists in the stage strip as the step between proposal and closure; the generic events endpoint can still walk it explicitly with `closure_confirmed` then `case_closed`.
+
 ### `POST /api/cases/{case_id}/reopen`
 
 Clinician reopen. Writes a `reopened` event and assigns an owner, never leaves the case unowned (`TICKET-05`, `TICKET-17` case 3).
+
+### `POST /api/cases/{case_id}/outreach`
+
+Records one patient outreach attempt (`TICKET-10`). Body: `{ "outcome": "no_answer", "channel": "call", "delay_reason": "fear" }`.
+
+- `outcome` (required) is free text and becomes the ladder's `result`.
+- `channel` is `call`, `sms` or `letter`; omitted means `call`.
+- `delay_reason` is the same closed set as `POST /api/tasks/{task_id}/complete`. Free text belongs in `note`.
+- `minutes` is optional.
+
+Contacting a patient does not advance a case, so this endpoint appends an `outreach_attempted` event and leaves the stage where it is. The case view's `outreach_attempts[]` is derived from those events, so the ladder and the timeline cannot disagree. Only coordination staff and navigators may call it (`log_outreach` in the permission table), and never on a closed case.
 
 ### `POST /api/cases/{case_id}/proposal/reject`
 
@@ -246,7 +269,36 @@ Batch of FHIR resources (`TICKET-07`, `TICKET-08`). Returns per-resource outcome
 
 ### `POST /api/clock/advance`
 
-Body: `{ "days": 1 }` or `{ "until": "next_deadline" }` (`TICKET-06`). Runs `tick(now)` and returns the new clock plus a count of what changed (`{ "escalations": 2, "cases_advanced": 0 }`). Repeated calls at the same `now` must produce no additional escalations; the guard lives in the engine, and the test calls this endpoint twice.
+Body: `{ "days": 1 }` or `{ "until": "next_deadline" }` (`TICKET-06`). Runs `tick(now)` and returns the new clock plus a count of what changed. Repeated calls at the same `now` must produce no additional escalations; the guard lives in the engine, and the test calls this endpoint twice.
+
+```json
+{
+  "clock": { "now": "2026-11-18T11:42:00+07:00", "is_demo": true, "day": 1, "referral_limit_days": 31, "label": "18 Nov 2026 · 11:42" },
+  "escalations": 1,
+  "cases_advanced": 0,
+  "escalations_per_role": [ { "role": "responsible_physician", "count": 1 } ]
+}
+```
+
+`escalations_per_role` answers the alert-fatigue question `TICKET-06` asks for: how many alerts one role received from one advance.
+
+`cases_advanced` is always `0` in this prototype: time escalates a case, it never moves it through the pathway. Advancing the clock must not advance a stage, or the demo would show the engine closing work it cannot close.
+
+**The ladder is paced by the clock, not backfilled.** Level 1 fires the first time a case is seen past its deadline; levels 2 and 3 fire at most one per 24 demo-clock hours, escalating coordination → responsible physician → program manager and stopping at level 3. A case that is already days late does not emit three alerts on the first advance.
+
+**`until: "next_deadline"`** moves the clock to the earliest stage deadline still ahead of `now` (or stays put when none is ahead), then ticks. It is a demo control for showing the next escalation without counting days.
+
+`GET /api/clock` is the read; `POST /api/clock/reset` sets day 0 and is demo-only. `POST /api/clock/tick` runs the timers without moving the clock, which is what makes the idempotency test a direct call rather than a race.
+
+### Escalation as data
+
+Each escalation writes three things in one transaction:
+
+- a `deadline_missed` event, with `actor_role: "system"` and a payload of `{ level, escalated_to, stage, due_at, hours_over }`, so it appears in the audit trail like any other event;
+- a `timer` row keyed by `(case_id, stage, due_at, level)`, which is what makes a second tick at the same level impossible;
+- an `escalation` task owned by the escalated role, so the work shows up for that role in `GET /api/cases`.
+
+A case that leaves a stage marks that stage's timers `cancelled`. A late case still prints a negative `hours_left_stage` and carries the `late` flag; the worklist prints "escalated" from that flag, never from a colour.
 
 ### `POST /api/clock/reset`
 
