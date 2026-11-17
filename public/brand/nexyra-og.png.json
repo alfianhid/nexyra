@@ -1,0 +1,6 @@
+{
+  "prompt": "A flat vector title plate for a hospital screening software product. Near-white background #fbfbf9 with a faint 36px construction grid in #dfe6f1 across the whole plate. Centered left-aligned wordmark 'Nexyra' set in a heavy geometric grotesque, ink #101418, tight tracking. Under it one line of small uppercase monospaced letterspaced text: 'A CASE ENGINE FOR POSITIVE SCREENING RESULTS' in graphite #576372. On the right side a six-column stack of square cells divided by hard 1px ink rules, one cell filled solid signal blue #1246d9 with a large white minus sign, the rest empty paper. Zero border radius, no gradients, no shadows, no glow, no photorealism, no people. Swiss typographic specimen aesthetic, Wim Crouwel grid system, printed on uncoated stock.",
+  "createdAt": "2026-11-16T18:30:01.503Z",
+  "tool": "impeccable generate-image",
+  "model": "gpt-image-2.5-flare"
+}

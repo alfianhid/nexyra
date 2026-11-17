@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Nexyra mark">
+  <title>Nexyra mark</title>
+  <desc>A three-by-two grid of case cells, one of them filled with the deadline plane.</desc>
+  <rect width="128" height="128" fill="#fbfbf9"/>
+  <g stroke="#101418" stroke-width="2" fill="none">
+    <rect x="16" y="22" width="96" height="84"/>
+    <path d="M16 50h96M16 78h96"/>
+    <path d="M64 22v84"/>
+  </g>
+  <rect x="64" y="22" width="48" height="28" fill="#1246d9"/>
+  <rect x="78" y="32" width="20" height="8" fill="#ffffff"/>
+  <rect x="78" y="60" width="20" height="8" fill="#101418"/>
+</svg>

@@ -1,0 +1,19 @@
+# Generated artifacts
+dist/
+node_modules/
+.vite/
+*.tsbuildinfo
+
+# SQLite database — data, never source
+data/*.sqlite*
+!data/*.sqlite.example
+
+# Local secrets — image generation credentials
+.impeccable/image.env
+*.env.local
+.env
+
+# Impeccable runtime dirs (questions, review captures)
+.impeccable/questions/
+.impeccable/review/
+.impeccable/mocks/

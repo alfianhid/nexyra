@@ -1,0 +1,6 @@
+{
+  "prompt": "A flat vector cover plate for a hackathon solution deck, 16:9, no photographs, no people, no 3D. Near-white #fbfbf9 ground with a faint 36px construction grid in #dfe6f1. Left half: the wordmark 'Nexyra' in a heavy geometric grotesque, ink #101418, tight negative tracking, very large; beneath it a thin 3px signal blue #1246d9 rule 96px wide; beneath that two lines of small uppercase monospaced letterspaced text in graphite #576372 reading 'CHALLENGE 05 - CLOSING THE SCREENING-TO-CARE LOOP' and 'A CASE ENGINE FOR POSITIVE SCREENING RESULTS'. Right half: a six by four grid of square cells divided by hard 1px ink lines, two cells in the second column filled solid signal blue with a white minus sign, one cell filled ink with white text-free bars, the rest empty paper. Zero border radius, hard edges, no gradients, no shadows, no glow. Swiss typographic specimen, Wim Crouwel grid, uncoated printed stock.",
+  "createdAt": "2026-11-16T18:31:23.429Z",
+  "tool": "impeccable generate-image",
+  "model": "gpt-image-2.5-flare"
+}

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nexyra — Closing the Screening-to-Care Loop · Challenge 05 brief</title>
+<meta name="description" content="Product brief for Nexyra: a case engine that keeps every positive screening result owned, timed, and evidenced until a clinician confirms closure. Challenge 05, Future Health / Hack2skill.">
+<style>
+  :root{
+    --ink:#182230;
+    --body:#334155;
+    --muted:#64748b;
+    --line:#e2e8f0;
+    --bg:#ffffff;
+    --bg-alt:#f6f8fa;
+    --accent:#0e7490;
+    --accent-ink:#0b5567;
+    --accent-soft:#e6f3f7;
+    --flag-bg:#fff7ed;
+    --flag-line:#fdba74;
+    --flag-ink:#9a3412;
+    --mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,monospace;
+    --serif:Charter,"Bitstream Charter","Iowan Old Style",Georgia,serif;
+    --sans:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--body);
+    font:16px/1.65 var(--sans);
+    text-align:left;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+  .wide{max-width:1120px;margin:0 auto;padding:0 24px}
+  h1,h2,h3,h4{color:var(--ink);font-family:var(--serif);line-height:1.25;margin:0 0 .5em}
+  h1{font-size:clamp(30px,5vw,44px);letter-spacing:-.01em}
+  h2{font-size:clamp(22px,3vw,28px);margin-top:2.2em;padding-top:.9em;border-top:1px solid var(--line)}
+  h3{font-size:19px;margin-top:1.6em}
+  p,li{margin:0 0 .9em}
+  ul,ol{padding-left:1.3em}
+  li{margin-bottom:.45em}
+  a{color:var(--accent)}
+  strong{color:var(--ink)}
+  code,.mono{font-family:var(--mono);font-size:.86em;background:var(--bg-alt);border:1px solid var(--line);border-radius:4px;padding:.08em .35em}
+  .eyebrow{
+    font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:600;margin:0 0 .9em
+  }
+  header.hero{padding:56px 0 8px}
+  .lede{font-size:19px;color:var(--ink);max-width:44em}
+  .metabar{
+    display:flex;flex-wrap:wrap;gap:8px;margin:1.6em 0 0;padding:0;list-style:none
+  }
+  .metabar li{
+    margin:0;font-size:13px;color:var(--accent-ink);background:var(--accent-soft);
+    border:1px solid #cbe4ec;border-radius:999px;padding:.32em .85em
+  }
+  section{padding-bottom:8px}
+  .callout{
+    background:var(--bg-alt);border:1px solid var(--line);border-left:4px solid var(--accent);
+    border-radius:8px;padding:16px 20px;margin:1.2em 0
+  }
+  .callout .title{font-weight:700;color:var(--ink);margin:0 0 .4em;font-family:var(--sans);font-size:15px}
+  .flag{
+    background:var(--flag-bg);border:1px dashed var(--flag-line);color:var(--flag-ink);
+    border-radius:6px;padding:.12em .45em;font-size:13.5px;font-weight:600;white-space:nowrap
+  }
+  .fill-note{
+    background:var(--flag-bg);border:1px solid var(--flag-line);border-radius:8px;
+    padding:12px 16px;margin:1em 0;color:var(--flag-ink);font-size:14.5px
+  }
+  table{border-collapse:collapse;width:100%;margin:1.1em 0;font-size:14.5px}
+  th,td{border:1px solid var(--line);padding:.55em .7em;text-align:left;vertical-align:top}
+  th{background:var(--bg-alt);color:var(--ink);font-weight:600}
+  td.num{white-space:nowrap}
+  .flow-note{color:var(--muted);font-size:14px;margin-top:.4em}
+  svg{display:block;max-width:100%;height:auto}
+  .qa{border-top:1px solid var(--line);padding:1em 0 .4em}
+  .qa h3{margin:0 0 .35em;font-size:17.5px}
+  .qa p{margin:0 0 .8em}
+  .pill{
+    display:inline-block;font-family:var(--mono);font-size:12.5px;color:var(--accent-ink);
+    background:var(--accent-soft);border:1px solid #cbe4ec;border-radius:999px;
+    padding:.12em .6em;margin:0 .25em .25em 0
+  }
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+  @media (max-width:760px){.two-col{grid-template-columns:1fr}}
+  footer{
+    margin-top:56px;padding:22px 0 56px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:13.5px
+  }
+  @media print{
+    .metabar li{border-color:#bbb}
+    h2{page-break-after:avoid}
+    .qa,table,.callout{page-break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero wrap">
+  <p class="eyebrow">Challenge 05 · Closing the Screening-to-Care Loop</p>
+  <h1>Nexyra</h1>
+  <p class="lede">
+    A case engine for positive screening results. Every case is owned, timed, and
+    evidenced from the first lab result until a clinician confirms closure — with
+    the audit trail to prove it.
+  </p>
+  <ul class="metabar">
+    <li>Future Health × Hack2skill</li>
+    <li>DoH – Abu Dhabi &amp; M42 judges</li>
+    <li>Submission deadline 21 Nov 2026, 02:59 UTC+7 (01:29 IST)</li>
+    <li>Demo pathway: FIT → colonoscopy → pathology → follow-up</li>
+  </ul>
+</header>
+
+<main>
+
+<section class="wrap">
+  <h2>1 · The problem</h2>
+  <p>
+    A screening programme only helps a patient if the loop closes: the test is done,
+    the result comes back, and the right care actually follows. Between a
+    <strong>positive FIT result</strong> and a completed colonoscopy with a recorded
+    follow-up, the case has to cross laboratories, clinics, and hospitals.
+  </p>
+  <p>
+    The challenge puts its finger on the biggest gap: <strong>handoffs between
+    organisations, where case ownership is lost.</strong> Referral status systems
+    track documents. They do not answer the question that decides whether a patient
+    is lost: <em>who is responsible for this case right now, and what happens if
+    nobody acts?</em>
+  </p>
+  <div class="fill-note">
+    <strong>Numbers to restore:</strong> the original brief's sources section carried
+    drop-off statistics and effect sizes for the screening-to-care gap, with caveats
+    per source. Those figures are lost with the file and must be re-sourced before
+    this brief or the deck quotes them
+    (<span class="flag">⚑ fill</span>). Anything quoted later must land in
+    <code>docs/evidence.md</code> with its caveat, exactly as in the source.
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>2 · What Nexyra is</h2>
+  <p>
+    Nexyra turns a positive screening result into a <strong>case</strong> and then
+    refuses to let it go quiet. A state machine moves the case along a configurable
+    pathway; every stage has exactly one owner and a deadline; timers escalate to
+    the next role when nobody acts; patient outreach runs in the patient's language
+    with confirmation of understanding; and closure requires real evidence plus a
+    responsible physician's confirmation.
+  </p>
+  <p>The product boundary is as important as the feature list:</p>
+  <ul>
+    <li><strong>Not a referral tracker.</strong> Referral status tracking is a function of Malaffi's e-Referral. Nexyra adds ownership at the screening-result level.</li>
+    <li><strong>Not a messaging channel.</strong> In production, message exchange runs through e-Referral; Nexyra monitors its status and keeps the question, its owner, and its deadline on the case.</li>
+    <li><strong>No risk-prediction model.</strong> Drop-off prediction is deliberately out of scope; rules, timers, and escalation do the work, and we claim nothing we cannot show.</li>
+    <li><strong>No real patient data.</strong> Everything in the challenge build is synthetic, and labelled as such.</li>
+  </ul>
+</section>
+
+<section class="wide">
+  <div class="wrap" style="padding-left:0;padding-right:0">
+    <h2>3 · How a case flows</h2>
+    <p>
+      The FIT-positive pathway is written as <em>data</em>, not code — one template
+      file configures stages, owners, deadlines, and the evidence required for
+      closure. Colonoscopy is simply the first pathway; others (mammography,
+      cervical, HbA1c) are meant to follow by configuration alone.
+    </p>
+  </div>
+
+  <svg viewBox="0 0 1120 320" role="img" aria-label="FIT pathway flow: result received, patient informed, patient confirms, referral sent, referral received, then scheduled, procedure done, pathology out, follow-up recorded, closed">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"></path>
+      </marker>
+    </defs>
+    <text x="20" y="18" font-size="13" fill="#64748b" font-family="Arial, sans-serif">Trigger — positive FIT result creates the case (event: case created, initial owner per template)</text>
+
+    <!-- row 1 -->
+    <g font-family="Arial, sans-serif">
+      <rect x="20" y="34" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="36" y="60" font-size="14" font-weight="bold" fill="#182230">Result received</text>
+      <text x="36" y="80" font-size="11" fill="#64748b" font-family="monospace">result_received</text>
+
+      <rect x="240" y="34" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="256" y="60" font-size="14" font-weight="bold" fill="#182230">Patient informed</text>
+      <text x="256" y="80" font-size="11" fill="#64748b" font-family="monospace">patient_informed</text>
+
+      <rect x="460" y="34" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="476" y="60" font-size="14" font-weight="bold" fill="#182230">Patient confirms</text>
+      <text x="476" y="80" font-size="11" fill="#64748b" font-family="monospace">patient_confirmed</text>
+
+      <rect x="680" y="34" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="696" y="60" font-size="14" font-weight="bold" fill="#182230">Referral sent</text>
+      <text x="696" y="80" font-size="11" fill="#64748b" font-family="monospace">referral_sent</text>
+
+      <rect x="900" y="34" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="916" y="60" font-size="14" font-weight="bold" fill="#182230">Referral received</text>
+      <text x="916" y="80" font-size="11" fill="#64748b" font-family="monospace">referral_received</text>
+
+      <line x1="200" y1="66" x2="234" y2="66" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+      <line x1="420" y1="66" x2="454" y2="66" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+      <line x1="640" y1="66" x2="674" y2="66" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+      <line x1="860" y1="66" x2="894" y2="66" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+
+      <!-- wrap connector -->
+      <path d="M 990 98 L 990 150" stroke="#94a3b8" stroke-width="2" fill="none" marker-end="url(#ar)"></path>
+      <text x="1000" y="132" font-size="11" fill="#64748b" font-family="monospace">referral accepted</text>
+
+      <!-- row 2, right to left -->
+      <rect x="900" y="160" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="916" y="186" font-size="14" font-weight="bold" fill="#182230">Scheduled</text>
+      <text x="916" y="206" font-size="11" fill="#64748b" font-family="monospace">scheduled</text>
+
+      <rect x="680" y="160" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="696" y="186" font-size="14" font-weight="bold" fill="#182230">Procedure done</text>
+      <text x="696" y="206" font-size="11" fill="#64748b" font-family="monospace">procedure_completed</text>
+
+      <rect x="460" y="160" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="476" y="186" font-size="14" font-weight="bold" fill="#182230">Pathology out</text>
+      <text x="476" y="206" font-size="11" fill="#64748b" font-family="monospace">pathology_ready</text>
+
+      <rect x="240" y="160" width="180" height="64" rx="8" fill="#eef2f5" stroke="#c9d4de"></rect>
+      <text x="256" y="186" font-size="14" font-weight="bold" fill="#182230">Follow-up recorded</text>
+      <text x="256" y="206" font-size="11" fill="#64748b" font-family="monospace">follow_up_recorded</text>
+
+      <rect x="20" y="160" width="180" height="64" rx="8" fill="#e6f3f7" stroke="#0e7490"></rect>
+      <text x="36" y="186" font-size="14" font-weight="bold" fill="#0b5567">Closed</text>
+      <text x="36" y="206" font-size="11" fill="#0b5567" font-family="monospace">closed</text>
+
+      <line x1="896" y1="192" x2="866" y2="192" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+      <line x1="676" y1="192" x2="646" y2="192" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+      <line x1="456" y1="192" x2="426" y2="192" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+      <line x1="236" y1="192" x2="206" y2="192" stroke="#94a3b8" stroke-width="2" marker-end="url(#ar)"></line>
+    </g>
+
+    <text x="20" y="262" font-size="12.5" fill="#64748b" font-family="Arial, sans-serif">Closure gate: a valid outcome from the template + required evidence attached + a closure_confirmed event by the responsible physician. The system role (including AI) can never close a case.</text>
+    <text x="20" y="284" font-size="12.5" fill="#64748b" font-family="Arial, sans-serif">Outcomes: returned_to_routine_screening · surveillance_scheduled · oncology_accepted_therapy_started.</text>
+    <text x="20" y="306" font-size="12.5" fill="#64748b" font-family="Arial, sans-serif">Backward steps exist by design — e.g. an incomplete exam returns the case to referral_sent and re-assigns an owner.</text>
+  </svg>
+  <p class="flow-note wrap" style="padding-left:0">
+    Each stage carries one owner, a deadline in days, and an escalation ladder:
+    <strong>coordination staff → responsible physician → program manager.</strong>
+    Deadlines without a source are marked <span class="flag">⚑ unsourced, needs clinical review</span>
+    — the only deadline with a published basis so far is referral-to-colonoscopy
+    ≤ 31 days (HAAD standard, cited in BMC Cancer 2021).
+  </p>
+
+  <div class="wrap" style="padding-left:0;padding-right:0">
+    <div class="callout">
+      <p class="title">When a case loses its owner</p>
+      <p style="margin:0">
+        Three triggers open an explicit <code>unowned</code> state: the referral
+        is rejected, the acceptance deadline passes unanswered, or the patient changes
+        provider while the case is open. An assign-owner task goes to the referring
+        provider's coordination staff, and the time until the case is owned again is
+        measured per case. Events arriving from other providers (appointments,
+        procedures, reports) are stitched to the right case via patient identity and
+        the originating referral; anything unmatched waits in a "not yet stitched"
+        queue instead of being dropped.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>4 · Meeting the challenge requirements</h2>
+  <p>The challenge sets six requirements. The mapping below is the working translation used by the team; exact requirement wording should be checked against the challenge page before the deck quotes it. <span class="flag">⚑ verify wording</span></p>
+  <table>
+    <thead>
+      <tr><th style="width:22%">Requirement</th><th>How Nexyra answers it</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1 · <span class="flag">⚑ wording</span></td><td>Tracked in the requirement matrix; restore the exact wording from the challenge page.</td></tr>
+      <tr><td>2 · <span class="flag">⚑ wording</span></td><td>Tracked in the requirement matrix; restore the exact wording from the challenge page.</td></tr>
+      <tr><td>3 · Clear communication, in the patient's language, with confirmation of understanding</td><td>The patient outreach ladder: plain-language message first (English and Arabic, right-to-left correct), two-way confirmation buttons, then a staff phone call, then a navigator — with structured delay reasons (fear, transport, cost, language) surfaced in the program view.</td></tr>
+      <tr><td>4 · Timely inter-clinician consultation</td><td>Consultation requests sit on the case as tasks with an owner and a response deadline, escalated by timer when missed. The message exchange itself runs on e-Referral in production; Nexyra monitors it.</td></tr>
+      <tr><td>5 · <span class="flag">⚑ wording</span></td><td>Tracked in the requirement matrix; restore the exact wording from the challenge page.</td></tr>
+      <tr><td>6 · Evidence of improvement on a relevant metric</td><td>Closure-verification evaluation on a labeled test set — the one metric we can measure ourselves without inventing patient behavior. Reported as fractions with denominators, errors included.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    The challenge's key question asks for this loop to be closed with
+    <strong>low friction</strong> for the facilities that already have systems. That is
+    why Nexyra attaches to data that DoH Circular 144/2026 already mandates — HL7 REF
+    referral messages to Malaffi — instead of asking clinics for new data entry.
+    <span class="flag">⚑ verify exact question wording</span>
+  </p>
+</section>
+
+<section class="wrap">
+  <h2>5 · Responsible AI and data governance</h2>
+  <ul>
+    <li><strong>AI extracts and proposes. It never decides.</strong> The model reads colonoscopy and pathology reports and copies out what is written — exam completeness, prep quality, biopsy taken, pathology available, outcome category, next steps. No diagnosis, no surveillance intervals, no clinical advice.</li>
+    <li><strong>Every extracted field carries a citation</strong> — the exact sentence from the report. If the quote is not verbatim in the text, the field's value is forced to <code>unknown</code> in code.</li>
+    <li><strong>The safe direction of error is a case staying open.</strong> Any doubt ends in <code>needs_human_reading</code>. Proposals are labelled as AI proposals on screen and are never shown as decisions.</li>
+    <li><strong>Closure is a human act.</strong> Only a responsible physician's <code>closure_confirmed</code> event closes a case; events from the system role — AI included — can never do it. Divergence between clinician decision and AI proposal is recorded and counted.</li>
+    <li><strong>All data is synthetic.</strong> No real patient data in any form. Generator parameters carry a source label — literature citation or an explicit <code>team guess</code> tag.</li>
+    <li>Enforced by tests (state machine rules and citation validation), documented in <code>docs/responsible-ai.md</code>, and reported with the evaluation results as they are.</li>
+  </ul>
+</section>
+
+<section class="wrap">
+  <h2>6 · What we are building during the challenge</h2>
+  <p>Plan of record (tracked ticket by ticket in <code>tickets/README.md</code>):</p>
+  <table>
+    <thead><tr><th style="width:16%">Day</th><th>Outcome at end of day</th></tr></thead>
+    <tbody>
+      <tr><td class="num">15 Nov</td><td>One case can be created and driven through tests, with an audit trail</td></tr>
+      <tr><td class="num">16 Nov</td><td>Cases move on their own when the clock advances and show up in the worklist</td></tr>
+      <tr><td class="num">17 Nov</td><td>Closure verification runs and has evaluation numbers; the deck skeleton follows the template</td></tr>
+      <tr><td class="num">18 Nov</td><td>Three demo cases run from start to closure; flow clinically reviewed; app reachable from outside</td></tr>
+      <tr><td class="num">19 Nov</td><td>Deck and video finished; build checked from scratch</td></tr>
+      <tr><td class="num">20 Nov</td><td>First submission version sent (afternoon, UTC+7). Remaining time is for small fixes only.</td></tr>
+      <tr><td class="num">21 Nov 02:59 UTC+7</td><td>Deadline. Do not rely on these hours.</td></tr>
+    </tbody>
+  </table>
+  <div class="two-col">
+    <div>
+      <h3>Built and demonstrated</h3>
+      <ul>
+        <li>Event-sourced case engine with append-only audit trail</li>
+        <li>FIT pathway as validated configuration</li>
+        <li>State machine with evidence-based closure rules</li>
+        <li>Timers, demo clock, role-based escalation</li>
+        <li>Synthetic cohort (~1,000 cases, reproducible seed)</li>
+        <li>Unowned-case detection and event stitching</li>
+        <li>Worklist and case detail (audit timeline)</li>
+        <li>Patient outreach ladder (English + Arabic)</li>
+        <li>Report extraction with validated citations</li>
+        <li>Closure confirmation screen for clinicians</li>
+        <li>Program view with exception list</li>
+        <li>Three scripted demo cases, one-command reset</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Designed, not built</h3>
+      <ul>
+        <li>Probabilistic identity matching (documented as a design)</li>
+        <li>Real Malaffi / e-Referral integration</li>
+        <li>Production hosting, auth, real notifications</li>
+        <li>Second pathway (mammography) — configuration proof only, not clinically reviewed</li>
+        <li>HL7 v2 ingest and consultation monitoring (stretch work)</li>
+      </ul>
+      <h3>Cut first if time runs out</h3>
+      <p style="font-size:14.5px">
+        Second pathway → consultation monitoring → HL7 v2 ingest → brief polish →
+        Arabic beyond draft → the funnel panel. Never cut the closure-verification
+        chain (extraction, evaluation, confirmation screen, demo cases) or the
+        submission deliverables — without them there is nothing to show.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>7 · The demo</h2>
+  <p>
+    Seven minutes, repeatable exactly — including five minutes before the stage.
+    The demo clock is a first-class feature: the team advances time from the screen
+    and cases move themselves. Three fictional cases carry the story:
+  </p>
+  <ol>
+    <li><strong>The silent patient</strong> — 58-year-old man, Arabic-speaking. Messages go unanswered; the case escalates to a staff call, then a navigator who records the real barrier: fear of the prep. Colonoscopy on day 19.</li>
+    <li><strong>Referral rejected, patient moves</strong> — 47-year-old expatriate worker. The referral is rejected for insufficient data, the patient changes clinic, the case becomes <code>unowned</code> — and is visibly re-owned.</li>
+    <li><strong>“Done” that is not done</strong> — staff mark a colonoscopy complete; verification reads the report and finds inadequate prep and cecum not reached; the clinician sees the citations and reopens the case. The repeat procedure finds a polyp, pathology lands, surveillance is scheduled, closure is confirmed — by a human.</li>
+  </ol>
+  <div class="fill-note">
+    <strong>Evaluation numbers for the demo:</strong> once the closure-verification
+    evaluation runs, its numbers go here and in the deck exactly as measured —
+    fractions with denominators, errors included
+    (<span class="flag">⚑ fill from docs/evaluation-results.md</span>).
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>8 · Evidence and evaluation</h2>
+  <p>
+    The only metric we can measure honestly inside the challenge is
+    <strong>closure verification</strong>: when the system reads a report, does it hold
+    back cases that must not be closed, and pass through cases that may be?
+  </p>
+  <ul>
+    <li>Test material: <strong>24 synthetic colonoscopy/pathology reports</strong>, labeled by hand <em>before</em> extraction ever ran — complete and incomplete exams, inadequate preps, missing pathology, ambiguous texts, and clear cancer findings.</li>
+    <li>Reported as <strong>fractions with denominators</strong> (e.g. “11 of 12”), never percentages alone — with 24 reports, percentages read more certain than they are.</li>
+    <li>Wrong closures that slipped through are reported at the very top of the results, not buried.</li>
+    <li>Honest caveats, always on the record: the reports are synthetic and team-written with AI help; results prove the mechanism, not accuracy on real hospital reports.</li>
+  </ul>
+  <p>
+    Impact on patients is <strong>not</strong> claimed anywhere in this brief or the
+    deck. It is the pilot's job to establish.
+  </p>
+</section>
+
+<section class="wrap">
+  <h2>9 · Pilot path and dependencies</h2>
+  <p>
+    The challenge build proves the mechanism on synthetic data. A pilot needs what a
+    hackathon cannot provide:
+  </p>
+  <ul>
+    <li>Access to Malaffi referral and lab-result data (the HL7 REF messages Circular 144/2026 mandates)</li>
+    <li>DoH approval and a hosting/identity setup that satisfies clinical data policy</li>
+    <li>Local clinical review of pathway stages, deadlines, and evidence rules</li>
+    <li>Native-speaker review of the Arabic patient-facing templates</li>
+    <li>A policy for using AI models on clinical data — extraction runs against stored report text and is cached by text hash</li>
+    <li>Real alerting (email/SMS) and a production-grade deployment story</li>
+  </ul>
+  <p>
+    Positioning is deliberate: Nexyra sits <em>on</em> Malaffi referral data and
+    e-Referral status, at the screening-result level where ownership gets lost. It
+    does not replace either.
+  </p>
+</section>
+
+<section class="wrap">
+  <h2>10 · Assumptions and limitations</h2>
+  <ul>
+    <li>All data is synthetic; drop-off rates are <strong>input assumptions</strong> to the generator, never findings of the product.</li>
+    <li>Test reports were written with AI assistance and are read by AI — a real weakness we state plainly.</li>
+    <li>The pathway logic was assembled from published guidelines and general logic, then reviewed by one clinician with clinic experience outside Abu Dhabi. Unsourced deadlines are flagged for that review and corrected afterwards.</li>
+    <li>No real integrations exist yet; Malaffi message formats beyond the circular's REF description have not been seen first-hand.</li>
+    <li>No clinician sits on the team. The external reviewer is credited as they permitted.</li>
+    <li>Everything the generator assumes is listed with its source in <code>docs/assumptions.md</code>; the limitation register lives in <code>docs/limitations.md</code>.</li>
+  </ul>
+</section>
+
+<section class="wrap">
+  <h2>11 · Jury Q&amp;A</h2>
+
+  <div class="qa">
+    <h3>How is this different from Malaffi's e-Referral?</h3>
+    <p>e-Referral manages referrals, tracks their status, and carries communication between referrer and receiver — that is its job, mandated and built. Nexyra works one level above: ownership of the case created by a <em>positive screening result</em>. It shows who owns the case now, escalates when nobody acts, verifies closure against the report, and leaves an audit trail. It is not a referral tracker and does not compete with e-Referral for messaging.</p>
+  </div>
+
+  <div class="qa">
+    <h3>Why not use a predictive model?</h3>
+    <p>Deliberate scope choice. A drop-off risk model trained on synthetic assumptions would dress guesses as predictions, and judges are right to distrust it. Instead the product makes loss visible and actionable: explicit unowned states, timers, escalation, and measured time-to-owner. We would rather show a rule that works than predict a number we cannot stand behind.</p>
+  </div>
+
+  <div class="qa">
+    <h3>Aren't automatic reminders enough?</h3>
+    <p>Reminders are step one of the ladder, not the answer to requirement 3. Two-way confirmation — “I understand and I will come” vs “call me” — is what makes communication <em>confirmed</em> rather than sent. And timing matters: in the Atlas 2023 trial letters went out in week 2 and calls in week 4 — too slow for a 31-day referral-to-colonoscopy window. Our ladder compresses that timeline and escalates to humans for patients who do not respond.</p>
+  </div>
+
+  <div class="qa">
+    <h3>The data is synthetic — what is actually proven?</h3>
+    <p>Proven: the mechanism. Cases cannot skip stages or close without evidence; closure verification holds back wrong closures on a hand-labeled test set with the numbers reported honestly; escalation fires exactly once per level; the whole thing replays deterministically. Not proven: any effect on real patients or real drop-off rates. Those claims stay out of the deck, and the synthetic-data label stays on screen.</p>
+  </div>
+
+  <div class="qa">
+    <h3>What if AI misreads a report?</h3>
+    <p>Every design choice points the failure the safe way. Quotations are validated in code — not verbatim, not usable. Unknown becomes <code>needs_human_reading</code>, not a guess. The AI proposal is labelled as a proposal and can never close a case; the responsible physician decides, and the divergence is recorded. A misread can make a case stay open too long; it cannot close one that should not close.</p>
+  </div>
+
+  <div class="qa">
+    <h3>Who on the team understands the clinical side?</h3>
+    <p>Honestly: no clinician is on the team. The pathway logic came from published guidelines and general logic, and one external clinician with clinic experience reviewed it before the judges did. Every deadline without a published source is visibly flagged for that review and corrected after it. That constraint is also why the product refuses to make clinical decisions — it surfaces evidence and hands the decision to a clinician.</p>
+  </div>
+
+  <div class="qa">
+    <h3>Why colonoscopy?</h3>
+    <p>Because it is where the loop breaks loudest. A positive FIT hands the patient from lab to clinic to hospital to pathology — four handoffs, four chances for ownership to vanish — and the referral-to-colonoscopy window (≤ 31 days) is the one deadline with a published basis to measure against. It is also only the first pathway: the engine reads pathway templates, and a mammography pathway is configured without touching the engine.</p>
+  </div>
+
+  <div class="qa">
+    <h3>What are your evaluation numbers?</h3>
+    <p>Closure verification on 24 hand-labeled synthetic reports, reported as fractions with denominators and with every error listed — including any wrong closure that slipped through. The numbers land here and in the deck exactly as measured (<span class="flag">⚑ fill from docs/evaluation-results.md after TICKET-14</span>). They measure the mechanism on synthetic reports, not clinical accuracy.</p>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>12 · Sources and caveats</h2>
+  <ul>
+    <li><strong>DoH Circular 144/2026</strong> — read first-hand (Nov 2026). All referral transactions must be sent to Malaffi as HL7 REF messages no later than <strong>31 August 2026</strong>, with priority and SNOMED-coded specialty; e-Referral is intended for referral management, status monitoring, and communication between referrer and receiver. Referenced by number and gist only — the document itself is not reproduced.</li>
+    <li><strong>HAAD standard</strong> — referral-to-colonoscopy ≤ 31 days (cited in BMC Cancer 2021). The only pathway deadline with a published source so far.</li>
+    <li><strong>Atlas 2023 trial</strong> — outreach timing (letters week 2, calls week 4) and an approximately 8-point follow-up lift from outreach. Used only for assumptions, with its caveat attached.</li>
+    <li><strong>DoH breast cancer screening &amp; diagnosis standard, v2 (Aug 2025)</strong> — basis for the mammography pathway's existence; its time limits have not been read yet.</li>
+    <li><strong>Caveat:</strong> statements that lab results and schedules must also be sent as HL7 messages come from search summaries of another circular — not to be cited as fact until the document is read first-hand.</li>
+    <li class="flag" style="white-space:normal">⚑ The original brief's per-source statistics and effect sizes were lost with the file. Restore them from the sources above (and the challenge's own evidence page) before any external publication.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer class="wrap">
+  <p>
+    <strong>About this file.</strong> Rebuilt on 16 Nov 2026 from the references across
+    <code>tickets/</code> and <code>docs/</code> after the original
+    <code>brief-c05-itmam.html</code> was lost; the project is now named Nexyra.
+    TICKET-24's known corrections (circular read first-hand, consultation module on top
+    of e-Referral, 15–20 Nov schedule, “Why colonoscopy?” in the Q&amp;A) are already
+    applied. Marked <span class="flag">⚑</span> items still need values from the
+    original or from later tickets — see <code>tickets/TICKET-24.md</code> for the
+    update checklist.
+  </p>
+  <p>
+    This brief is also published as a public web page. Republishing changes what
+    outside readers see, so it happens only at the project owner's request.
+  </p>
+</footer>
+
+</body>
+</html>

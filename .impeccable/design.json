@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-17T13:05:00Z",
+  "title": "Design System: Nexyra",
+  "extensions": {
+    "worldSource": "crouwel-grid-specimen",
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "#1246d9",
+        "tonalRamp": ["#edf1fa", "#d6e0fb", "#a8bef2", "#7a9ae8", "#4a70dd", "#1246d9", "#0e37ad", "#082380"]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Signal Blue Soft",
+        "canonical": "#edf1fa",
+        "tonalRamp": ["#f7f9fe", "#edf1fa", "#dfe7f7", "#cbd8f3"]
+      },
+      "ground": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#fbfbf9",
+        "tonalRamp": ["#ffffff", "#fbfbf9", "#f4f6fa", "#eceff3"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink Rule",
+        "canonical": "#101418",
+        "tonalRamp": ["#97a1ad", "#576372", "#2b323a", "#101418"]
+      },
+      "grid": {
+        "role": "neutral",
+        "displayName": "Construction Grid",
+        "canonical": "#dfe6f1",
+        "tonalRamp": ["#eef2f8", "#dfe6f1", "#d6deea", "#c3ccd9"]
+      },
+      "alarm": {
+        "role": "tertiary",
+        "displayName": "Oxide",
+        "canonical": "#b03a2e",
+        "tonalRamp": ["#f7e9e6", "#e9c9c3", "#b03a2e", "#6d231b"]
+      },
+      "surface-raised": {
+        "role": "neutral",
+        "displayName": "Raised Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#ffffff"]
+      },
+      "ink-body": {
+        "role": "neutral",
+        "displayName": "Quoted Evidence Ink",
+        "canonical": "#2b323a",
+        "tonalRamp": ["#2b323a"]
+      },
+      "muted-soft": {
+        "role": "neutral",
+        "displayName": "Closed Ink",
+        "canonical": "#97a1ad",
+        "tonalRamp": ["#97a1ad"]
+      },
+      "on-accent": {
+        "role": "primary",
+        "displayName": "On Signal Blue",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#ffffff"]
+      },
+      "on-accent-muted": {
+        "role": "primary",
+        "displayName": "On Signal Blue Muted",
+        "canonical": "#c6d5ff",
+        "tonalRamp": ["#c6d5ff"]
+      },
+      "on-ink-muted": {
+        "role": "neutral",
+        "displayName": "On Ink Muted",
+        "canonical": "#cdd8e8",
+        "tonalRamp": ["#cdd8e8"]
+      },
+      "alarm-ink": {
+        "role": "tertiary",
+        "displayName": "Oxide Ink",
+        "canonical": "#6d231b",
+        "tonalRamp": ["#6d231b"]
+      },
+      "disabled-ground": {
+        "role": "neutral",
+        "displayName": "Disabled Ground",
+        "canonical": "#f4f6fa",
+        "tonalRamp": ["#f4f6fa"]
+      },
+      "disabled-border": {
+        "role": "neutral",
+        "displayName": "Disabled Border",
+        "canonical": "#bcc6d3",
+        "tonalRamp": ["#bcc6d3"]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Resolved Green",
+        "canonical": "#2f6b4f",
+        "tonalRamp": ["#2f6b4f"]
+      }
+    },
+    "typographyMeta": {
+      "figure": { "displayName": "Programme Figure", "purpose": "The single open-cases figure, 104px. One per screen." },
+      "figure-md": { "displayName": "Programme Figure (narrow)", "purpose": "The same figure between 820 and 1180px." },
+      "headline": { "displayName": "Case Identity", "purpose": "Detail sheet title; the ref sits above it in Signal Blue." },
+      "headline-sm": { "displayName": "Case Identity (narrow)", "purpose": "Detail sheet title below 820px." },
+      "numeric-lg": { "displayName": "Summary Count", "purpose": "The three counts beside the figure. Tabular." },
+      "numeric": { "displayName": "Deadline Number", "purpose": "Distance to deadline on the floor of a cell. Tabular." },
+      "brand": { "displayName": "Wordmark", "purpose": "Product name in the top bar." },
+      "title": { "displayName": "Section Heading", "purpose": "Sheet sections. Sentence case, never with an eyebrow above it." },
+      "cell-name": { "displayName": "Cell Patient Line", "purpose": "Patient and age inside a case cell." },
+      "body": { "displayName": "Body", "purpose": "Default reading text, capped at ~68ch in prose blocks." },
+      "body-sm": { "displayName": "Body Small", "purpose": "Quoted evidence, event rows, form values." },
+      "note": { "displayName": "Section Note", "purpose": "The explanatory line under a heading." },
+      "filter": { "displayName": "Filter Label", "purpose": "Pressed-state filter buttons." },
+      "cell-stage": { "displayName": "Cell Stage Line", "purpose": "Stage name inside a case cell." },
+      "meta": { "displayName": "Meta Value", "purpose": "Deadlines, offsets, source files in mono." },
+      "label": { "displayName": "Mono Label", "purpose": "Nav items, column heads, field labels. Uppercase, 0.14em." },
+      "label-sm": { "displayName": "Mono Label Small", "purpose": "Footers, legends, key lines." },
+      "micro": { "displayName": "Micro Label", "purpose": "Provenance and count labels." },
+      "micro-sm": { "displayName": "Micro Label XS", "purpose": "Stage strip ordinals and relations." },
+      "micro-xs": { "displayName": "Micro Label Cell", "purpose": "Owner and state line inside a case cell." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "settle", "value": "320ms cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "The one authored entrance: cells rise 6px into place." },
+      { "name": "settle-stagger", "value": "18ms per cell index", "purpose": "Staggers the settle across the grid; removed under prefers-reduced-motion." }
+    ],
+    "breakpoints": [
+      { "name": "grid-4", "value": "1180px" },
+      { "name": "layout-collapse", "value": "820px" },
+      { "name": "single-column", "value": "520px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one committed action per view, e.g. Confirm closure.",
+      "html": "<button class=\"ds-btn-primary\">Confirm closure</button>",
+      "css": ".ds-btn-primary { font: 500 13px/1 Archivo, system-ui, sans-serif; background: #1246d9; color: #fff; border: 1px solid #1246d9; border-radius: 0; padding: 9px 16px; cursor: pointer; transition: background 120ms ease-out; } .ds-btn-primary:hover { background: #0e37ad; border-color: #0e37ad; } .ds-btn-primary:focus-visible { outline: 2px solid #1246d9; outline-offset: 2px; } .ds-btn-primary:disabled { background: #f4f6fa; border-color: #bcc6d3; color: #97a1ad; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Every ordinary action; never carries the accent fill.",
+      "html": "<button class=\"ds-btn\">Return to engine</button>",
+      "css": ".ds-btn { font: 400 13px/1 Archivo, system-ui, sans-serif; background: #fbfbf9; color: #101418; border: 1px solid #101418; border-radius: 0; padding: 9px 16px; cursor: pointer; } .ds-btn:hover { background: #edf1fa; } .ds-btn:focus-visible { outline: 2px solid #1246d9; outline-offset: 2px; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "filter",
+      "description": "Pressed-state filter group over the case grid.",
+      "html": "<button class=\"ds-filter\" aria-pressed=\"true\">Unowned</button>",
+      "css": ".ds-filter { font: 400 12px/1 Archivo, system-ui, sans-serif; background: #fbfbf9; color: #101418; border: 1px solid #101418; border-radius: 0; padding: 5px 11px; cursor: pointer; } .ds-filter:hover { background: #edf1fa; } .ds-filter[aria-pressed=\"true\"] { background: #1246d9; border-color: #1246d9; color: #fff; }"
+    },
+    {
+      "name": "Case Cell",
+      "kind": "custom",
+      "description": "The signature unit: one case per cell, deadline distance resting on the floor. Late flips the whole cell to Signal Blue.",
+      "html": "<a class=\"ds-cell\" href=\"#\" data-state=\"late\"><span class=\"ds-cell-who\">S. Al Ali</span><span class=\"ds-cell-ref\">CX-0409</span><span class=\"ds-cell-name\">M. Rahman · 61</span><span class=\"ds-cell-stage\">Colonoscopy booked</span><span class=\"ds-cell-due\"><b>−3</b><i>hours late</i></span><span class=\"ds-cell-badge\">escalated</span></a>",
+      "css": ".ds-cell { display: flex; flex-direction: column; min-height: 116px; padding: 8px 9px 9px; border-right: 1px solid #101418; border-bottom: 1px solid #101418; background: #fbfbf9; color: #101418; text-decoration: none; position: relative; } .ds-cell-who { position: absolute; top: 8px; right: 9px; font: 400 8.5px Spline Sans Mono, monospace; letter-spacing: .1em; text-transform: uppercase; color: #576372; } .ds-cell-ref { font: 400 10px Spline Sans Mono, monospace; letter-spacing: .05em; color: #1246d9; } .ds-cell-name { font: 600 14.5px/1.2 Archivo, system-ui, sans-serif; margin-top: 3px; } .ds-cell-stage { font-size: 11.5px; color: #576372; margin-top: 2px; } .ds-cell-due { margin-top: auto; display: flex; align-items: baseline; gap: 5px; } .ds-cell-due b { font: 600 24px/1 Archivo, system-ui, sans-serif; letter-spacing: -.03em; font-variant-numeric: tabular-nums; } .ds-cell-due i { font: 400 8.5px Spline Sans Mono, monospace; letter-spacing: .1em; text-transform: uppercase; color: #576372; } .ds-cell-badge { font: 400 8.5px Spline Sans Mono, monospace; letter-spacing: .14em; text-transform: uppercase; color: #576372; } .ds-cell[data-state=\"late\"] { background: #1246d9; color: #fff; } .ds-cell[data-state=\"late\"] .ds-cell-ref, .ds-cell[data-state=\"late\"] .ds-cell-stage, .ds-cell[data-state=\"late\"] .ds-cell-who, .ds-cell[data-state=\"late\"] .ds-cell-due i, .ds-cell[data-state=\"late\"] .ds-cell-badge { color: #c6d5ff; } .ds-cell[data-state=\"due\"] { background: #edf1fa; }"
+    },
+    {
+      "name": "Stage Strip",
+      "kind": "custom",
+      "description": "Seven fixed-scale stage segments; the current one inverts to ink.",
+      "html": "<div class=\"ds-strip\"><div data-done=\"true\"><em>01</em><strong>Result</strong><small>done</small></div><div data-current=\"true\" aria-current=\"step\"><em>02</em><strong>Colonoscopy</strong><small>here</small></div><div><em>03</em><strong>Ordered</strong><small>ahead</small></div></div>",
+      "css": ".ds-strip { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid #101418; border-right: 0; } .ds-strip > div { border-right: 1px solid #101418; padding: 10px 9px 12px; min-height: 84px; display: flex; flex-direction: column; } .ds-strip em { font: 400 9px Spline Sans Mono, monospace; letter-spacing: .12em; color: #576372; } .ds-strip strong { font: 600 13px/1.25 Archivo, system-ui, sans-serif; margin-top: 6px; } .ds-strip small { font: 400 9px Spline Sans Mono, monospace; letter-spacing: .08em; color: #576372; margin-top: auto; } .ds-strip > div[data-done=\"true\"] { background: #edf1fa; } .ds-strip > div[data-current=\"true\"] { background: #101418; color: #fff; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Single-line and multi-line entry; errors pair with an oxide notice panel.",
+      "html": "<label class=\"ds-label\" for=\"r\">What happened</label><textarea class=\"ds-input\" id=\"r\">No answer after two rings.</textarea>",
+      "css": ".ds-label { display: block; font: 400 9.5px Spline Sans Mono, monospace; letter-spacing: .12em; text-transform: uppercase; color: #576372; margin-bottom: 6px; } .ds-input { font: 400 13px/1.45 Archivo, system-ui, sans-serif; width: 100%; max-width: 420px; padding: 8px 10px; border: 1px solid #101418; border-radius: 0; background: #fff; color: #101418; min-height: 76px; resize: vertical; } .ds-input:focus-visible { outline: 2px solid #1246d9; outline-offset: 2px; } .ds-input[aria-invalid=\"true\"] { border-color: #b03a2e; }"
+    },
+    {
+      "name": "Error Notice",
+      "kind": "card",
+      "description": "Names the problem and the recovery beside the control that failed.",
+      "html": "<p class=\"ds-notice-alarm\"><strong>Attempt not logged</strong>Write what happened on the attempt — at least a few words.</p>",
+      "css": ".ds-notice-alarm { max-width: 620px; padding: 12px 14px; border: 1px solid #b03a2e; background: #f7e9e6; color: #6d231b; font-size: 12.5px; } .ds-notice-alarm strong { display: block; font-size: 13px; margin-bottom: 3px; color: #101418; }"
+    },
+    {
+      "name": "Top Bar Navigation",
+      "kind": "nav",
+      "description": "Wordmark plus mono nav; active item is ink with a 3px Signal Blue rule.",
+      "html": "<header class=\"ds-topbar\"><span class=\"ds-brand\">Nexyra</span><nav><a href=\"#\" aria-current=\"page\">Cases</a><a href=\"#\">Programme</a></nav><span class=\"ds-clock\"><b>17 Nov 2026 · 11:42</b>demo clock · UTC+7</span></header>",
+      "css": ".ds-topbar { display: flex; align-items: center; gap: 32px; height: 72px; padding: 0 36px; background: #fbfbf9; border-bottom: 2px solid #101418; } .ds-brand { font: 700 19px/1 Archivo, system-ui, sans-serif; letter-spacing: -.01em; } .ds-topbar nav { display: flex; gap: 26px; } .ds-topbar nav a { font: 400 10.5px Spline Sans Mono, monospace; letter-spacing: .14em; text-transform: uppercase; color: #576372; text-decoration: none; padding: 26px 0 24px; border-bottom: 3px solid transparent; } .ds-topbar nav a[aria-current=\"page\"] { color: #101418; border-bottom-color: #1246d9; } .ds-clock { margin-left: auto; text-align: right; font: 400 10px Spline Sans Mono, monospace; letter-spacing: .1em; text-transform: uppercase; color: #576372; } .ds-clock b { display: block; font-size: 13px; color: #101418; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Case Register",
+    "overview": "The interface behaves like the grid it is drawn on: a construction grid stays visible in the shell, and every case occupies exactly one cell in it. The grid is the measurement the work is read against, so it is left showing rather than painted over.\n\nDensity is the point. Coordination staff scan roughly 140 open cases a day, so contrast is spent on data rather than on the frame: hard 1px ink rules instead of shadows, zero radii, and a near-white ground that lets one saturated plane mean something. When a case misses its deadline its whole cell turns that plane, so the exception is found before a label is read.\n\nThe system refuses the category defaults: status pills, equal KPI card grids, and rounded soft-shadowed containers. Expression lives in the type scale and the grid.",
+    "keyCharacteristics": [
+      "Visible 36px construction grid behind every screen",
+      "One saturated plane #1246d9 reserved for missed deadlines and the single primary action",
+      "Zero border radius, border-only elevation",
+      "Monospace for anything measured, Archivo for anything read",
+      "The deadline number at each cell's floor is the primary data of every list"
+    ],
+    "rules": [
+      { "name": "The One Plane Rule", "body": "The saturated blue may appear on at most one cell per viewport band and one control per screen. Its rarity is what makes a missed deadline readable at a glance.", "section": "colors" },
+      { "name": "The No-Colour-Only Rule", "body": "Colour never carries a state by itself. Late cells also print a negative number and the word escalated; unowned cases print no owner.", "section": "colors" },
+      { "name": "The Mono-For-Measurement Rule", "body": "Values compared across rows are set in Spline Sans Mono with tabular figures; sentences are set in Archivo. There is no third case.", "section": "typography" },
+      { "name": "The No-Eyebrow Rule", "body": "A section heading carries itself. No small uppercase kicker sits above a heading anywhere in the product.", "section": "typography" },
+      { "name": "The Border-Or-Nothing Rule", "body": "Elevation is a border. A soft shadow added to a card, cell, or panel is a defect, not a variation.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do put the deadline's distance at the floor of every list row or cell, as a signed number in tabular figures.",
+      "Do keep the construction grid visible in the shell at #dfe6f1 and nowhere inside a data region.",
+      "Do print provenance next to every extracted value: source file, character offset, read time.",
+      "Do name the reason in an exception list rather than showing a count alone.",
+      "Do disable an action a role cannot take, keep it legible, and state why beside it.",
+      "Do set every compared value in Spline Sans Mono with tabular-nums.",
+      "Do honour prefers-reduced-motion by removing the cell settle entirely."
+    ],
+    "donts": [
+      "Don't introduce status pills, rounded badges, or a second accent colour.",
+      "Don't add box-shadow anywhere, including hover states and floating panels.",
+      "Don't round a corner on buttons, chips, inputs, notices, or cells.",
+      "Don't use #ffffff as a page ground; it is reserved for inputs and notice panels above #fbfbf9.",
+      "Don't put a kicker or eyebrow above a heading.",
+      "Don't nest a bordered container inside another bordered container.",
+      "Don't imply automatic closure in copy or layout; the engine proposes, a clinician confirms."
+    ]
+  }
+}

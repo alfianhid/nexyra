@@ -1,0 +1,94 @@
+# Nexyra project tickets (Challenge 05)
+
+Compiled on 15 Nov 2026. Submission deadline: **Saturday, 21 Nov 2026 at 02:59 UTC+7** (01:29 IST). Target for the first version: the afternoon of 20 Nov (UTC+7). The product specification is in [`brief-c05-nexyra.html`](../brief-c05-nexyra.html); these tickets break it down into work that can be picked up one piece at a time.
+
+## What we submit
+
+> **Flagged: two human review slots are the critical path, and neither is booked.**
+> Slot 1 (label check, TICKET-12) is needed by **end of 17 Nov** and must happen *before* TICKET-13 runs, or the evaluation numbers are measured against tuned labels. Slot 2 (clinical review, TICKET-19) is needed **18 Nov** and blocks the deck, the brief update, and the documentation. Both are with Fulan. See [`docs/review-slots.md`](../docs/review-slots.md) for materials, prompts, and reminders. Nothing on the schedule recovers if these slip a day.
+
+Details are in [`docs/submission.md`](../docs/submission.md).
+
+| Deliverable | Limit | Ticket |
+|---|---|---|
+| Solution deck from the mandatory PPT template, as PDF | 5 MB | TICKET-26 |
+| Demo video via a public link | under 3 minutes | TICKET-21 |
+| Prototype or deployment link | – | TICKET-21 |
+| Solution summary | 2,000 characters | TICKET-27 |
+| What has been built during the challenge | 1,500 characters | TICKET-27 |
+| Conflict of interest declaration | – | TICKET-27 |
+
+## How to use
+
+- One file per ticket. Change the `Status` line in the ticket file when starting and when finishing (`not started` → `in progress` → `done`).
+- Tickets marked **Claude Code** can be handed straight to a Claude Code session, for example: "work on `tickets/TICKET-05.md`". Tickets marked **human** must be done by a team member.
+- A ticket is done when every item in the "Done when" section is met and its tests pass.
+- Priority: **P0** is mandatory for the submission, **P1** is done when that day's P0 work is finished, **P2** is cut first when time runs out.
+
+## Decisions made
+
+- Demo pathway: positive FIT → colonoscopy → pathology → follow-up. Other pathways are added via templates (see TICKET-04 and TICKET-18).
+- No drop-off risk prediction model is built.
+- AI only extracts and proposes. Case closure is always confirmed by a clinician.
+- All data is synthetic. No real patient data.
+- Nexyra builds on Malaffi referral data (DoH Circular 144/2026) and does not create a competing inter-clinician messaging channel.
+- The stack is chosen for the project's needs, not for what is already installed: TypeScript on Node.js, React, and SQLite. Anything not yet installed is set up in TICKET-02, and the team may replace it in that ticket. SQLite replaced PostgreSQL via Docker Compose on 17 Nov to cut technical complexity (see [`docs/ideas/build-readiness.md`](../docs/ideas/build-readiness.md)).
+- Roles: the picker keeps three (`coordinator`, `physician`, `program_manager`) for the demo. `docs/api.md` also defines `navigator`; it exists in the client `Role` type and in the permission table, but has no screen and is not selectable. Decided 18 Nov, before Phase 2 of [`docs/prompts/README.md`](../docs/prompts/README.md).
+- Frontend stays in `src/`, the server goes in `server/` (deviation from TICKET-02's `src/engine` + `src/web` split). Recorded 18 Nov, Phase 3. `src/` is not moved or renamed.
+- Vitest is pinned to v2 because v5 requires Vite 6+ and the app is on Vite 5. Typescript for `server/` is a separate project (`tsconfig.server.json`) because the app's `tsconfig.json` covers `src/` only.
+- This machine's npm policy blocks dependency install scripts. `better-sqlite3` therefore needs `npm install-scripts approve better-sqlite3` followed by `npm rebuild better-sqlite3` after `npm install`, or it fails at runtime with "Could not locate the bindings file". Running the two commands on 18 Nov built the binding for Node 24.18.0 / win32-x64.
+
+## Ticket list
+
+| ID | Title | Priority | Day | Assignee | Depends on |
+|---|---|---|---|---|---|
+| [TICKET-01](TICKET-01.md) | Complete the official submission requirements | P0 | 15 Nov | human | – |
+| [TICKET-02](TICKET-02.md) | Set up the project and stack | P0 | 15 Nov | Claude Code | – |
+| [TICKET-03](TICKET-03.md) | Data model and audit trail | P0 | 15 Nov | Claude Code | 02 |
+| [TICKET-04](TICKET-04.md) | FIT pathway template as configuration | P0 | 15 Nov | Claude Code | 02 |
+| [TICKET-05](TICKET-05.md) | Case state machine and closure rules | P0 | 15 Nov | Claude Code | 03, 04 |
+| [TICKET-06](TICKET-06.md) | Timers, demo clock, and escalation | P0 | 16 Nov | Claude Code | 05 |
+| [TICKET-07](TICKET-07.md) | Synthetic data generator | P0 | 16 Nov | Claude Code | 03, 04 |
+| [TICKET-08](TICKET-08.md) | Unowned cases and event stitching | P0 | 16 Nov | Claude Code | 05, 06 |
+| [TICKET-09](TICKET-09.md) | Worklist and case detail page | P0 | 16 Nov | Claude Code | 05, 06 |
+| [TICKET-10](TICKET-10.md) | Patient outreach ladder | P0 | 17 Nov | Claude Code | 06, 09 |
+| [TICKET-11](TICKET-11.md) | Inter-clinician consultation monitoring | P1 | 18 Nov | Claude Code | 08, 09 |
+| [TICKET-12](TICKET-12.md) | Labeled report test set | P0 | 16 Nov | Claude Code + human | 02 |
+| [TICKET-13](TICKET-13.md) | Report extraction with citations | P0 | 17 Nov | Claude Code | 05, 12 |
+| [TICKET-14](TICKET-14.md) | Closure verification evaluation | P0 | 17 Nov | Claude Code | 12, 13 |
+| [TICKET-15](TICKET-15.md) | Closure confirmation screen | P0 | 17 Nov | Claude Code | 09, 13 |
+| [TICKET-16](TICKET-16.md) | Program view | P0 | 18 Nov | Claude Code | 07, 08 |
+| [TICKET-17](TICKET-17.md) | Three demo cases with one-command reset | P0 | 18 Nov | Claude Code | 08, 10, 15 |
+| [TICKET-18](TICKET-18.md) | Second pathway via configuration | P2 | 19 Nov | Claude Code | 04, 05, 06 |
+| [TICKET-19](TICKET-19.md) | Clinical review | P0 | 18 Nov | Fulan (external) | 04, 12 |
+| [TICKET-20](TICKET-20.md) | Submission documentation | P0 | 19 Nov | Claude Code + human | 14, 19 |
+| [TICKET-21](TICKET-21.md) | Demo video and prototype link | P0 | 18–19 Nov | human + Claude Code | 17 |
+| [TICKET-22](TICKET-22.md) | Recording rehearsal and Q&A preparation | P0 | 19 Nov | human | 17 |
+| [TICKET-23](TICKET-23.md) | Final from-scratch check | P0 | 19 Nov | Claude Code | all P0 |
+| [TICKET-24](TICKET-24.md) | Update the brief | P1 | 19 Nov | Claude Code | 19 |
+| [TICKET-25](TICKET-25.md) | HL7 v2 message ingest for referrals and lab results | P1 | 18 Nov | Claude Code | 05, 08 |
+| [TICKET-26](TICKET-26.md) | Solution deck from the mandatory template | P0 | 17–19 Nov | Claude Code + human | 01, 14, 19 |
+| [TICKET-27](TICKET-27.md) | Fill in the form and submit | P0 | 19–20 Nov | human + Claude Code | 21, 23, 26 |
+
+## Schedule
+
+| Day | Tickets | Result at end of day |
+|---|---|---|
+| 15 Nov | 01, 02, 03, 04, 05 | One case can be created and driven through tests, with an audit trail |
+| 16 Nov | 06, 07, 08, 09, 12 | Cases move on their own when the clock advances and show up in the worklist |
+| 17 Nov | 10, 13, 14, 15, deck skeleton 26 | Closure verification runs and has evaluation numbers; the deck skeleton already follows the template |
+| 18 Nov | 16, 17, 19, first deploy 21, 25, 11 | The three demo cases run from start to closure; the flow has been clinically reviewed; the app can be opened from outside |
+| 19 Nov | 20, 26, 22, video 21, 23, draft 27, 24, 18 | Deck and video finished, build checked from scratch |
+| 20 Nov | 27 | Send the first version in the afternoon (UTC+7). Remaining time is only for small fixes. |
+| 21 Nov 02:59 UTC+7 | – | Deadline. Do not rely on these hours. |
+
+## Cut order if time runs out
+
+1. TICKET-18 (second pathway)
+2. TICKET-11 (consultation monitoring), covered in the documentation instead
+3. TICKET-25 (HL7 v2 ingest), covered in the documentation instead
+4. TICKET-24 (brief)
+5. Arabic in TICKET-10, keep English only with Arabic as a draft
+6. The 1,000-case funnel in TICKET-16, keep only the exception list
+
+Do not cut TICKET-13, TICKET-14, TICKET-15, or TICKET-17. Those four tickets are Nexyra's differentiators. TICKET-21, TICKET-26, and TICKET-27 cannot be cut either, because without them there is nothing to submit.
