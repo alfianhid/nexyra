@@ -64,6 +64,8 @@ export function Shell() {
               Cases
             </NavLink>
             <NavLink to="/programme">Programme</NavLink>
+            {/* TICKET-08: the not-yet-stitched queue is coordination and programme work. */}
+            {role !== "physician" && <NavLink to="/ingest/unstitched">Unstitched</NavLink>}
           </nav>
           <div className="role">
             <label htmlFor="role">Acting as</label>

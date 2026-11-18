@@ -1,10 +1,12 @@
-import { useMemo, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, type CSSProperties } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Page, useRole } from "../components/Shell";
 import { api } from "../api";
 import { roleFor } from "../api/roles";
 import type { CaseFilter, CaseSummary } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
+// TICKET-08
+import { UnownedList } from "../components/UnownedList";
 
 type Filter = "all" | "unowned" | "due" | "closure" | "late";
 
@@ -51,7 +53,11 @@ function matches(c: CaseSummary, filter: Filter) {
 
 export default function Worklist() {
   const { role, clockVersion } = useRole();
-  const [filter, setFilter] = useState<Filter>("all");
+  // The filter lives in the URL, so /cases?filter=unowned opens the unowned list directly.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get("filter");
+  const filter: Filter = filters.some((f) => f.id === asked) ? (asked as Filter) : "all";
+  const setFilter = (next: Filter) => setParams(next === "all" ? {} : { filter: next });
   const { data, error, loading } = useAsync(
     () => api.listCases(roleFor[role], serverFilter[filter]),
     [role, filter, clockVersion],
@@ -91,7 +97,9 @@ export default function Worklist() {
           <div className="count">
             <span>Unowned</span>
             <b className="alarm">{counts.unowned}</b>
-            <p>oldest 26h · no coordinator matched</p>
+            <p>
+              <Link to="/cases?filter=unowned">open the unowned list</Link>
+            </p>
           </div>
           <div className="count">
             <span>Past deadline</span>
@@ -118,70 +126,78 @@ export default function Worklist() {
           </button>
         ))}
         <span className="measure">
-          Cell = case · number = distance to deadline
+          {filter === "unowned"
+            ? "Row = case with no owner · longest first"
+            : "Cell = case · number = distance to deadline"}
         </span>
       </div>
 
-      <div className="cells" role="list" aria-label="Open cases" aria-busy={loading}>
-        {rows.map((c, i) => {
-          const due = dueFigure(c);
-          return (
-            <Link
-              key={c.case_id}
-              to={`/cases/${c.case_id}`}
-              className="cell"
-              role="listitem"
-              data-state={stateOf(c)}
-              style={{ "--i": i } as CSSProperties}
-            >
-              <span className="who">{c.owner?.display_name ?? "unowned"}</span>
-              <span className="ref">{c.case_id}</span>
-              <span className="name">{c.patient.display_name}</span>
-              <span className="stage">{c.stage_label}</span>
-              <span className="due">
-                <b>{due.value}</b>
-                <i>{due.unit}</i>
-              </span>
-              <span
-                className={`badge${c.owner === null && !c.flags.includes("closed") ? " alarm" : ""}`}
-              >
-                {c.flags.includes("late")
-                  ? c.owner === null
-                    ? "unowned"
-                    : "escalated"
-                  : c.owner === null && !c.flags.includes("closed")
-                    ? "no owner"
-                    : c.flags_renderable[0]}
-              </span>
-            </Link>
-          );
-        })}
-      </div>
+      {filter === "unowned" ? (
+        <UnownedList role={roleFor[role]} clockVersion={clockVersion} />
+      ) : (
+        <>
+          <div className="cells" role="list" aria-label="Open cases" aria-busy={loading}>
+            {rows.map((c, i) => {
+              const due = dueFigure(c);
+              return (
+                <Link
+                  key={c.case_id}
+                  to={`/cases/${c.case_id}`}
+                  className="cell"
+                  role="listitem"
+                  data-state={stateOf(c)}
+                  style={{ "--i": i } as CSSProperties}
+                >
+                  <span className="who">{c.owner?.display_name ?? "unowned"}</span>
+                  <span className="ref">{c.case_id}</span>
+                  <span className="name">{c.patient.display_name}</span>
+                  <span className="stage">{c.stage_label}</span>
+                  <span className="due">
+                    <b>{due.value}</b>
+                    <i>{due.unit}</i>
+                  </span>
+                  <span
+                    className={`badge${c.owner === null && !c.flags.includes("closed") ? " alarm" : ""}`}
+                  >
+                    {c.flags.includes("late")
+                      ? c.owner === null
+                        ? "unowned"
+                        : "escalated"
+                      : c.owner === null && !c.flags.includes("closed")
+                        ? "no owner"
+                        : c.flags_renderable[0]}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
 
-      {error && (
-        <p style={{ padding: "32px 0", fontSize: 13 }}>{error.message}</p>
+          {error && (
+            <p style={{ padding: "32px 0", fontSize: 13 }}>{error.message}</p>
+          )}
+
+          {!loading && !error && rows.length === 0 && (
+            <p style={{ padding: "32px 0", fontSize: 13 }}>
+              No case matches this filter. Clear it to see all {counts.open} open cases.
+            </p>
+          )}
+
+          <div className="grid-foot">
+            <span className="key">
+              <s className="late" />
+              past deadline
+            </span>
+            <span className="key">
+              <s className="due" />
+              due within 48 hours
+            </span>
+            {/* The grid carries closed rows too, so the denominator is the register this role
+                can see, not counts.open. */}
+            <span>{rows.length} of {data.cases.length} shown</span>
+            <span className="right">Grid is the register · open a cell to act</span>
+          </div>
+        </>
       )}
-
-      {!loading && !error && rows.length === 0 && (
-        <p style={{ padding: "32px 0", fontSize: 13 }}>
-          No case matches this filter. Clear it to see all {counts.open} open cases.
-        </p>
-      )}
-
-      <div className="grid-foot">
-        <span className="key">
-          <s className="late" />
-          past deadline
-        </span>
-        <span className="key">
-          <s className="due" />
-          due within 48 hours
-        </span>
-        {/* The grid carries closed rows too, so the denominator is the register this role
-            can see, not counts.open. */}
-        <span>{rows.length} of {data.cases.length} shown</span>
-        <span className="right">Grid is the register · open a cell to act</span>
-      </div>
     </Page>
   );
 }

@@ -8,6 +8,8 @@ import Programme from "./pages/Programme";
 import NotFound from "./pages/NotFound";
 // TICKET-10
 import PatientPage from "./pages/Patient";
+// TICKET-08
+import Unstitched from "./pages/Unstitched";
 
 export default function App() {
   return (
@@ -21,6 +23,8 @@ export default function App() {
         <Route path="/cases/:ref/outreach" element={<Outreach />} />
         <Route path="/cases/:ref/closure" element={<Closure />} />
         <Route path="/programme" element={<Programme />} />
+        {/* TICKET-08 */}
+        <Route path="/ingest/unstitched" element={<Unstitched />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
