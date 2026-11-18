@@ -1,0 +1,4 @@
+MSH|^~\&|LAB_A|prov_clinic_a|NEXYRA|NEXYRA|20261112080000||ORU^R01^ORU_R01|ORU-2002-1|P|2.5
+PID|1||NX-P-2002^^^NEXYRA^MR||Kumar^R||19791009|M|||||||en
+OBR|1||FIT-4377-26|29771-3^Fecal immunochemical test^LN|||20261111
+OBX|1|ST|29771-3^Fecal immunochemical test^LN||Positive||||||F

@@ -1,0 +1,4 @@
+MSH|^~\&|LAB_B|prov_clinic_b|NEXYRA|NEXYRA|20261117091500||ORU^R01^ORU_R01|ORU-2004-1|P|2.5
+PID|1||NX-P-2004^^^NEXYRA^MR||Nasser^Omar||19730115|M|||||||en
+OBR|1||FIT-2004-26|58453-2^Hemoglobin [Mass/volume] in Stool by Immunoassay^LN|||20261116
+OBX|1|NM|58453-2^Hemoglobin [Mass/volume] in Stool by Immunoassay^LN||240|ug/g|<100|H|||F

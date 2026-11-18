@@ -14,6 +14,7 @@
     "typecheck:server": "tsc -p tsconfig.server.json",
     "demo:reset": "tsx server/reset.ts",
     "demo:reset:remote": "tsx --env-file=.env server/reset.ts",
+    "ingest:hl7": "tsx --env-file-if-exists=.env server/ingest/hl7v2/cli.ts",
     "verify:file": "tsx server/verify/cli.ts",
     "eval": "tsx --env-file-if-exists=.env scripts/eval.ts",
     "pathway:deadlines": "tsx server/pathways/deadlines.ts"
@@ -21,6 +22,7 @@
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "express": "^4.22.3",
+    "hl7v2": "^2.3.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"

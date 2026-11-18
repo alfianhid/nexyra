@@ -621,3 +621,26 @@ Demo only. Sets the demo clock to day 0. `npm run demo:reset` (`TICKET-17`) call
 ## Model and provider
 
 `NEXYRA_MODEL` defaults to `deepseek/deepseek-v4.1-flash-1017`, called through an OpenAI-compatible chat completions endpoint (`LLM_BASE_URL`, `LLM_API_KEY`). Not Anthropic. Whatever model string is live is recorded, with the prompt version, in `docs/evaluation-results.md` (`TICKET-14`), so the published numbers name the model that produced them.
+
+### `POST /api/ingest/hl7v2`
+
+HL7 v2 `REF` and `ORU` messages (TICKET-25). Requires the `X-Nexyra-Actor` header like the FHIR ingest. The body is the message as `text/plain` (segments separated by `\r` or newlines) or JSON `{ "message": "MSH|..." }`. **Structure is generic HL7 v2.5; the Malaffi message specification has not been seen** (see `docs/architecture.md`, "HL7 v2 ingest"). MLLP and ADT/SIU are out of scope. The same function runs from the command line: `npm run ingest:hl7 -- data/hl7` (a file or a folder, in file-name order, written as the system actor; add `--json` for the full results).
+
+One message answers the result object below; a body with several messages (each starting `MSH|`) answers `{ "results": [...], "counts": { "<outcome>": n } }`. The result is the "raw message next to the events it produced" view: `raw`, `segments`, `parsed` and `events`.
+
+```json
+{
+  "raw": "MSH|^~\&|EREF_B|prov_hospital_b|...\rRF1|R^Rejected|...",
+  "segments": [{ "segment": "MSH", "text": "MSH|..." }, { "segment": "RF1", "text": "RF1|R^Rejected|..." }],
+  "message_type": "REF^I12^REF_I12",
+  "control_id": "REF-4377-R2-REJ",
+  "outcome": "applied",
+  "parsed": { "kind": "REF", "referral_id": "REF-4377-R2", "status": "rejected", "patient_identifier": "NX-P-2002", "priority": "routine", "specialty": { "system": "http://snomed.info/sct", "code": "394584008", "display": "Gastroenterology" }, "referring_provider_id": "prov_clinic_a", "receiving_provider_id": "prov_hospital_b", "reason": "Colonoscopy request incomplete (hospital B)" },
+  "case_id": "CX-H7-FIT-4377-26",
+  "events": [{ "event_id": "ev_...", "type": "referral_rejected", "case_id": "CX-H7-FIT-4377-26", "stage": "patient_notified" }]
+}
+```
+
+`outcome` is `created_case` (positive FIT), `applied` (a REF event recorded), `no_action` (negative FIT, or the referral is already in that state; `reason_code` says which) or `queued_unstitched` (`unstitched_id`, `reason_code`, `reason`; also listed by `GET /api/ingest/unstitched`, resource type `HL7v2`). A message answered before is `duplicate: true`. A bad message is still `200` with its reason; only a request with no message at all is `400`.
+
+**Demo case 2 by HL7** (messages in `data/hl7`; the seeded CX-1002 is the same story already played, so the replay uses patient `NX-P-2002`): `02-oru-...` creates the case; a coordinator tells the patient (`POST /events` `patient_notified`); `06-ref-new-...` sends the referral (sent before that step it is held with `invalid_transition` and applies on replay); `09-ref-rejected-...` rejects it, and the case appears in `GET /api/unowned` with trigger `referral_rejected`. The consultation steps then continue as in "Demo case 2 through the API". `10-ref-rejected-seeded-CX-1002` answers `no_action` (`already_in_state`) because the seed already holds that rejection.

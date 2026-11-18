@@ -1,0 +1,5 @@
+MSH|^~\&|EREF_B|prov_hospital_b|NEXYRA|NEXYRA|20261116154000||REF^I12^REF_I12|REF-4377-R2-REJ|P|2.5
+RF1|R^Rejected|R^Routine|394584008^Gastroenterology^SCT|||REF-4377-R2|20261114|||^Colonoscopy request incomplete (hospital B)
+PRD|RP|Haddad^R|||||prov_clinic_a
+PRD|RT|Fulana^Dr|||||prov_hospital_b
+PID|1||NX-P-2002^^^NEXYRA^MR||Kumar^R||19791009|M|||||||en

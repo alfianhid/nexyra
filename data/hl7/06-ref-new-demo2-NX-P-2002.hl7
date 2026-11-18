@@ -1,0 +1,5 @@
+MSH|^~\&|EREF_A|prov_clinic_a|NEXYRA|NEXYRA|20261114100000||REF^I12^REF_I12|REF-4377-R2-NEW|P|2.5
+RF1|P^Pending|R^Routine|394584008^Gastroenterology^SCT|||REF-4377-R2|20261114
+PRD|RP|Haddad^R|||||prov_clinic_a
+PRD|RT|Fulana^Dr|||||prov_hospital_b
+PID|1||NX-P-2002^^^NEXYRA^MR||Kumar^R||19791009|M|||||||en

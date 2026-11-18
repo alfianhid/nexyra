@@ -23,6 +23,7 @@ import {
 import { HttpError, sendError } from "./errors.js";
 import { programmeSummary } from "./programme.js";
 import { ingestFhir } from "./ingest.js";
+import { ingestHl7Text } from "./ingest/hl7v2/ingest.js";
 import { runCaseVerification } from "./verify/caseVerification.js";
 // TICKET-10
 import { afterOutreachLogged, evaluateCase } from "./outreach/ladder.js";
@@ -386,6 +387,37 @@ app.post(
     res.json(await ingestFhir(await getDb(), req.body, actor));
   }),
 );
+
+// --- TICKET-25: HL7 v2 ingest (REF and ORU) -------------------------------------------
+// text/plain body, or JSON { "message": "MSH|..." }. One message answers the result
+// object; several (each starting "MSH|") answer { results, counts }. See server/ingest/hl7v2.
+app.post(
+  "/api/ingest/hl7v2",
+  express.text({ type: ["text/*", "application/hl7-v2", "x-application/hl7-v2+er7"], limit: "1mb" }),
+  actorMiddleware(),
+  handle(async (req, res) => {
+    const actor = actorOf(res);
+    const body: unknown = req.body;
+    const text =
+      typeof body === "string"
+        ? body
+        : typeof body === "object" && body !== null && typeof (body as { message?: unknown }).message === "string"
+          ? (body as { message: string }).message
+          : null;
+    if (text === null) {
+      throw new HttpError(400, "validation_failed", 'Send the HL7 v2 message as a text/plain body or as JSON { "message": "MSH|..." }.');
+    }
+    const results = await ingestHl7Text(await getDb(), text, actor);
+    if (results.length === 1) {
+      res.json(results[0]);
+      return;
+    }
+    const counts: Record<string, number> = {};
+    for (const r of results) counts[r.outcome] = (counts[r.outcome] ?? 0) + 1;
+    res.json({ results, counts });
+  }),
+);
+// --- end TICKET-25 ---------------------------------------------------------------------
 
 app.post(
   "/api/cases/:case_id/consultations",

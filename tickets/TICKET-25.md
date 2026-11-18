@@ -2,7 +2,7 @@
 
 - **Priority:** P1 · **Day:** 18 Nov · **Estimate:** 3–4 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-05, TICKET-08
-- **Status:** not started
+- **Status:** done (18 Nov). Parser: `hl7v2` npm library. Endpoint `POST /api/ingest/hl7v2`, CLI `npm run ingest:hl7`, 15 messages in `data/hl7`, tests in `server/ingest/hl7v2/hl7v2.test.ts`.
 
 ## Goal
 
@@ -24,11 +24,11 @@ Connection to Malaffi. MLLP transport protocol. Other message types (ADT, SIU). 
 
 ## Done when
 
-- [ ] Test: an ORU message with a positive FIT creates one case with an initial owner
-- [ ] Test: a REF "rejected" message triggers the `unowned` status via TICKET-08
-- [ ] Test: a broken message does not crash the application and is recorded with its reason
-- [ ] Demo case 2 can be run by ingesting an HL7 message, not by pressing a simulation button
-- [ ] The documentation states clearly that the message structure follows generic HL7 v2, because we have never seen the Malaffi message specification
+- [x] Test: an ORU message with a positive FIT creates one case with an initial owner
+- [x] Test: a REF "rejected" message triggers the `unowned` status via TICKET-08
+- [x] Test: a broken message does not crash the application and is recorded with its reason
+- [x] Demo case 2 can be run by ingesting an HL7 message, not by pressing a simulation button
+- [x] The documentation states clearly that the message structure follows generic HL7 v2, because we have never seen the Malaffi message specification
 
 ## Notes
 

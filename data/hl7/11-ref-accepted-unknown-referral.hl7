@@ -1,0 +1,4 @@
+MSH|^~\&|EREF_B|prov_hospital_b|NEXYRA|NEXYRA|20261117150000||REF^I12^REF_I12|REF-9999-1-ACC|P|2.5
+RF1|A^Accepted|R^Routine|394584008^Gastroenterology^SCT|||REF-9999-1|20261117
+PRD|RT|Fulana^Dr|||||prov_hospital_b
+PID|1||NX-P-9999^^^NEXYRA^MR||Unknown^Patient||19600101|F|||||||en
