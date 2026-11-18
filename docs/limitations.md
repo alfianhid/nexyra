@@ -20,6 +20,7 @@ What this prototype does not do, does not prove, or has not had checked. Written
 - No clinician is on the team.
 - `[CLINICAL REVIEW PENDING — TICKET-19]` The pathway, deadlines and closure rules have not been reviewed by a clinician at the time of writing. When review happens, it will be one hospital colleague outside Abu Dhabi, who is not a team member. State which parts he did and did not review.
 - Six of the seven stage deadlines have no published source (see [`assumptions.md`](assumptions.md)). Only referral to colonoscopy within 31 days has one.
+- The mammography pathway is a configuration demonstration only and has not been clinically reviewed. (TICKET-18: `server/pathways/mammography-biopsy.json`. None of its deadlines has a source. We have not read the DoH breast cancer screening and diagnosis standard, version 2, effective August 2025. It has no report verification, no report test set and no patient message templates.)
 
 ## What the code does and does not contain today
 
@@ -31,7 +32,7 @@ Not in the code:
 - No labelled test set and no evaluation run.
 - No real patient messaging. The automated outreach message (TICKET-10) is recorded as sent but not delivered: there is no SMS or WhatsApp gateway, and the patient page is reached through a simulated link with no login.
 - The programme view reads the live case records through `GET /api/program/summary`, but its numbers are only as good as the synthetic data behind them. Its scenario panel applies one trial's effect size (Atlas et al., JAMA 2023) to the synthetic case count. That is an assumption, not a measurement.
-- No HL7 ingest, no Malaffi or e-Referral connection, no consultation monitoring, no second pathway.
+- No HL7 ingest, no Malaffi or e-Referral connection, no consultation monitoring.
 - No identity matching across providers.
 - No login. The role is picked from a menu, so the audit trail is only as honest as that menu.
 - The deployed version has not been run on Vercel at the time of writing.

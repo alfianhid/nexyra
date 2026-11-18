@@ -70,6 +70,8 @@ export type LadderCase = {
   owner_role: string | null;
   stage_entered_at: string | null;
   created_at: string;
+  // TICKET-18: the ladder belongs to one pathway (LADDER.pathway_id).
+  pathway_id: string;
 };
 
 export type StepRow = {
@@ -97,14 +99,18 @@ export type RunFacts = {
 };
 
 const CASE_COLUMNS = `c.id, c.patient_name, c.patient_language, c.stage, c.status, c.owner_actor_id,
-                      c.stage_entered_at, c.created_at, a.role AS owner_role`;
+                      c.stage_entered_at, c.created_at, a.role AS owner_role, c.pathway_id`;
 
 export function runIdOf(c: Pick<LadderCase, "stage" | "stage_entered_at" | "created_at">): string {
   return `${c.stage}@${c.stage_entered_at ?? c.created_at}`;
 }
 
-export function isLadderActive(c: Pick<LadderCase, "stage" | "status">): boolean {
-  return c.status !== "closed" && c.stage === LADDER.applies_to_stage;
+// TICKET-18: a case on another pathway never enters this ladder, even at a stage that
+// happens to share the ladder's stage name; its messages are not written.
+export function isLadderActive(c: Pick<LadderCase, "stage" | "status" | "pathway_id">): boolean {
+  return (
+    c.status !== "closed" && c.pathway_id === LADDER.pathway_id && c.stage === LADDER.applies_to_stage
+  );
 }
 
 function parse(json: string): Record<string, unknown> {
@@ -493,12 +499,12 @@ export async function tickOutreach(db: Db, now: string): Promise<OutreachTickRes
   const rows = await db
     .prepare(
       `SELECT id FROM cases
-        WHERE (status != 'closed' AND stage = ?)
+        WHERE (status != 'closed' AND stage = ? AND pathway_id = ?)
            OR id IN (SELECT s.case_id FROM outreach_steps s JOIN tasks t ON t.id = s.task_id
                       WHERE t.status = 'open')
         ORDER BY id`,
     )
-    .all<{ id: string }>(LADDER.applies_to_stage);
+    .all<{ id: string }>(LADDER.applies_to_stage, LADDER.pathway_id);
 
   const result: OutreachTickResult = {
     messages_sent: 0,

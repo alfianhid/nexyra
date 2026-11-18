@@ -255,22 +255,28 @@ export async function programmeSummary(db: Db, role: Role) {
   const now = (await getClock(db)).now;
   const clock = await embeddedClock(db);
 
+  // TICKET-18: the programme view is one pathway's funnel (the default, FIT). Cases on
+  // another template have other stages and another limit, so they are left out here
+  // rather than mixed into this funnel.
   const cases = await db
     .prepare(
       `SELECT c.id, c.stage, c.status, c.owner_actor_id, c.stage_entered_at, c.created_at,
               a.display_name AS owner_name
          FROM cases c
          LEFT JOIN actors a ON a.id = c.owner_actor_id
+        WHERE c.pathway_id = ?
         ORDER BY c.id`,
     )
-    .all<CaseRow>();
+    .all<CaseRow>(PATHWAY.id);
 
   const events = await db
     .prepare(
       `SELECT case_id, type, actor_id, actor_role, occurred_at, payload
-         FROM events ORDER BY rowid`,
+         FROM events
+        WHERE case_id IN (SELECT id FROM cases WHERE pathway_id = ?)
+        ORDER BY rowid`,
     )
-    .all<EventRow>();
+    .all<EventRow>(PATHWAY.id);
 
   // The latest reading per case, the same row the case detail's `verification` reads.
   const readings = await db

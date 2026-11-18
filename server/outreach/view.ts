@@ -1,5 +1,6 @@
 import { addHours, formatDue, getClock } from "../clock.js";
 import type { Db } from "../db.js";
+import { HttpError } from "../errors.js";
 import { DELAY_REASONS } from "../events.js";
 import {
   OUTREACH_EVENTS,
@@ -118,6 +119,14 @@ function displayedRun(currentRun: string, all: readonly StepRow[], active: boole
 export async function getOutreachLadder(db: Db, caseId: string) {
   const now = (await getClock(db)).now;
   const c = await loadLadderCase(db, caseId);
+  // TICKET-18: the ladder and its message templates are written for one pathway only.
+  if (c.pathway_id !== LADDER.pathway_id) {
+    throw new HttpError(
+      404,
+      "not_found",
+      `Case ${caseId} is on the ${c.pathway_id} pathway, which has no patient outreach ladder or message templates.`,
+    );
+  }
   const active = isLadderActive(c);
   const allSteps = await stepsFor(db, caseId);
   const runId = displayedRun(runIdOf(c), allSteps, active);

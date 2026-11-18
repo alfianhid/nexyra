@@ -19,6 +19,9 @@ const PROVIDERS = [
   { id: "prov_clinic_b", name: "Clinic B", kind: "clinic" },
   { id: "prov_hospital_b", name: "Hospital B", kind: "hospital" },
   { id: "prov_endo_e", name: "Endoscopy Unit E", kind: "endoscopy_unit" },
+  // TICKET-18: where the mammography cases are referred for diagnostic assessment. The
+  // schema's provider kinds have no imaging centre, so it is a hospital department.
+  { id: "prov_breast_c", name: "Breast Imaging Centre C", kind: "hospital" },
 ];
 
 const ACTORS = [
@@ -32,6 +35,10 @@ const ACTORS = [
   { id: "act_system", role: "system", display_name: "system", provider_id: null },
   // TICKET-10: the patient, acting only through the link in the outreach message.
   { id: "act_patient", role: "patient", display_name: "Patient (via link)", provider_id: null },
+  // TICKET-18: the breast care navigator who owns the mammography recalls, and the
+  // physician at the breast imaging centre who takes the cases that need a biopsy.
+  { id: "act_007", role: "navigator", display_name: "L. Mansour", provider_id: "prov_clinic_b" },
+  { id: "act_008", role: "responsible_physician", display_name: "Dr. Hessa", provider_id: "prov_breast_c" },
 ];
 
 // The specialty a colonoscopy referral is addressed to, as a SNOMED CT coding.
@@ -39,6 +46,13 @@ const GASTROENTEROLOGY = {
   system: "http://snomed.info/sct",
   code: "394584008",
   display: "Gastroenterology",
+};
+
+// TICKET-18: the specialty a diagnostic breast assessment referral is addressed to.
+const RADIOLOGY = {
+  system: "http://snomed.info/sct",
+  code: "394914008",
+  display: "Radiology",
 };
 
 // ---- TICKET-10: CX-1001's automated message ------------------------------------------
@@ -73,6 +87,8 @@ type SeedCase = {
   patient_language: string;
   // TICKET-08: what incoming FHIR resources are matched on. Fictional by construction.
   patient_identifier: string;
+  // TICKET-18: the template the case runs; the FIT pathway when absent.
+  pathway_id?: string;
   // What the story says the case looks like at day 0. The seed does not write these: it
   // replays `events` through the engine and refuses to run if the replay disagrees, so
   // the cached columns are always what rebuildCase would produce (TICKET-03).
@@ -280,6 +296,221 @@ const CASES: SeedCase[] = [
   },
 ];
 
+// ---- TICKET-18: three mammography cases on the second pathway ------------------------
+// Fictional, on server/pathways/mammography-biopsy.json, which is a configuration
+// demonstration and not clinically reviewed. They run on the same engine and sit in the
+// same worklist as the FIT cases. Owned by the breast care navigator and the breast
+// imaging centre's physician, so the coordinator's register is the FIT one it was.
+// Their deadlines fall after day 2 on purpose: advancing the demo clock 3 days escalates
+// MM-2001, 4 days escalates MM-2002.
+const MAMMOGRAPHY = "mammography-biopsy";
+
+const MAMMOGRAPHY_CASES: SeedCase[] = [
+  {
+    // Recalled on day 0 but the assessment referral has not gone out: due 20 Nov 09:00.
+    id: "MM-2001",
+    patient_name: "F. Al Mazrouei",
+    patient_age: 49,
+    patient_language: "ar",
+    patient_identifier: "NX-P-2001",
+    pathway_id: MAMMOGRAPHY,
+    expect: { stage: "patient_recalled", owner_actor_id: "act_007", final_outcome: null },
+    events: [
+      {
+        id: "e_2001_1",
+        type: "case_created",
+        actor_id: "act_system",
+        at: "2026-11-14T09:00:00+07:00",
+        summary: "Case created from screening mammogram 8812/26: recall for assessment",
+        payload: { owner_actor_id: "act_007", provider_id: "prov_clinic_b" },
+      },
+      {
+        id: "e_2001_2",
+        type: "patient_recalled",
+        actor_id: "act_007",
+        at: "2026-11-17T09:00:00+07:00",
+        summary: "Patient told the result by phone and agreed to come for assessment",
+      },
+    ],
+  },
+  {
+    // Imaging asked for tissue; the core biopsy was taken on 14 Nov and the pathology is
+    // due 21 Nov 10:00.
+    id: "MM-2002",
+    patient_name: "J. Santos",
+    patient_age: 56,
+    patient_language: "en",
+    patient_identifier: "NX-P-2002",
+    pathway_id: MAMMOGRAPHY,
+    expect: { stage: "biopsy_done", owner_actor_id: "act_008", final_outcome: null },
+    events: [
+      {
+        id: "e_2002_1",
+        type: "case_created",
+        actor_id: "act_system",
+        at: "2026-10-27T10:00:00+07:00",
+        summary: "Case created from screening mammogram 8790/26: recall for assessment",
+        payload: { owner_actor_id: "act_007", provider_id: "prov_clinic_b" },
+      },
+      {
+        id: "e_2002_2",
+        type: "patient_recalled",
+        actor_id: "act_007",
+        at: "2026-10-28T09:00:00+07:00",
+        summary: "Patient told the result in clinic",
+      },
+      {
+        id: "e_2002_3",
+        type: "assessment_referred",
+        actor_id: "act_007",
+        at: "2026-10-29T10:00:00+07:00",
+        summary: "Referral for diagnostic assessment sent to Breast Imaging Centre C",
+        payload: {
+          referral: {
+            referral_id: "REF-8790-1",
+            from_provider_id: "prov_clinic_b",
+            to_provider_id: "prov_breast_c",
+            status: "pending",
+            priority: "asap",
+            specialty: RADIOLOGY,
+          },
+        },
+      },
+      {
+        id: "e_2002_4",
+        type: "assessment_accepted",
+        actor_id: "act_system",
+        at: "2026-10-30T12:00:00+07:00",
+        summary: "Breast Imaging Centre C accepted the referral",
+      },
+      {
+        id: "e_2002_5",
+        type: "diagnostic_imaging_booked",
+        actor_id: "act_007",
+        at: "2026-10-30T12:30:00+07:00",
+        summary: "Diagnostic mammogram and ultrasound booked for 6 Nov",
+      },
+      {
+        id: "e_2002_6",
+        type: "diagnostic_imaging_done",
+        actor_id: "act_system",
+        at: "2026-11-06T11:00:00+07:00",
+        summary: "Diagnostic imaging done: biopsy recommended",
+      },
+      {
+        id: "e_2002_7",
+        type: "owner_assigned",
+        actor_id: "act_007",
+        at: "2026-11-06T12:00:00+07:00",
+        summary: "Handed to Dr. Hessa for the biopsy and its pathology",
+        payload: { owner_actor_id: "act_008", previous_owner_actor_id: "act_007" },
+      },
+      {
+        id: "e_2002_8",
+        type: "biopsy_performed",
+        actor_id: "act_008",
+        at: "2026-11-14T10:00:00+07:00",
+        summary: "Ultrasound-guided core biopsy performed",
+      },
+    ],
+  },
+  {
+    // Closed: diagnostic imaging found nothing that needs tissue, so the physician closed
+    // the case with the imaging report as evidence.
+    id: "MM-2003",
+    patient_name: "A. Rahimi",
+    patient_age: 61,
+    patient_language: "en",
+    patient_identifier: "NX-P-2003",
+    pathway_id: MAMMOGRAPHY,
+    expect: { stage: "closed", owner_actor_id: "act_008", final_outcome: "returned_to_routine_screening" },
+    events: [
+      {
+        id: "e_2003_1",
+        type: "case_created",
+        actor_id: "act_system",
+        at: "2026-10-06T09:00:00+07:00",
+        summary: "Case created from screening mammogram 8701/26: recall for assessment",
+        payload: { owner_actor_id: "act_007", provider_id: "prov_clinic_b" },
+      },
+      {
+        id: "e_2003_2",
+        type: "patient_recalled",
+        actor_id: "act_007",
+        at: "2026-10-07T10:00:00+07:00",
+        summary: "Patient told the result by phone",
+      },
+      {
+        id: "e_2003_3",
+        type: "assessment_referred",
+        actor_id: "act_007",
+        at: "2026-10-08T09:30:00+07:00",
+        summary: "Referral for diagnostic assessment sent to Breast Imaging Centre C",
+        payload: {
+          referral: {
+            referral_id: "REF-8701-1",
+            from_provider_id: "prov_clinic_b",
+            to_provider_id: "prov_breast_c",
+            status: "pending",
+            priority: "routine",
+            specialty: RADIOLOGY,
+          },
+        },
+      },
+      {
+        id: "e_2003_4",
+        type: "assessment_accepted",
+        actor_id: "act_system",
+        at: "2026-10-09T14:00:00+07:00",
+        summary: "Breast Imaging Centre C accepted the referral",
+      },
+      {
+        id: "e_2003_5",
+        type: "diagnostic_imaging_booked",
+        actor_id: "act_007",
+        at: "2026-10-09T15:00:00+07:00",
+        summary: "Diagnostic mammogram and ultrasound booked for 16 Oct",
+      },
+      {
+        id: "e_2003_6",
+        type: "diagnostic_imaging_done",
+        actor_id: "act_system",
+        at: "2026-10-16T10:00:00+07:00",
+        summary: "Diagnostic imaging done: benign finding, no biopsy recommended",
+      },
+      {
+        id: "e_2003_7",
+        type: "owner_assigned",
+        actor_id: "act_007",
+        at: "2026-10-16T11:00:00+07:00",
+        summary: "Handed to Dr. Hessa for the closure decision",
+        payload: { owner_actor_id: "act_008", previous_owner_actor_id: "act_007" },
+      },
+      {
+        id: "e_2003_8",
+        type: "closure_proposed",
+        actor_id: "act_008",
+        at: "2026-10-17T09:00:00+07:00",
+        summary: "Closure proposed: returned to routine screening",
+        payload: { outcome: "returned_to_routine_screening" },
+      },
+      {
+        id: "e_2003_9",
+        type: "closure_confirmed",
+        actor_id: "act_008",
+        at: "2026-10-17T15:00:00+07:00",
+        summary: "Closure confirmed with the diagnostic imaging report as evidence",
+        payload: { finalises: true },
+      },
+    ],
+  },
+];
+
+const MAMMOGRAPHY_IMAGING_REPORT =
+  "Synthetic report. Diagnostic mammography and targeted ultrasound of the recalled area. " +
+  "Findings are benign. No biopsy recommended. Return to routine screening.";
+// ---- end TICKET-18 ---------------------------------------------------------------------
+
 const ROLE_OF = new Map(ACTORS.map((a) => [a.id, a.role]));
 
 function recorded(e: SeedEvent): RecordedEvent {
@@ -294,7 +525,7 @@ function recorded(e: SeedEvent): RecordedEvent {
 
 // The cached columns for one seed case, computed the way rebuildCase computes them.
 function replay(c: SeedCase): CaseState {
-  const state = foldEvents(c.events.map(recorded));
+  const state = foldEvents(c.events.map(recorded), c.pathway_id);
   if (state === null) throw new Error(`Seed case ${c.id} has no case creation event.`);
   const mismatch = (["stage", "owner_actor_id", "final_outcome"] as const).filter(
     (key) => state[key] !== c.expect[key],
@@ -316,7 +547,7 @@ function ownershipRows(db: Db, c: SeedCase): InStatement[] {
   const referrals: Record<string, unknown>[] = [];
 
   for (const e of c.events) {
-    const status = eventDefinition(e.type)?.referral_status ?? null;
+    const status = eventDefinition(e.type, c.pathway_id)?.referral_status ?? null;
     const latest = referrals.at(-1);
     if (status !== null && latest) {
       latest.status = status;
@@ -369,7 +600,7 @@ function ownershipRows(db: Db, c: SeedCase): InStatement[] {
        owner_actor_id = excluded.owner_actor_id, owned_at = excluded.owned_at,
        hours_to_owner = excluded.hours_to_owner`,
   );
-  for (const gap of ownershipGaps(c.events.map(recorded))) {
+  for (const gap of ownershipGaps(c.events.map(recorded), c.pathway_id)) {
     const trigger = c.events[gap.trigger_index];
     if (!trigger) continue;
     out.push(
@@ -522,7 +753,7 @@ export async function seed(
     for (const p of PROVIDERS) statements.push(upsertProvider.bind(p));
     for (const a of ACTORS) statements.push(upsertActor.bind(a));
 
-    for (const c of CASES) {
+    for (const c of [...CASES, ...MAMMOGRAPHY_CASES]) {
       const state = replay(c);
       statements.push(upsertCase.bind({
         provider_id: state.provider_id ?? null,
@@ -531,7 +762,7 @@ export async function seed(
         patient_name: c.patient_name,
         patient_age: c.patient_age,
         patient_language: c.patient_language,
-        pathway_id: "fit-colonoscopy",
+        pathway_id: c.pathway_id ?? "fit-colonoscopy",
         owner_actor_id: state.owner_actor_id,
         stage: state.stage,
         status: state.status,
@@ -623,6 +854,15 @@ export async function seed(
       owner_actor_id: "act_003",
       due_at: "2026-11-17T14:00:00+07:00",
       status: "open",
+    }));
+
+    // TICKET-18: the evidence MM-2003 was closed on.
+    statements.push(upsertDocument.bind({
+      id: "d_2003",
+      case_id: "MM-2003",
+      kind: "diagnostic_imaging",
+      title: "Diagnostic imaging report",
+      text: MAMMOGRAPHY_IMAGING_REPORT,
     }));
   }
 

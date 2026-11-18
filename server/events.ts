@@ -4,14 +4,7 @@ import type { Actor } from "./actor.js";
 import { addHours, getClock, hoursBetween } from "./clock.js";
 import type { Db } from "./db.js";
 import {
-  CLOSURE_CONFIRMATION_EVENT,
-  CONSULTATION,
-  INITIAL_STAGE,
-  OUTCOMES,
-  PATHWAY,
-  REOPEN_EVENT,
   ReplayError,
-  UNOWNED,
   availableActions,
   confirmClosure,
   consultationAnswerEvent,
@@ -21,7 +14,9 @@ import {
   isConsultationAnswerEvent,
   isValidOutcome,
   nextState,
+  pathwayOf,
   rolesForEvent,
+  rulesOf,
   stageDefinition,
   transitionFor,
   type CaseState,
@@ -31,7 +26,7 @@ import {
 } from "./engine.js";
 import { HttpError } from "./errors.js";
 import { roundHours } from "./ownership.js";
-import { REFERRAL_STATUSES } from "./pathways/index.js";
+import { DEFAULT_PATHWAY, REFERRAL_STATUSES, UnknownPathwayError, type Pathway } from "./pathways/index.js";
 
 // Every write in the prototype ends up in this file. Nothing outside it updates a case
 // row, and nothing at all updates an event row: the events table is append-only.
@@ -47,13 +42,15 @@ type CaseStateRow = {
   stage_entered_at: string | null;
   created_at: string;
   provider_id: string | null;
+  // TICKET-18: which template every rule for this case runs.
+  pathway_id: string;
 };
 
 async function loadCase(db: Db, caseId: string): Promise<CaseStateRow> {
   const row = await db
     .prepare(
       `SELECT id, stage, status, owner_actor_id, final_outcome, stage_entered_at, created_at,
-              provider_id
+              provider_id, pathway_id
          FROM cases WHERE id = ?`,
     )
     .get<CaseStateRow>(caseId);
@@ -71,7 +68,7 @@ export async function loadEngineCase(db: Db, caseId: string): Promise<EngineCase
       `SELECT count(*) AS n FROM events
         WHERE case_id = ? AND type = ? AND actor_role = 'responsible_physician'`,
     )
-    .get<{ n: number }>(caseId, CLOSURE_CONFIRMATION_EVENT);
+    .get<{ n: number }>(caseId, rulesOf(row.pathway_id).closureConfirmationEvent);
 
   return {
     stage: row.stage,
@@ -81,6 +78,7 @@ export async function loadEngineCase(db: Db, caseId: string): Promise<EngineCase
     documents: documents.map((doc) => ({ kind: doc.kind })),
     physician_confirmed: (confirmed?.n ?? 0) > 0,
     open_consultation: await hasOpenConsultation(db, caseId),
+    pathway_id: row.pathway_id,
   };
 }
 
@@ -207,12 +205,14 @@ export async function prepareEvent(
   void _ignored;
   const caseRow = await loadCase(db, input.caseId);
   const engineCase = await loadEngineCase(db, input.caseId);
+  // TICKET-18: every rule below runs the case's own template.
+  const pathway = pathwayOf(caseRow.pathway_id);
 
   // Closure is checked before the transition table: the three conditions are a stricter
   // test than "is this the next stage", and the 409 must carry the details.
-  if (input.type === CLOSURE_CONFIRMATION_EVENT) {
+  if (input.type === rulesOf(pathway).closureConfirmationEvent) {
     const judged: EngineCase =
-      isValidOutcome(input.judgedOutcome)
+      isValidOutcome(input.judgedOutcome, pathway)
         ? { ...engineCase, final_outcome: input.judgedOutcome }
         : engineCase;
     const decision = confirmClosure(judged, actor.role);
@@ -226,7 +226,7 @@ export async function prepareEvent(
     }
   }
 
-  const allowedRoles = rolesForEvent(input.type);
+  const allowedRoles = rolesForEvent(input.type, pathway);
   if (allowedRoles === null) {
     throw new HttpError(400, "validation_failed", `"${input.type}" is not a case event.`);
   }
@@ -238,7 +238,7 @@ export async function prepareEvent(
     );
   }
 
-  const transition = transitionFor(caseRow.stage, input.type, actor.role);
+  const transition = transitionFor(caseRow.stage, input.type, actor.role, pathway);
   if (!transition.ok) {
     throw new HttpError(
       transition.code === "role_not_permitted" ? 403 : 409,
@@ -249,7 +249,7 @@ export async function prepareEvent(
 
   // TICKET-11: a consultation answer moves the case, so it is recorded only by answering
   // an open consultation, never through the generic events endpoint.
-  if (isConsultationAnswerEvent(input.type) && input.consultationAnswer !== true) {
+  if (isConsultationAnswerEvent(input.type, pathway) && input.consultationAnswer !== true) {
     throw new HttpError(
       409,
       "invalid_transition",
@@ -259,7 +259,7 @@ export async function prepareEvent(
 
   // Who owns the case after this event, written into the payload so the timeline alone
   // can say it (rebuildCase reads it back).
-  const definition = eventDefinition(input.type);
+  const definition = eventDefinition(input.type, pathway);
   const payload: Record<string, unknown> = { ...clientPayload };
   const assigns =
     definition?.owner === "assign" ||
@@ -287,7 +287,7 @@ export async function prepareEvent(
     delete payload.owner_actor_id;
   }
   if (input.finalise === true) payload.finalises = true;
-  await prepareOwnershipPayload(db, caseRow, input.type, transition.to, transition.moves_stage, payload);
+  await prepareOwnershipPayload(db, caseRow, input.type, transition.to, transition.moves_stage, payload, pathway);
 
   const now = input.occurredAt ?? (await getClock(db)).now;
   const recordedEvent: RecordedEvent = {
@@ -300,7 +300,7 @@ export async function prepareEvent(
 
   let next: CaseState | null;
   try {
-    next = nextState(caseStateOf(caseRow), recordedEvent);
+    next = nextState(caseStateOf(caseRow), recordedEvent, pathway);
   } catch (error) {
     if (error instanceof ReplayError) throw replayHttpError(error);
     throw error;
@@ -353,6 +353,7 @@ export async function prepareEvent(
       next,
       payload,
       now,
+      pathway,
     })),
     ...(input.extraStatements ?? []),
   ];
@@ -375,14 +376,25 @@ export async function createCase(
     // FHIR resources are matched on. Both optional.
     providerId?: string;
     patientIdentifier?: string;
+    // TICKET-18: the template the case runs; the default (FIT) pathway when absent.
+    pathwayId?: string;
   },
 ): Promise<{ recorded: string; caseId: string }> {
   const existing = await db.prepare("SELECT id FROM cases WHERE id = ?").get(input.caseId);
   if (existing) throw new HttpError(409, "invalid_transition", `Case ${input.caseId} already exists.`);
 
+  let pathway: Pathway = DEFAULT_PATHWAY;
+  try {
+    pathway = pathwayOf(input.pathwayId);
+  } catch (error) {
+    if (error instanceof UnknownPathwayError) throw new HttpError(400, "validation_failed", error.message);
+    throw error;
+  }
+  const initialStage = rulesOf(pathway).initialStage;
+
   let owner = input.ownerActorId ?? null;
   if (owner === null) {
-    const role = stageDefinition(INITIAL_STAGE)?.owner_role;
+    const role = stageDefinition(initialStage, pathway)?.owner_role;
     const row = await db
       .prepare("SELECT id FROM actors WHERE role = ? ORDER BY id LIMIT 1")
       .get<{ id: string }>(role ?? "");
@@ -402,13 +414,17 @@ export async function createCase(
   };
   let state: CaseState | null;
   try {
-    state = nextState(null, {
-      type: PATHWAY.trigger.event,
-      actor_id: input.actor.actor_id,
-      actor_role: input.actor.role,
-      occurred_at: now,
-      payload,
-    });
+    state = nextState(
+      null,
+      {
+        type: pathway.trigger.event,
+        actor_id: input.actor.actor_id,
+        actor_role: input.actor.role,
+        occurred_at: now,
+        payload,
+      },
+      pathway,
+    );
   } catch (error) {
     if (error instanceof ReplayError) throw replayHttpError(error);
     throw error;
@@ -417,7 +433,7 @@ export async function createCase(
 
   const { id, statement } = eventStatement(
     db,
-    { caseId: input.caseId, type: PATHWAY.trigger.event, actor: input.actor, payload },
+    { caseId: input.caseId, type: pathway.trigger.event, actor: input.actor, payload },
     now,
   );
   const createdAt = new Date().toISOString();
@@ -435,7 +451,7 @@ export async function createCase(
         input.patient.name,
         input.patient.age,
         input.patient.language,
-        PATHWAY.id,
+        pathway.id,
         state.owner_actor_id,
         state.stage,
         state.status,
@@ -478,6 +494,10 @@ export async function computeCaseState(db: Db, caseId: string): Promise<CaseStat
          FROM events WHERE case_id = ? ORDER BY rowid`,
     )
     .all<StoredEventRow>(caseId);
+  // TICKET-18: replayed with the case's own template (the default if the row is gone).
+  const pathwayRow = await db
+    .prepare("SELECT pathway_id FROM cases WHERE id = ?")
+    .get<{ pathway_id: string }>(caseId);
 
   let state: CaseState | null;
   try {
@@ -489,6 +509,7 @@ export async function computeCaseState(db: Db, caseId: string): Promise<CaseStat
         occurred_at: row.occurred_at,
         payload: parseStoredPayload(row.payload),
       })),
+      pathwayRow?.pathway_id,
     );
   } catch (error) {
     if (error instanceof ReplayError) {
@@ -530,24 +551,26 @@ export async function confirmCaseClosure(
   db: Db,
   input: { caseId: string; actor: WriteActor; finalOutcome?: unknown },
 ) {
-  if (CLOSURE_CONFIRMATION_EVENT === null) {
+  const engineCase = await loadEngineCase(db, input.caseId);
+  const rules = rulesOf(engineCase.pathway_id);
+  const confirmationEvent = rules.closureConfirmationEvent;
+  if (confirmationEvent === null) {
     throw new HttpError(409, "invalid_transition", "This pathway has no closure confirmation.");
   }
-  const engineCase = await loadEngineCase(db, input.caseId);
 
   // An outcome chosen on the closure screen is recorded with the confirmation; without
   // one, the case's own proposed outcome is what the three conditions judge.
   const outcome = input.finalOutcome;
-  if (outcome !== undefined && !isValidOutcome(outcome)) {
+  if (outcome !== undefined && !isValidOutcome(outcome, rules.pathway)) {
     throw new HttpError(
       400,
       "validation_failed",
-      `final_outcome must be one of ${OUTCOMES.map((o) => o.key).join(", ")}.`,
+      `final_outcome must be one of ${rules.outcomes.map((o) => o.key).join(", ")}.`,
     );
   }
 
   const judged: EngineCase =
-    outcome !== undefined && isValidOutcome(outcome)
+    outcome !== undefined && isValidOutcome(outcome, rules.pathway)
       ? { ...engineCase, final_outcome: outcome }
       : engineCase;
 
@@ -563,7 +586,7 @@ export async function confirmCaseClosure(
 
   return applyEvent(db, {
     caseId: input.caseId,
-    type: CLOSURE_CONFIRMATION_EVENT,
+    type: confirmationEvent,
     actor: input.actor,
     payload: outcome !== undefined ? { outcome } : {},
     judgedOutcome: outcome,
@@ -571,16 +594,17 @@ export async function confirmCaseClosure(
   });
 }
 
-export function reopenCase(
+export async function reopenCase(
   db: Db,
   input: { caseId: string; actor: WriteActor; ownerActorId?: string },
 ) {
-  if (REOPEN_EVENT === null) {
+  const reopenEvent = rulesOf((await loadCase(db, input.caseId)).pathway_id).reopenEvent;
+  if (reopenEvent === null) {
     throw new HttpError(409, "invalid_transition", "This pathway has no reopen event.");
   }
   return applyEvent(db, {
     caseId: input.caseId,
-    type: REOPEN_EVENT,
+    type: reopenEvent,
     actor: input.actor,
     ownerActorId: input.ownerActorId,
     payload: { summary: "Case reopened after clinician review" },
@@ -931,8 +955,10 @@ async function prepareOwnershipPayload(
   to: string,
   movesStage: boolean,
   payload: Record<string, unknown>,
+  pathway: Pathway,
 ): Promise<void> {
-  const definition = eventDefinition(type);
+  const definition = eventDefinition(type, pathway);
+  const unowned = pathway.unowned;
   if (definition?.owner === "clear" && caseRow.owner_actor_id !== null) {
     payload.previous_owner_actor_id = caseRow.owner_actor_id;
   }
@@ -955,8 +981,8 @@ async function prepareOwnershipPayload(
   }
 
   if (payload.referral !== undefined) {
-    if (!UNOWNED || !movesStage || to !== UNOWNED.acceptance_stage) {
-      fail(`A referral can only be sent with an event that moves the case to "${UNOWNED?.acceptance_stage}".`);
+    if (!unowned || !movesStage || to !== unowned.acceptance_stage) {
+      fail(`A referral can only be sent with an event that moves the case to "${unowned?.acceptance_stage}".`);
     }
     payload.referral = await normaliseReferral(db, payload.referral, caseRow.id, caseRow.provider_id);
   }
@@ -974,10 +1000,12 @@ async function ownershipStatements(
     next: CaseState;
     payload: Record<string, unknown>;
     now: string;
+    pathway: Pathway;
   },
 ): Promise<InStatement[]> {
   const out: InStatement[] = [];
-  const definition = eventDefinition(input.type);
+  const definition = eventDefinition(input.type, input.pathway);
+  const unowned = input.pathway.unowned;
 
   if (definition?.referral_status) {
     out.push(
@@ -1020,7 +1048,7 @@ async function ownershipStatements(
     );
   }
 
-  if (!UNOWNED) return out;
+  if (!unowned) return out;
   const wasOwned = input.before.owner_actor_id !== null;
   const isOwned = input.next.owner_actor_id !== null;
   const provider = input.next.provider_id ?? null;
@@ -1057,8 +1085,8 @@ async function ownershipStatements(
           newId("t"),
           input.caseId,
           ASSIGN_OWNER_TASK,
-          await actorAtProvider(db, UNOWNED.assign_owner_role, provider),
-          addHours(input.now, UNOWNED.assign_owner_hours),
+          await actorAtProvider(db, unowned.assign_owner_role, provider),
+          addHours(input.now, unowned.assign_owner_hours),
         ),
     );
   } else if (!wasOwned && !isOwned && definition?.sets_provider) {
@@ -1069,7 +1097,7 @@ async function ownershipStatements(
           `UPDATE tasks SET owner_actor_id = ?
             WHERE case_id = ? AND kind = ? AND status = 'open'`,
         )
-        .bind(await actorAtProvider(db, UNOWNED.assign_owner_role, provider), input.caseId, ASSIGN_OWNER_TASK),
+        .bind(await actorAtProvider(db, unowned.assign_owner_role, provider), input.caseId, ASSIGN_OWNER_TASK),
     );
   } else if (!wasOwned && isOwned) {
     const gap = await openGap(db, input.caseId);
@@ -1136,13 +1164,14 @@ export async function requestConsultation(
     toActorId?: unknown;
   },
 ): Promise<{ recorded: string; caseId: string; consultationId: string }> {
-  if (!CONSULTATION) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
   const caseRow = await loadCase(db, input.caseId);
+  const consultation = rulesOf(caseRow.pathway_id).consultation;
+  if (!consultation) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
   const engineCase = await loadEngineCase(db, input.caseId);
   const role = input.actor.role as Role;
 
   if (!availableActions(engineCase, role).includes("request_consultation")) {
-    if (input.actor.role === "system" || !CONSULTATION.request_roles.includes(role)) {
+    if (input.actor.role === "system" || !consultation.request_roles.includes(role)) {
       throw new HttpError(403, "role_not_permitted", `The ${input.actor.role} role may not ask a consultation.`);
     }
     throw new HttpError(
@@ -1175,13 +1204,13 @@ export async function requestConsultation(
       .prepare("SELECT id, role FROM actors WHERE id = ?")
       .get<{ id: string; role: string }>(input.toActorId);
     if (!row) fail(`No actor carries the id "${input.toActorId}".`);
-    if (!(CONSULTATION.answer_roles as readonly string[]).includes(row.role)) {
+    if (!(consultation.answer_roles as readonly string[]).includes(row.role)) {
       fail(`${input.toActorId} cannot answer a consultation (role ${row.role}).`);
     }
     toActor = row.id;
   } else {
     toActor = null;
-    for (const answerRole of CONSULTATION.answer_roles) {
+    for (const answerRole of consultation.answer_roles) {
       toActor = await actorAtProvider(db, answerRole, toProvider);
       if (toActor) break;
     }
@@ -1192,7 +1221,7 @@ export async function requestConsultation(
     (await db.prepare("SELECT name FROM providers WHERE id = ?").get<{ name: string }>(toProvider))?.name ??
     toProvider;
   const now = (await getClock(db)).now;
-  const dueAt = addHours(now, CONSULTATION.answer_hours);
+  const dueAt = addHours(now, consultation.answer_hours);
   const consultationId = newId("k");
   const taskId = newId("t");
 
@@ -1259,7 +1288,6 @@ export async function answerConsultation(
     referral?: unknown;
   },
 ): Promise<{ recorded: string; caseId: string }> {
-  if (!CONSULTATION) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
   const consultation = await db
     .prepare(
       `SELECT id, case_id, question, requested_by_actor_id, to_provider_id, to_actor_id, referral_id,
@@ -1275,6 +1303,8 @@ export async function answerConsultation(
   }
 
   const engineCase = await loadEngineCase(db, consultation.case_id);
+  const rules = rulesOf(engineCase.pathway_id);
+  if (!rules.consultation) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
   if (!availableActions(engineCase, input.actor.role as Role).includes("answer_consultation")) {
     throw new HttpError(403, "role_not_permitted", `The ${input.actor.role} role may not answer a consultation.`);
   }
@@ -1283,7 +1313,7 @@ export async function answerConsultation(
     fail("outcome must be one of accepted, redirected, more_data_requested.");
   }
   const outcome = input.outcome;
-  const event = consultationAnswerEvent(outcome);
+  const event = consultationAnswerEvent(outcome, rules.pathway);
   if (!event) throw new HttpError(409, "invalid_transition", `This pathway has no "${outcome}" answer.`);
   if (input.note !== undefined && typeof input.note !== "string") fail("note must be a string.");
   if (input.ownerActorId !== undefined && typeof input.ownerActorId !== "string") {
@@ -1382,7 +1412,7 @@ export async function answerConsultation(
           consultation.case_id,
           SUPPLY_DATA_TASK,
           consultation.requested_by_actor_id,
-          addHours(now, CONSULTATION.more_data_hours),
+          addHours(now, rules.consultation.more_data_hours),
         ),
     );
   }
@@ -1457,7 +1487,7 @@ export async function stitchResource(
 
   let notMoved: string | null = null;
   if (input.event !== null) {
-    const transition = transitionFor(caseRow.stage, input.event, "system");
+    const transition = transitionFor(caseRow.stage, input.event, "system", caseRow.pathway_id);
     if (transition.ok && transition.moves_stage) {
       const prepared = await prepareEvent(db, {
         caseId: input.caseId,

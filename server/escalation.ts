@@ -2,7 +2,7 @@ import type { InStatement } from "@libsql/client";
 import { randomUUID } from "node:crypto";
 import { addHours, advanceDays, getClock, hoursBetween, setClock, type Clock } from "./clock.js";
 import { type Db } from "./db.js";
-import { CONSULTATION, PATHWAY, UNOWNED, stageDefinition, type Role } from "./engine.js";
+import { PATHWAY, pathwayOf, stageDefinition, type PathwayRef, type Role } from "./engine.js";
 import { SYSTEM_ACTOR, consultationTimerStage, prepareEvent } from "./events.js";
 // TICKET-10
 import { tickOutreach, type OutreachTickResult } from "./outreach/ladder.js";
@@ -17,13 +17,14 @@ import { tickOutreach, type OutreachTickResult } from "./outreach/ladder.js";
 // open stage escalates responsible physician -> program manager -> program manager.
 export type EscalationLevel = number;
 
-export function escalationLadder(stage: string): readonly Role[] {
-  return stageDefinition(stage)?.escalation ?? [];
+export function escalationLadder(stage: string, pathway?: PathwayRef): readonly Role[] {
+  return stageDefinition(stage, pathway)?.escalation ?? [];
 }
 
 // A level may fire at most once per case per stage, and only after the previous level
 // has had time to be seen (the template's escalation_spacing_hours, demo-clock hours).
 // That spacing is what makes "advance 1 day" produce one new escalation, not three.
+// TICKET-18: this is the default pathway's; tick reads each case's own template.
 export const ESCALATION_SPACING_HOURS = PATHWAY.escalation_spacing_hours;
 
 type OpenCaseRow = {
@@ -32,6 +33,8 @@ type OpenCaseRow = {
   status: string;
   stage_entered_at: string | null;
   created_at: string;
+  // TICKET-18
+  pathway_id: string;
 };
 
 export type TickResult = {
@@ -51,7 +54,7 @@ export type TickResult = {
 };
 
 function stageDeadline(row: OpenCaseRow): string | null {
-  const definition = stageDefinition(row.stage);
+  const definition = stageDefinition(row.stage, row.pathway_id);
   if (!definition || definition.sla_hours === null) return null;
   return addHours(row.stage_entered_at ?? row.created_at, definition.sla_hours);
 }
@@ -82,7 +85,7 @@ async function lastFired(
 async function openCases(db: Db): Promise<OpenCaseRow[]> {
   return db
     .prepare(
-      `SELECT id, stage, status, stage_entered_at, created_at
+      `SELECT id, stage, status, stage_entered_at, created_at, pathway_id
          FROM cases
         WHERE status != 'closed'`,
     )
@@ -107,10 +110,11 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
     if (deadline === null) continue;
     if (hoursBetween(deadline, at) < 0) continue; // not late yet
 
-    const ladder = escalationLadder(row.stage);
+    const ladder = escalationLadder(row.stage, row.pathway_id);
+    const spacing = pathwayOf(row.pathway_id).escalation_spacing_hours; // TICKET-18
     const last = await lastFired(db, row.id, row.stage, deadline);
     if (last && last.level >= ladder.length) continue; // the ladder is exhausted
-    if (last && hoursBetween(last.fired_at, at) < ESCALATION_SPACING_HOURS) continue;
+    if (last && hoursBetween(last.fired_at, at) < spacing) continue;
     const level: EscalationLevel = (last?.level ?? 0) + 1;
 
     const role = ladder[level - 1];
@@ -146,7 +150,7 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
             hours_over: overHours,
             summary:
               `Escalated to ${role.replace(/_/g, " ")}: ${overHours}h past the ` +
-              `${stageDefinition(row.stage)?.label ?? row.stage} deadline`,
+              `${stageDefinition(row.stage, row.pathway_id)?.label ?? row.stage} deadline`,
           }),
         ),
       db
@@ -263,10 +267,10 @@ async function unansweredReferrals(
 ): Promise<{ statements: InStatement[]; cases: string[] }> {
   const statements: InStatement[] = [];
   const cases: string[] = [];
-  if (!UNOWNED) return { statements, cases };
 
   for (const row of open) {
-    if (row.stage !== UNOWNED.acceptance_stage) continue;
+    const unowned = pathwayOf(row.pathway_id).unowned; // TICKET-18: the case's own rule
+    if (!unowned || row.stage !== unowned.acceptance_stage) continue;
     const deadline = stageDeadline(row);
     if (deadline === null || hoursBetween(deadline, at) < 0) continue;
 
@@ -284,7 +288,7 @@ async function unansweredReferrals(
     const hoursOver = Math.round(hoursBetween(deadline, at));
     const prepared = await prepareEvent(db, {
       caseId: row.id,
-      type: UNOWNED.unanswered_event,
+      type: unowned.unanswered_event,
       actor: SYSTEM_ACTOR,
       occurredAt: at,
       payload: {
@@ -301,7 +305,7 @@ async function unansweredReferrals(
           `INSERT INTO timers (id, case_id, stage, due_at, level, role, status, fired_at)
            VALUES (?, ?, ?, ?, 1, ?, 'fired', ?)`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.id, key, deadline, UNOWNED.assign_owner_role, at),
+        .bind(`t_${randomUUID().slice(0, 8)}`, row.id, key, deadline, unowned.assign_owner_role, at),
     );
     cases.push(row.id);
   }
@@ -318,6 +322,8 @@ type OpenConsultationRow = {
   due_at: string;
   to_actor_id: string | null;
   requested_by_actor_id: string;
+  // TICKET-18
+  pathway_id: string;
 };
 
 async function overdueConsultations(
@@ -329,22 +335,25 @@ async function overdueConsultations(
 }> {
   const statements: InStatement[] = [];
   const fired: { case_id: string; level: number; role: Role; consultation_id: string }[] = [];
-  if (!CONSULTATION) return { statements, fired };
 
   const rows = await db
     .prepare(
-      `SELECT id, case_id, due_at, to_actor_id, requested_by_actor_id
-         FROM consultations WHERE status = 'open'`,
+      `SELECT k.id, k.case_id, k.due_at, k.to_actor_id, k.requested_by_actor_id, c.pathway_id
+         FROM consultations k JOIN cases c ON c.id = k.case_id
+        WHERE k.status = 'open'`,
     )
     .all<OpenConsultationRow>();
 
   for (const row of rows) {
     if (hoursBetween(row.due_at, at) < 0) continue;
+    // TICKET-18: the consultation rules of the case's own template.
+    const pathway = pathwayOf(row.pathway_id);
+    if (!pathway.consultation) continue;
     const key = consultationTimerStage(row.id);
     const last = await lastFired(db, row.case_id, key, row.due_at);
-    const ladder = CONSULTATION.escalation;
+    const ladder = pathway.consultation.escalation;
     if (last && last.level >= ladder.length) continue;
-    if (last && hoursBetween(last.fired_at, at) < ESCALATION_SPACING_HOURS) continue;
+    if (last && hoursBetween(last.fired_at, at) < pathway.escalation_spacing_hours) continue;
     const level = (last?.level ?? 0) + 1;
     const role = ladder[level - 1];
     if (!role) continue;
@@ -388,7 +397,7 @@ async function overdueConsultations(
           `INSERT INTO tasks (id, case_id, kind, owner_actor_id, due_at, status)
            VALUES (?, ?, 'escalation', ?, ?, 'open')`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.case_id, owner, addHours(at, ESCALATION_SPACING_HOURS)),
+        .bind(`t_${randomUUID().slice(0, 8)}`, row.case_id, owner, addHours(at, pathway.escalation_spacing_hours)),
     );
     fired.push({ case_id: row.case_id, level, role, consultation_id: row.id });
   }

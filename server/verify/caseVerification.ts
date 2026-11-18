@@ -142,17 +142,38 @@ export type CaseVerificationResponse = {
     proposal: string;
     proposal_reason: string;
     proposed_outcome: string | null;
-    origin: ExtractionResult["origin"] | "no_report";
+    origin: ExtractionResult["origin"] | "no_report" | "pathway_not_verified";
   };
 };
+
+// TICKET-18: the prompt, the fields and the outcome mapping are written for colonoscopy
+// and pathology reports on the FIT pathway. Another pathway's reports are read by a person.
+export const VERIFIED_PATHWAY_ID = "fit-colonoscopy";
 
 export async function runCaseVerification(
   db: Db,
   caseId: string,
   options: { actor: Actor; documentId?: string; llm?: LlmConfig | null; fetch?: FetchLike },
 ): Promise<CaseVerificationResponse> {
-  const exists = await db.prepare("SELECT id FROM cases WHERE id = ?").get(caseId);
+  const exists = await db
+    .prepare("SELECT id, pathway_id FROM cases WHERE id = ?")
+    .get<{ id: string; pathway_id: string }>(caseId);
   if (!exists) throw new HttpError(404, "not_found", `No case carries the reference ${caseId}.`);
+
+  if (exists.pathway_id !== VERIFIED_PATHWAY_ID) {
+    return {
+      report: { document_id: null, text: "" },
+      extraction: {
+        prompt_version: PROMPT_VERSION,
+        model: null,
+        fields: [],
+        proposal: "needs_human_reading",
+        proposal_reason: `Report verification is not configured for the ${exists.pathway_id} pathway; a person reads its reports.`,
+        proposed_outcome: null,
+        origin: "pathway_not_verified",
+      },
+    };
+  }
 
   const document = await reportDocument(db, caseId, options.documentId);
   if (!document || document.text.trim().length === 0) {
