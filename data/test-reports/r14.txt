@@ -1,0 +1,26 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0014          Date of procedure: 2026-09-21
+Endoscopist: Dr. B. Sample   Sedation: none (patient preference), Entonox
+
+INDICATION
+Positive FIT, no symptoms.
+
+BOWEL PREPARATION
+Split-dose. BBPS 3/2/3, total 8. Good.
+
+EXTENT OF EXAMINATION
+Caecum reached; ileocaecal valve and appendiceal orifice photographed. Terminal ileum intubated for 10 cm, normal mucosa. Caecal intubation time 11 min; withdrawal time 10 min.
+
+FINDINGS
+Normal colonic mucosa throughout. No polyps, diverticula, masses or colitis. Small internal haemorrhoids.
+
+INTERVENTIONS / SPECIMENS
+None.
+
+CONCLUSION
+Complete, normal colonoscopy.
+
+RECOMMENDATIONS
+No further colonoscopy. Routine screening to resume in 2 years. Patient reassured; haemorrhoids can explain the positive FIT.

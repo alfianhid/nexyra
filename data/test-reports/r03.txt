@@ -1,0 +1,31 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0003          Date of procedure: 2026-08-18
+Endoscopist: Dr. B. Sample   Sedation: midazolam 3 mg, fentanyl 50 mcg IV
+
+INDICATION
+Positive FIT, asymptomatic.
+
+BOWEL PREPARATION
+Split-dose. BBPS 2/3/2, total 7. Adequate.
+
+EXTENT OF EXAMINATION
+Caecum reached (ileocaecal valve and appendiceal orifice documented). Terminal ileum intubated for approximately 5 cm and normal. Withdrawal time 11 minutes.
+
+FINDINGS
+1. 8 mm sessile polyp (Paris Is) in the ascending colon.
+2. 5 mm sessile polyp (Paris Is) in the sigmoid colon.
+No other lesions. No blood in the lumen.
+
+INTERVENTIONS
+Both polyps removed by cold snare polypectomy; both retrieved.
+
+SPECIMENS
+Jar A: ascending colon polyp. Jar B: sigmoid polyp. Both in formalin, sent to histopathology (Example Pathology Lab, fictional).
+
+PATHOLOGY
+Not yet available at the time of this report. Result awaited.
+
+RECOMMENDATIONS
+Await histology. Surveillance interval to be set once the pathology result is reviewed. Patient told the result will follow by letter.

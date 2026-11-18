@@ -1,0 +1,6 @@
+COLONOSCOPY | Pt TEST-0021 | 2026-10-05 | Dr. A. Example
+Ind +FIT. BBPS 3/2/3 (8). Caecum reached (IC valve, AO, TI intub. 6 cm). CIT 8 min / W/D 10 min.
+Findings: 12 mm sessile polyp in rectum (Paris Is), 10 cm from AV. EMR w/ lift, resected en bloc, margin clipped, retrieved. 5 mm polyp transverse colon, cold snare, retrieved.
+Spec: A rectal polyp (EMR), B transverse polyp -> histology.
+Path: NOT YET REPORTED at time of this note (lab states ~7 working days).
+Rec: await histology, surveillance interval depends on result. Letter to follow.

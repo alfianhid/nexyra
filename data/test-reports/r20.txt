@@ -1,0 +1,7 @@
+COLONOSCOPY | TEST-0020 | 2026-10-01 | Dr. B. Sample | ind +FIT
+Prep: Ottawa Bowel Prep Scale total 11 (R 4, M 4, L 3) / Aronchick "poor". Heavy liquid + solid stool throughout. Extensive washing, still ~50% mucosa not seen.
+Caecum reached (IC valve, AO). TI not intubated. W/D 7 min.
+Findings: no lesion seen BUT views grossly inadequate - cannot exclude polyps/neoplasia.
+No bx, no polypectomy.
+Impression: caecal intubation achieved; exam non-diagnostic because of inadequate prep.
+Rec: repeat colonoscopy with a 2-day prep within 6-8 wks. Do not treat as a negative result.

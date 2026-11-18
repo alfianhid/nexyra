@@ -1,0 +1,7 @@
+COLONOSCOPY - Example General Hosp. (fictional)
+Pt TEST-0005 | 2026-08-20 | Dr. B. Sample | ind: +FIT
+Prep: BBPS 1/1/1 (tot 3), solid stool throughout, poor despite extensive washing/suction. Pt reports not completing 2nd dose.
+Scope advanced to splenic flexure only; mucosa poorly seen, views inadequate to exclude polyps. Caecum not reached. Procedure abandoned, W/D 4 min.
+No lesions seen (limited views). No bx, no polypectomy.
+Impression: inadequate prep, incomplete/limited exam.
+Plan: REPEAT colonoscopy with extended prep (2 days low-residue diet, split-dose PEG + bisacodyl). Pt counselled, new date to be booked.

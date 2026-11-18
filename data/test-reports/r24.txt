@@ -1,0 +1,33 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0024          Date of procedure: 2026-09-30
+Endoscopist: Dr. A. Example   Sedation: midazolam 2 mg, fentanyl 50 mcg IV
+
+INDICATION
+Positive FIT (screening programme).
+
+BOWEL PREPARATION
+Split-dose. BBPS 3/3/3, total 9.
+
+EXTENT OF EXAMINATION
+Caecum reached, confirmed by appendiceal orifice and ileocaecal valve with photographs. Terminal ileum not intubated. Withdrawal time 12 minutes.
+
+FINDINGS
+One 15 mm pedunculated polyp (Paris Ip) in the sigmoid colon, with a stalk of about 8 mm. No other polyps. Mild diverticulosis.
+
+INTERVENTIONS
+Prophylactic detachable loop on the stalk, then resected with hot snare in one piece. Retrieved. No bleeding on completion.
+
+SPECIMENS
+A: sigmoid pedunculated polyp.
+
+--------------------------------------------------------------
+HISTOPATHOLOGY REPORT (Example Pathology Lab, fictional)
+Patient: TEST-0024   Reported: 2026-10-07
+A. Sigmoid polyp: tubular adenoma with low-grade dysplasia, resection margin clear. No high-grade dysplasia. No invasive carcinoma.
+Pathologist: Dr. C. Placeholder
+--------------------------------------------------------------
+
+RECOMMENDATIONS
+Single adenoma, completely excised. Surveillance colonoscopy in 3 years. Patient and GP to be informed.

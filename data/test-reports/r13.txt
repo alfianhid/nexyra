@@ -1,0 +1,26 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0013          Date of procedure: 2026-09-17
+Endoscopist: Dr. B. Sample
+
+INDICATION
+Positive FIT.
+
+BOWEL PREPARATION
+BBPS 2/1/2, total 5. The right colon scored 1 (poor): semi-solid residue and adherent stool, only partly cleared by washing and suction. Prep INADEQUATE in the right colon.
+
+EXTENT OF EXAMINATION
+Caecum reached (appendiceal orifice and ileocaecal valve seen). Withdrawal time 9 minutes.
+
+FINDINGS
+No lesions seen. However, mucosal visualisation of the right colon was inadequate to exclude polyps larger than 5 mm. Left colon views satisfactory.
+
+INTERVENTIONS / SPECIMENS
+None.
+
+CONCLUSION
+Caecum reached but the examination is limited by inadequate bowel preparation in the right colon.
+
+RECOMMENDATIONS
+Repeat colonoscopy within 3 months with enhanced bowel preparation (2-day low-residue diet, split-dose PEG). Not suitable to close the screening episode.

@@ -1,0 +1,10 @@
+COLONOSCOPY + HISTOLOGY | TEST-0016 | 2026-08-31 | Dr. B. Sample
+Ind: +FIT, age 62
+Prep: BBPS 3/3/3 (9)
+Caecum reached, IC valve + ap. orifice photographed, TI intubated. W/D 11 min. Complete.
+Findings: 35 mm sessile/LST-nodular lesion asc. colon (Paris Is+IIa), firm, non-lifting at centre on submucosal injection -> NOT amenable to EMR. 6 bx taken from nodular area, tattoo placed. Also 5 mm sessile polyp sigmoid, cold snare, retrieved.
+Spec: A asc colon lesion bx x6; B sigmoid polyp.
+Histology (Example Pathology Lab, fictional, 2026-09-07, Dr. C. Placeholder):
+A. invasive adenocarcinoma (at least pT1) arising in tubulovillous adenoma w/ HGD; submucosal invasion present.
+B. tubular adenoma, LGD.
+Rec: refer colorectal MDT for surgical opinion, staging CT TAP. Pt aware. Lesion site tattooed.

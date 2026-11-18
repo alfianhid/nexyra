@@ -1,0 +1,34 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0008          Date of procedure: 2026-08-05
+Endoscopist: Dr. A. Example   Sedation: midazolam 2 mg, fentanyl 50 mcg IV
+
+INDICATION
+Positive FIT. Mild iron deficiency noted by GP.
+
+BOWEL PREPARATION
+Split-dose. BBPS 3/3/2, total 8. Adequate.
+
+EXTENT OF EXAMINATION
+Caecum reached with the appendiceal orifice and ileocaecal valve visualised. Terminal ileum not intubated. Withdrawal time 12 minutes. The lesion described below was passed with the scope.
+
+FINDINGS
+1. Ulcerated, friable circumferential mass in the sigmoid colon at 28 cm from the anal verge, approximately 4 cm long, partially narrowing the lumen. Suspicious for malignancy.
+2. Two 4 mm sessile polyps in the rectum, left in situ.
+
+INTERVENTIONS
+Multiple (6) biopsies from the sigmoid mass. Tattoo placed distal to the lesion (carbon particles).
+
+SPECIMENS
+Jar A: sigmoid mass biopsies.
+
+--------------------------------------------------------------
+HISTOPATHOLOGY REPORT (Example Pathology Lab, fictional)
+Patient: TEST-0008   Reported: 2026-08-12
+A. Sigmoid mass, biopsies x6: invasive adenocarcinoma, moderately differentiated (G2), arising in a background of adenoma with high-grade dysplasia. Lymphovascular invasion cannot be assessed on biopsy.
+Pathologist: Dr. C. Placeholder
+--------------------------------------------------------------
+
+RECOMMENDATIONS
+Confirmed colorectal adenocarcinoma. Refer urgently to the colorectal multidisciplinary team (MDT). CT chest/abdomen/pelvis for staging and CEA. Patient informed of the finding.

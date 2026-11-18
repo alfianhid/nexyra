@@ -1,0 +1,26 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0001          Date of procedure: 2026-08-11
+Endoscopist: Dr. A. Example   Sedation: midazolam 2 mg, fentanyl 50 mcg IV
+
+INDICATION
+Positive faecal immunochemical test (FIT) in the bowel screening programme.
+
+BOWEL PREPARATION
+Split-dose polyethylene glycol. Boston Bowel Preparation Scale (BBPS) 2/2/2, total 6. Adequate for the segments examined.
+
+EXTENT OF EXAMINATION
+Adult colonoscope advanced to the hepatic flexure. Marked looping of the sigmoid and transverse colon; despite abdominal pressure, patient repositioning and a change of scope, the caecum was NOT reached. Patient discomfort increased and the procedure was stopped. Withdrawal time 6 minutes.
+
+FINDINGS
+No polyps, masses or mucosal abnormality in the segments examined (rectum to hepatic flexure). Caecum, ileocaecal valve and ascending colon not visualised.
+
+INTERVENTIONS / SPECIMENS
+None.
+
+CONCLUSION
+Incomplete colonoscopy. No lesion seen in the examined colon.
+
+RECOMMENDATIONS
+Complete examination of the right colon by CT colonography or repeat colonoscopy under anaesthetic support. Patient informed.

@@ -1,0 +1,26 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0002          Date of procedure: 2026-08-14
+Endoscopist: Dr. A. Example   Sedation: midazolam 2 mg, fentanyl 50 mcg IV
+
+INDICATION
+Positive FIT (quantitative result 142 ug Hb/g faeces) in the screening programme.
+
+BOWEL PREPARATION
+Split-dose regimen. BBPS 3/3/3, total 9. Excellent.
+
+EXTENT OF EXAMINATION
+Caecum reached; ileocaecal valve, appendiceal orifice and triradiate fold identified and photographed. Caecal intubation time 9 minutes. Terminal ileum not intubated. Withdrawal time 8 minutes.
+
+FINDINGS
+Small non-bleeding internal haemorrhoids on retroflexion. Scattered sigmoid diverticula without inflammation. No polyps, masses, colitis or other mucosal lesion.
+
+INTERVENTIONS / SPECIMENS
+None. No biopsies taken.
+
+CONCLUSION
+Complete colonoscopy, normal apart from diverticulosis and haemorrhoids.
+
+RECOMMENDATIONS
+No further colonoscopy required. Return to routine FIT screening in 2 years. GP letter sent.

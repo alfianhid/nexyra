@@ -1,0 +1,6 @@
+COLONOSCOPY | TEST-0023 | 2026-10-12 | Dr. A. Example
+Ind: +FIT
+Prep: BBPS 3/3/2 = 8
+Caecum reached - IC valve + AO photographed; TI intubated, normal. W/D 9 min.
+Colon: normal throughout. No polyp/mass/colitis. Few L-sided diverticula. Nil bx.
+Impression: complete normal colonoscopy.
