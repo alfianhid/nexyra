@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 18 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-07, TICKET-08
-- **Status:** not started
+- **Status:** done on 18 Nov, built before TICKET-07 and TICKET-08 merged. `GET /api/program/summary` (`server/programme.ts`) feeds `src/pages/Programme.tsx`. Tests are in `server/programme.test.ts`. The unstitched section reports `available: false` until TICKET-08's `unstitched` table exists, then reads it with no code change. The scenario panel is built. The projector check was a 1440×900 light-mode screenshot, not a real projector.
 
 ## Goal
 
@@ -28,11 +28,11 @@ Comparisons by nationality, gender, or age. Time-trend charts. Export.
 
 ## Done when
 
-- [ ] Funnel numbers match direct counts from the `events` table
-- [ ] Every row in the exception list opens its case
-- [ ] The synthetic-data label is visible without scrolling
-- [ ] No number on this screen can be read as Nexyra's impact on patients, except the labeled scenario panel
-- [ ] Charts read well in light mode on a projector
+- [x] Funnel numbers match direct counts from the `events` table (test: `funnel numbers match direct counts from the events table`)
+- [x] Every row in the exception list opens its case (test: `every exception row carries its case id`; the page links each row to `/cases/{case_id}`)
+- [x] The synthetic-data label is visible without scrolling (it is in the payload, and the page prints it first, above the summary)
+- [x] No number on this screen can be read as Nexyra's impact on patients, except the labeled scenario panel
+- [x] Charts read well in light mode on a projector (checked on a 1440×900 light-mode screenshot only; no real projector was used)
 
 ## Notes
 

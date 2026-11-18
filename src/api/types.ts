@@ -156,43 +156,112 @@ export type OutreachInput = {
   minutes?: number;
 };
 
-// docs/api.md fixes only the five keys of the program summary, not the shape of the
-// rows inside them. These item types mirror the programme summary in src/data.ts.
+// GET /api/program/summary (docs/api.md, TICKET-16). Every string a row prints
+// (`reason`, `owner`, `due_label`, `label`) is formatted by the server.
+export type ProgramExceptionKind = "unowned" | "past_referral_limit" | "closure_held";
+
 export type ProgramException = {
   case_id: string;
+  kind: ProgramExceptionKind;
   reason: string;
   owner: string;
-  due_at: string;
+  stage_label: string;
+  due_at: string | null;
+  due_label: string;
+};
+
+export type UnstitchedRow = {
+  id: string;
+  received_at: string | null;
+  received_label: string;
+  reason: string;
+  summary: string;
 };
 
 export type FunnelRow = {
+  key: string;
+  // The stage label, printed as written.
   stage: string;
+  reached: number;
   open: number;
   unowned: number;
+  median_days_from_previous: number | null;
+  terminal: boolean;
+};
+
+export type ReferralBucket = {
+  label: string;
+  min_days: number;
+  max_days: number | null;
+  over_limit: boolean;
+  completed: number;
+  waiting: number;
+};
+
+export type ReferralToColonoscopy = {
+  limit_days: number;
+  label: string;
+  source: string;
+  completed: number;
+  completed_within_limit: number;
+  completed_over_limit: number;
+  waiting: number;
+  waiting_over_limit: number;
+  median_days_completed: number | null;
+  buckets: ReferralBucket[];
 };
 
 export type RoleDayCount = {
   role: Role;
+  role_label: string;
+  total: number;
   per_day: number;
 };
 
+export type EscalationDay = {
+  day: number;
+  label: string;
+  per_role: { role: Role; count: number }[];
+};
+
 export type DelayReasonCount = {
-  delay_reason: DelayReason;
+  delay_reason: DelayReason | string;
+  label: string;
   count: number;
 };
 
+export type ProgramScenario = {
+  title: string;
+  cohort_cases: number;
+  baseline_rate: number;
+  outreach_rate: number;
+  additional_completed: number;
+  source: string;
+  caveat: string;
+};
+
 export type ProgramSummary = {
+  clock: Clock;
+  synthetic_data_label: string;
   counts: {
+    total: number;
     open: number;
     unowned: number;
     due_today: number;
+    due_today_unowned: number;
     closed_this_week: number;
+    past_referral_limit: number;
+    closures_held: number;
   };
   exceptions: ProgramException[];
+  unstitched: { available: boolean; count: number; rows: UnstitchedRow[] };
   funnel: FunnelRow[];
-  escalations_per_role_per_day: RoleDayCount[];
+  referral_to_colonoscopy: ReferralToColonoscopy | null;
   delay_reasons: DelayReasonCount[];
-  synthetic_data_label: string;
+  escalations_per_role_per_day: RoleDayCount[];
+  escalations_by_day: EscalationDay[];
+  scenario: ProgramScenario;
+  pathway: { id: string; label: string };
 };
 
 export type MutationResult = {

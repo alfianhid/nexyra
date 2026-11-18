@@ -30,7 +30,7 @@ Not in the code:
 - No live model call. The extraction shown for the demo case is a stored row.
 - No labelled test set and no evaluation run.
 - No patient messaging. Outreach attempts are entered by staff by hand. There are no Arabic templates.
-- The programme view reads fixture data. There is no programme summary endpoint.
+- The programme view reads the live case records through `GET /api/program/summary`, but its numbers are only as good as the synthetic data behind them. Its scenario panel applies one trial's effect size (Atlas et al., JAMA 2023) to the synthetic case count. That is an assumption, not a measurement.
 - No HL7 ingest, no Malaffi or e-Referral connection, no consultation monitoring, no second pathway.
 - No identity matching across providers.
 - No login. The role is picked from a menu, so the audit trail is only as honest as that menu.

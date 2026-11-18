@@ -49,7 +49,7 @@ The brief plans a synthetic cohort of about 1,000 cases with drop-off rates. It 
 
 ## Effect sizes
 
-The scenario panel, if built, may only use effect sizes from [`evidence.md`](evidence.md): 22.9%, 22.7%, 31.0% and 31.4% (Atlas et al., JAMA 2023), 76% against 65% (Kaiser Permanente Northwest, 2021), and 55.1% against 42.1% (PRECISE, 2025, from summaries). The current build has no scenario panel.
+The scenario panel, if built, may only use effect sizes from [`evidence.md`](evidence.md): 22.9%, 22.7%, 31.0% and 31.4% (Atlas et al., JAMA 2023), 76% against 65% (Kaiser Permanente Northwest, 2021), and 55.1% against 42.1% (PRECISE, 2025, from summaries). The panel that exists uses only Atlas: usual care (22.9%) against the reminder, letter and phone outreach arm (31.0%), applied to the number of synthetic cases. It is titled "Scenario based on assumptions" and cites its source.
 
 ## Other assumptions
 
