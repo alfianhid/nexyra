@@ -8,7 +8,20 @@ Decided 18 Nov 2026. The frontend is a static Vite build; the API is the same Ex
 - `vercel.json` builds with `npm run build`, serves `dist/`, sends `/api/*` to the function, and sends every other path to `index.html` so React Router can handle it.
 - `server/db.ts` uses `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` when they are set, and a local file (`DATABASE_FILE`, default `data/nexyra.sqlite`) when they are not. On Vercel without the URL it fails on purpose with a message saying what is missing.
 
-## Steps (done by a team member, from their own accounts)
+## Shortest route: the Turso integration in the Vercel Marketplace
+
+1. Create the Vercel project (step 3 below), without environment variables yet.
+2. In the Vercel project, open **Storage** (or the Marketplace), add **Turso Cloud**, create a database, and connect it to the project. The integration sets `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, the same names `server/db.ts` reads.
+3. Copy those values to your machine and fill the database once:
+   ```bash
+   npx vercel env pull .env
+   ```
+   ```bash
+   npm run demo:reset:remote
+   ```
+4. Redeploy, then run the check in step 5 below.
+
+## Manual route (done by a team member, from their own accounts)
 
 1. **Create the Turso database.** In the Turso dashboard, create a database (for example `nexyra`) in a region near the Vercel region. Copy its URL (`libsql://...`) and create an auth token for it.
 2. **Fill the database once from your machine.** Put both values in a local `.env` (copy `.env.example`; `.env` is git-ignored), then run:
