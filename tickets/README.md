@@ -96,6 +96,40 @@ These settle every question the frontend would otherwise have to guess at. They 
 | 20 Nov | 27 | Send the first version in the afternoon (UTC+7). Remaining time is only for small fixes. |
 | 21 Nov 02:59 UTC+7 | – | Deadline. Do not rely on these hours. |
 
+## Status on 18 Nov
+
+Read from the ticket files and the code (300 tests pass in 24 files). "Human" means a person must act; the code cannot finish it.
+
+| Ticket | Status | What is left |
+|---|---|---|
+| 01 Submission requirements | in progress (human) | Record the form options (Solution stage, Challenges) |
+| 02 Project and stack | done | |
+| 03 Data model and audit trail | done | |
+| 04 FIT pathway template | done | Deadlines await clinical review (19) |
+| 05 State machine and closure | done | |
+| 06 Timers, clock, escalation | done | |
+| 07 Synthetic data generator | done | Parameters are team guesses |
+| 08 Unowned cases and stitching | done | Probabilistic matching designed, not built |
+| 09 Worklist and case detail | done | |
+| 10 Outreach ladder | done | Arabic native-speaker review (human); Urdu, Hindi, Tagalog empty |
+| 11 Consultation monitoring | done | Screens being built in parallel |
+| 12 Labelled test set | in progress (human) | A person must check `labels.json` before the evaluation runs |
+| 13 Report extraction | done in code | Not run against a real model |
+| 14 Closure verification evaluation | in progress | Harness ready; needs a model key and the checked labels. `[EVAL RESULTS PENDING — TICKET-14]` |
+| 15 Closure confirmation screen | in progress | Re-audit the boxes; `proposal/reject` and divergence count not built |
+| 16 Program view | done | Check the delay-reason count after a logged call (see `docs/demo-script.md`) |
+| 17 Demo cases and reset | in progress | UI walk and a timed rehearsal |
+| 18 Second pathway | done | Demonstration only, not clinically reviewed |
+| 19 Clinical review | not started (human) | Fulan. `[CLINICAL REVIEW PENDING — TICKET-19]` |
+| 20 Submission documentation | in progress | Docs updated 18 Nov; update again after 14 and 19 |
+| 21 Video and prototype link | in progress (human) | Deploy to Vercel and Turso, record the video. `[PENDING — TICKET-21]` |
+| 22 Rehearsal and Q&A | not started (human) | |
+| 23 From-scratch check | not started | After all P0 tickets |
+| 24 Update the brief | not started | After 19 |
+| 25 HL7 v2 ingest | done | Generic v2.5; Malaffi spec not seen |
+| 26 Deck | in progress (human + Claude Code) | Final text in `docs/deck-content.md`; team fields and screenshots |
+| 27 Form and submit | in progress (human) | Team fields, conflict of interest, links |
+
 ## Cut order if time runs out
 
 1. TICKET-18 (second pathway)

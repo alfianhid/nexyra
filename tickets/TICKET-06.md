@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 16 Nov · **Estimate:** 3–4 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-05
-- **Status:** not started
+- **Status:** done (checked 18 Nov against the code). Demo clock in `server/clock.ts`, deadlines and escalation in `server/escalation.ts`; tests in `server/clock.test.ts`, `server/engine.test.ts`.
 
 ## Goal
 

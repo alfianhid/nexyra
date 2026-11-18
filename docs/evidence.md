@@ -46,13 +46,15 @@ What these three sources do not show: that targeting navigation by predicted ris
 
 ## Policy context
 
-DoH Circular 144/2026 requires all facilities to send all referral transactions to Malaffi as HL7 REF messages by 31 August 2026. Malaffi e-Referral is meant for referral management, status tracking and communication between referrer and receiver. Nexyra is positioned above that layer, at the level of the screening result and who owns the case. The circular itself is not reproduced or attached here.
+DoH Circular 144/2026 (number and gist only): all referral transactions go to Malaffi as HL7 REF messages by 31 August 2026, and Malaffi e-Referral is for referral management, status tracking and communication between referrer and receiver. Nexyra is positioned above that layer, at the level of the screening result and who owns the case. Consultation monitoring records who owes an answer and by when; the message itself belongs to e-Referral. The circular is not reproduced or attached here.
 
 ## Nexyra's own evaluation
 
 `[EVAL RESULTS PENDING — TICKET-14]`
 
-When it exists, it will report closure verification on the labelled synthetic test set as fractions with denominators, with every error listed, wrong closures first. It measures the mechanism on synthetic reports. It does not measure clinical accuracy or patient outcomes.
+The harness is ready (`npm run eval`, 24 labelled synthetic reports) and has not been run, because no model key was available. When it runs, it reports closure verification as fractions with denominators, with every error listed, wrong closures first. It measures the mechanism on synthetic reports. It does not measure clinical accuracy or patient outcomes.
+
+What does exist is prior testing of the mechanism: 300 automated tests in 24 files, including one that replays all three demo cases through the API after a reset, and tests that every proposal rule and every quote check behaves as documented. These show the code does what it says, not that it is clinically right.
 
 ## Clinical review
 
@@ -64,4 +66,5 @@ No clinician is on the team. Nothing in this folder has been clinically reviewed
 
 - That Nexyra improves follow-up completion or any patient outcome.
 - That navigation targeted by risk prediction improves outcomes.
-- That the synthetic cohort behaves like real patients.
+- That the synthetic cohort behaves like real patients. Its drop-off rates are inputs, not findings.
+- That the scenario panel on the programme view predicts anything. It applies one US trial's effect size to a synthetic case count and is labelled an assumption.

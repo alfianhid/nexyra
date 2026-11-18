@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 16 Nov · **Estimate:** 4 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-05, TICKET-06
-- **Status:** not started
+- **Status:** done (checked 18 Nov against the code). Worklist and case detail are `src/pages/Worklist.tsx` and `src/pages/CaseDetail.tsx`; boxes not re-audited line by line here.
 
 ## Goal
 

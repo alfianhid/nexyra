@@ -7,35 +7,39 @@ Two lists: what a pilot needs and does not have yet, and what the prototype itse
 | Need | Status |
 |---|---|
 | Access to Malaffi referral and lab-result data (the HL7 REF messages DoH Circular 144/2026 requires) | Not available. Not requested. |
+| The Malaffi message specification, to check the HL7 v2 field map in `server/ingest/hl7v2/parse.ts` | Not seen. The ingest is generic HL7 v2.5. |
+| Malaffi e-Referral as the channel for consultation questions and answers | Not connected. Two endpoints stand in for it. |
 | Department of Health approval for a pilot | Not sought |
 | Hosting and identity set-up that satisfies clinical data policy | Not done. The prototype is on public hosting with no login. |
-| Local clinical review of pathway stages, deadlines and closure evidence rules | `[CLINICAL REVIEW PENDING — TICKET-19]` |
-| Native-speaker review of Arabic patient-facing text | Not done. No Arabic patient templates exist in the current build. |
-| A policy for using AI models on clinical data | Not written. The prototype sends only synthetic data to any model. |
-| Real alerts (email, SMS) | Not built. Outreach attempts are logged by staff. |
+| Local clinical review of pathway stages, deadlines, closure evidence rules and message wording | `[CLINICAL REVIEW PENDING — TICKET-19]` |
+| A clinician to check the labels of the report test set | Not done. `checked_by` is empty. |
+| Native-speaker review of Arabic patient-facing text, and written Urdu, Hindi and Tagalog templates | Arabic written, not reviewed. The other three are empty slots. |
+| An SMS or WhatsApp gateway and sender registration | Not built. The message is recorded as sent, not delivered. |
+| A policy for using AI models on clinical data, and a model provider whose terms allow it | Not written. The prototype sends only synthetic data to any model. |
 | Real authentication and per-user audit | Not built. The role is chosen from a menu. |
-| Malaffi message formats beyond the circular's REF description | Not seen first-hand |
-| A clinician on the team or a named clinical owner for a pilot | None |
+| A screening-programme partner with a named clinical owner | None. No clinician on the team. |
+| Local identifiers (Emirates ID, MRN) and a rule for identity matching beyond exact keys | Exact keys only. Probabilistic matching is designed, not built. |
 
 ## What the prototype runs on
 
 | Component | Use | Where |
 |---|---|---|
-| Node.js, TypeScript | Server and tooling | `package.json` |
+| Node.js 22, TypeScript | Server and tooling | `package.json` |
 | React 18, Vite 5, React Router 6 | Frontend | `src/` |
 | Express 4 | API, run as one Vercel function in deployment | `server/`, `api/index.ts` |
 | `@libsql/client` | Database client. Local SQLite file, or Turso when `TURSO_DATABASE_URL` is set. | `server/db.ts` |
-| Vitest 2 | Tests | `server/*.test.ts` |
-| Vercel | Hosting. Not yet confirmed running there. | `vercel.json`, `docs/deploy.md` |
+| `hl7v2` (npm) | HL7 v2 parsing. Pure JavaScript, no native build. | `server/ingest/hl7v2/` |
+| Vitest 2 | 300 tests in 24 files | `server/*.test.ts`, `src/*.test.ts` |
+| Vercel | Hosting and the daily demo-reset cron. Not yet confirmed running there. | `vercel.json`, `docs/deploy.md` |
 | Turso | Hosted libSQL database | `docs/deploy.md` |
-| An OpenAI-compatible model endpoint | Report extraction. DeepSeek is the default; Meta Muse Spark through the Meta Model API is an option. Configured with `LLM_BASE_URL`, `LLM_API_KEY` and `NEXYRA_MODEL`. | `.env.example` |
+| An OpenAI-compatible model endpoint | Report extraction. DeepSeek is the default; Meta Muse Spark through the Meta Model API is possible. Configured with `LLM_BASE_URL`, `LLM_API_KEY` and `NEXYRA_MODEL`. | `server/verify/llm.ts`, `.env.example` |
 
 ## Model dependency, stated plainly
 
-- The current build does not call a model at run time. The extraction shown for the demo case is a stored row.
-- The configuration for a model exists. The live extraction step is `[PLANNED — TICKET-13]`.
-- While the team uses Meta's free credits, the provider's terms say content may be used for product improvement. For that reason only synthetic data is ever sent to any model.
-- Extraction results are meant to be cached by a hash of the report text, so a repeated run does not call the model again. The table and the unique hash index exist in `server/db.ts`.
+- The demo does not need a model. The reading for demo case 3 is stored, and an extraction already seen is served from a cache keyed by a hash of the report text.
+- The live path exists: with `LLM_BASE_URL` and `LLM_API_KEY` set, `POST /api/cases/{id}/verification` and `npm run verify:file` call the model, check every quote against the report in code, and apply the proposal rules. Without a key and without a cached reading, the answer is "needs human reading".
+- The live path has been tested with a fake model and has not yet been run against a real provider. `[EVAL RESULTS PENDING — TICKET-14]`
+- A provider's terms can allow use of content for product improvement while free credits are used. For that reason only synthetic data is ever sent to any model.
 - API keys live in `.env` and in Vercel settings. They are never committed.
 
 ## Third-party licences

@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 17 Nov · **Estimate:** 4 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-05, TICKET-12
-- **Status:** not started
+- **Status:** done in code (checked 18 Nov), not run against a real model. `server/verify/` has the prompt (`extract-v1`), fields, code-checked quotes, proposal rules, cache and an OpenAI-compatible client; endpoint `POST /api/cases/{id}/verification` and `npm run verify:file`. Tests use a fake model (`server/verify/extract.test.ts`, `verification.test.ts`). The live call needs `LLM_BASE_URL` and `LLM_API_KEY`.
 
 ## Goal
 

@@ -2,43 +2,45 @@
 
 Source: `docs/[PUB] Future Health Digital Innovation Challenge _ Submission Template.pptx`, read from `ppt/slides/slide*.xml` on 18 Nov 2026. It has 16 slides. The slide order in `ppt/presentation.xml` matches the file numbers. An asterisk after a title means the template marks the item as required. Prompt text is verbatim.
 
-Rules from the ticket: keep slide order, titles and layout. Do not delete slides. If a section does not apply, write a short explanation. Key information must be in text, not only in images.
+Rules from the ticket: keep slide order, titles and layout. Do not delete slides. If a section does not apply, write a short explanation. Key information must be in text, not only in images. The final text for every slide is in [`deck-content.md`](deck-content.md).
 
-Status key: **ready** = material exists in the repository. **partial** = some material, gaps named. **no material** = the team has nothing yet.
+Status key: **ready** = the text is written from material in the repository. **partial** = written, with named gaps. **team** = only the team can supply it.
 
-| # | Slide title | Prompt text (verbatim) | Answered by | Status |
+| # | Slide title | Prompt text (verbatim) | Source documents | Status |
 |---|---|---|---|---|
-| 1 | (no title; three labels) | `Team Name:` / `Team Size:` / `Problem Statement:` | Team name: Itmam / Nexyra, to confirm with the team. Problem statement: brief section 1 and the form's Solution summary in `docs/form-answers.md`. Team size: ask the team. | partial |
-| 2 | Team members* | `[Name, country, role, organization, age confirmation]`. Table columns: S.No, Name, Country, Role, Organization, Age confirmation, rows 1 to 5. | Not in the repository. Each member must supply their own details and age confirmation. | **no material** |
-| 3 | Team Capability Summary* | `Maximum 1,000 characters` | Brief section 10 (no clinician on the team; external reviewer credited as permitted) and `docs/limitations.md`. Skills and experience of members must come from the members. | partial |
-| 4 | Architecture or workflow diagram* | (title only) | Brief section 3 (case flow) and `docs/architecture.md` (being written by another agent). The current code has seven stages, not the brief's ten. Draw what exists, mark the rest planned. | partial |
-| 5 | Target users and intended outcome* | (title only) | `PRODUCT.md` (users and roles), brief sections 1 to 2. Intended outcome must be worded as a design aim, never as a proven result. | ready |
-| 6 | How will success be measured?* | (title only) | Brief section 8 (closure verification on labelled reports) and `docs/responsible-ai.md`. Pilot measures are not defined anywhere: for a pilot, candidates are time-to-owner, share of cases with an owner, share of stages closed within deadline. These are proposals and need a team decision. `[EVAL RESULTS PENDING — TICKET-14]` | partial |
-| 7 | Evidence supporting the approach* | `Citations, studies, benchmarks, or prior testing.` | `docs/evidence.md`. Prior testing: the test suite and `[EVAL RESULTS PENDING — TICKET-14]`. | ready, except the 30.5% citation and eval results |
-| 8 | Data sources and legal right to use them* | `List source, type, owner, sensitivity, permissions, and whether personal data is used.` | `docs/data-sources.md` | ready |
-| 9 | Risks and safeguards* | `Privacy; security; bias; explainability; misuse; human oversight; failure modes.` | `docs/responsible-ai.md`, `docs/limitations.md`. Security and privacy: only partly covered; no security review exists. | partial |
-| 10 | Hardware requirements | `Required if wearable, sensor, connected device, or other hardware is there. Include sourcing and safety.` | Not applicable. Write one line: software only, no hardware. | ready |
-| 11 | (title is the prompt) | `If the application requires login authentication, please provide valid access credentials` / `or enable a "Continue as Guest" option with all necessary features and functionalities accessible to guest users.` | The app has no login. The role is picked from a menu, which works as guest access. State this, and give the prototype URL (TICKET-21). | partial, needs the deployed URL |
-| 12 | Path to pilot and scale* | `Stakeholders, integration, regulatory needs, timeline assumptions, and sustainability.` | Brief section 9, `docs/dependencies.md`. Timeline assumptions and sustainability (who pays, who runs it) are not written anywhere. | partial |
-| 13 | Pre-existing IP and third-party materials* | `Identify ownership, licenses, open-source components, and restrictions.` | `docs/dependencies.md` lists components; a licence list from `package-lock.json` is not produced yet. Ownership statement for the code and for the literature figures needs a team decision. | partial |
-| 14 | Conflict of interest declaration* | `Disclose relationships with organizers, partners, or judges.` | Each member's answers, collected for `docs/form-answers.md`. Must match the form. | **no material** |
-| 15 | Additional Slide | (no prompt) | Optional. Candidates: screenshots of the real prototype, demo case walk-through, the Malaffi positioning. | n/a |
+| 1 | (no title; three labels) | `Team Name:` / `Team Size:` / `Problem Statement:` | Problem: `form-answers.md` (summary), `evidence.md`. Name and size from the team. | partial, team name and size |
+| 2 | Team members* | `[Name, country, role, organization, age confirmation]`. Table columns: S.No, Name, Country, Role, Organization, Age confirmation, rows 1 to 5. | Not in the repository. | **team** |
+| 3 | Team Capability Summary* | `Maximum 1,000 characters` | `limitations.md` (no clinician on the team; external reviewer, not a member). Skills from the members. | partial, team |
+| 4 | Architecture or workflow diagram* | (title only) | `architecture.md`, `README.md` ("What is in the build"), screenshots in `docs/shots/` | ready |
+| 5 | Target users and intended outcome* | (title only) | `PRODUCT.md`, `evidence.md`, `docs/demo-script.md` | ready |
+| 6 | How will success be measured?* | (title only) | `responsible-ai.md` (evaluation), `assumptions.md`. Pilot measures are proposals needing a team decision. `[EVAL RESULTS PENDING — TICKET-14]` | partial |
+| 7 | Evidence supporting the approach* | `Citations, studies, benchmarks, or prior testing.` | `evidence.md`; prior testing: 300 automated tests. 30.5% full citation still to add. | ready except citation and eval |
+| 8 | Data sources and legal right to use them* | `List source, type, owner, sensitivity, permissions, and whether personal data is used.` | `data-sources.md` | ready |
+| 9 | Risks and safeguards* | `Privacy; security; bias; explainability; misuse; human oversight; failure modes.` | `responsible-ai.md`, `limitations.md`. No security review exists. | partial |
+| 10 | Hardware requirements | `Required if wearable, sensor, connected device, or other hardware is there. Include sourcing and safety.` | Not applicable: software only. | ready |
+| 11 | (title is the prompt) | `If the application requires login authentication, please provide valid access credentials` / `or enable a "Continue as Guest" option with all necessary features and functionalities accessible to guest users.` | The app has no login; the role picker acts as guest access. URL from TICKET-21. | partial, needs URL |
+| 12 | Path to pilot and scale* | `Stakeholders, integration, regulatory needs, timeline assumptions, and sustainability.` | `dependencies.md`, `architecture.md` (several pathways, ingest), `limitations.md`. Timeline and sustainability are proposals needing a team decision. | partial |
+| 13 | Pre-existing IP and third-party materials* | `Identify ownership, licenses, open-source components, and restrictions.` | `dependencies.md`. Licence list not generated; IP ownership statement is the team's. | partial, team |
+| 14 | Conflict of interest declaration* | `Disclose relationships with organizers, partners, or judges.` | Members' answers, recorded in `form-answers.md`. Must match the form. | **team** |
+| 15 | Additional Slide | (no prompt) | Use: the two-pathway demonstration, the screenshots, assumptions and limitations in one place. | ready |
 | 16 | (no text) | (no text) | Contains no text in the file. Open the slide in PowerPoint to see whether it is a closing or image slide. | check by eye |
 
-## Slides the team cannot fill from the repository
+## Slides the team must fill
 
-- Slide 2 (team members): personal details only the members have.
-- Slide 14 (conflict of interest): answers only the members have.
-- Slide 3 (capability summary): needs each member's background in at most 1,000 characters.
-- Slide 6 (success measures): needs a decision on pilot metrics.
-- Slide 12 (timeline, sustainability): not written.
-- Slide 13 (licences, ownership): licence list not generated.
+- Slide 1: team name and size.
+- Slide 2: members' details and age confirmation.
+- Slide 3: members' skills (1,000 characters at most).
+- Slide 6: decide the pilot measures proposed in the text.
+- Slide 12: decide the timeline and who runs and pays.
+- Slide 13: ownership and the licence list.
+- Slide 14: conflict of interest answers.
 
 ## Items that wait on other tickets
 
 - Evaluation numbers: `[EVAL RESULTS PENDING — TICKET-14]` (slides 6, 7, 9).
 - Clinical review status: `[CLINICAL REVIEW PENDING — TICKET-19]` (slides 3, 9, 12).
-- Screenshots and prototype link: TICKET-21 (slides 4, 11, 15).
+- Deployment URL and video link: `[PENDING — TICKET-21]` (slides 4, 11, 15).
+- Screenshots `case1-*`, `case3-*`, `programme-*`, `patient-ar.png`: being captured (see `deck-content.md`).
 
 ## Content the ticket says must appear, and where it fits
 
@@ -46,7 +48,7 @@ Status key: **ready** = material exists in the repository. **partial** = some ma
 |---|---|
 | The problem, with numbers and sources | 1, 7 |
 | What Nexyra does and for whom | 5 |
-| Mapping to the six challenge requirements | 5 or 15. The exact requirement wording is still unverified in the brief (requirements 1, 2 and 5 are marked as needing wording). |
+| Mapping to the challenge requirements | 5, 15 (the exact requirement wording is still unverified in the brief) |
 | Architecture and the role of AI | 4, 9 |
 | What was built and what is only designed | 4, 15 |
 | Evaluation results with denominators | 6, 7 |
