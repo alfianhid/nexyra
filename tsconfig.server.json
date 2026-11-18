@@ -14,5 +14,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["server", "api"]
+  "include": ["server", "api", "scripts"]
 }

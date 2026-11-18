@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 17 Nov · **Estimate:** 2 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-12, TICKET-13
-- **Status:** not started
+- **Status:** in progress
 
 ## Goal
 
