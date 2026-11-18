@@ -250,19 +250,21 @@ describe("POST /api/cases/:id/events", () => {
   });
 
   it("advances a case one legal stage and records the event", async () => {
+    // The next stage after result_received is patient_notified in the template (it was
+    // colonoscopy_booked in the old seven-stage list).
     const { status, body } = await request("POST", "/api/cases/CX-1001/events", {
       headers: COORDINATOR,
-      body: { type: "colonoscopy_booked", payload: { channel: "patient_page" } },
+      body: { type: "patient_notified", payload: { channel: "patient_page" } },
     });
     expect(status).toBe(200);
-    expect(body.case.stage).toBe("colonoscopy_booked");
-    expect(body.stages.find((s: { key: string }) => s.key === "colonoscopy_booked").state).toBe(
+    expect(body.case.stage).toBe("patient_notified");
+    expect(body.stages.find((s: { key: string }) => s.key === "patient_notified").state).toBe(
       "current",
     );
 
     const last = body.timeline.at(-1);
     expect(last.event_id).toBe(body.recorded);
-    expect(last.type).toBe("colonoscopy_booked");
+    expect(last.type).toBe("patient_notified");
     expect(last.payload.channel).toBe("patient_page");
   });
 

@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 15 Nov · **Estimate:** 2–3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-02
-- **Status:** not started
+- **Status:** done-when met 18 Nov. `rebuildCase` is in `server/events.ts`; tests in `server/caseEngine.test.ts` and `server/db.test.ts`. Deviation: patient fields live on `cases` and there is no `providers` table yet (provider identity arrives with TICKET-08).
 
 ## Goal
 
@@ -23,10 +23,10 @@ Transition rules (TICKET-05), timers (TICKET-06).
 
 ## Done when
 
-- [ ] Test: after deleting the computed status columns, `rebuildCase` produces exactly the same status
-- [ ] Test: no code path modifies or deletes `events` rows
-- [ ] Every event records who did it and their role
-- [ ] The schema is documented briefly in `docs/architecture.md`
+- [x] Test: after deleting the computed status columns, `rebuildCase` produces exactly the same status (`TICKET-03: rebuildCase reproduces every seeded case exactly after its status columns are wiped`)
+- [x] Test: no code path modifies or deletes `events` rows (database triggers; `server/db.test.ts` and the audit-trail test in `server/writes.test.ts`)
+- [x] Every event records who did it and their role (`actor_id`, `actor_role` are `NOT NULL`; the engine refuses an event whose role the template does not allow)
+- [x] The schema is documented briefly in `docs/architecture.md`
 
 ## Notes
 

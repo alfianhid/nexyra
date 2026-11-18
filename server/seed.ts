@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { InStatement } from "@libsql/client";
 import { databaseLabel, getDb, type Db } from "./db.js";
+import { foldEvents, type CaseState, type RecordedEvent } from "./engine.js";
 
 // TICKET-17: three cases, all fictional. Running this file twice must not duplicate
 // anything, so every row has a fixed id and every write is an upsert.
@@ -17,29 +18,42 @@ const ACTORS = [
   { id: "act_system", role: "system", display_name: "system" },
 ];
 
+type SeedEvent = {
+  id: string;
+  type: string;
+  actor_id: string;
+  at: string;
+  summary: string;
+  // Extra payload the engine reads back on replay: the owner a creation or hand-over
+  // names, the outcome a closure proposal carries.
+  payload?: Record<string, unknown>;
+};
+
 type SeedCase = {
   id: string;
   patient_name: string;
   patient_age: number;
   patient_language: string;
-  owner_actor_id: string | null;
-  stage: string;
-  status: string;
-  // The outcome a closure was proposed with. Null until a closure is proposed.
-  final_outcome?: string | null;
-  events: { id: string; type: string; actor_id: string; at: string; summary: string }[];
+  // What the story says the case looks like at day 0. The seed does not write these: it
+  // replays `events` through the engine and refuses to run if the replay disagrees, so
+  // the cached columns are always what rebuildCase would produce (TICKET-03).
+  expect: {
+    stage: string;
+    owner_actor_id: string | null;
+    final_outcome: string | null;
+  };
+  events: SeedEvent[];
 };
 
 const CASES: SeedCase[] = [
   {
-    // 1. The silent patient — unanswered messages, then a recorded fear of the prep.
+    // 1. The silent patient: the result is in, calls and an Arabic SMS go unanswered, so
+    // the patient has not been told yet and the case sits at result_received.
     id: "CX-1001",
     patient_name: "Y. Al Hammadi",
     patient_age: 58,
     patient_language: "ar",
-    owner_actor_id: "act_005",
-    stage: "result_received",
-    status: "open",
+    expect: { stage: "result_received", owner_actor_id: "act_005", final_outcome: null },
     events: [
       {
         id: "e_1001_1",
@@ -47,6 +61,7 @@ const CASES: SeedCase[] = [
         actor_id: "act_system",
         at: "2026-11-15T09:12:00+07:00",
         summary: "Case created from FIT result 4412/26",
+        payload: { owner_actor_id: "act_005" },
       },
       {
         id: "e_1001_2",
@@ -58,75 +73,170 @@ const CASES: SeedCase[] = [
     ],
   },
   {
-    // 2. Referral rejected, patient moves clinic — ends up unowned.
+    // 2. Referral rejected by the receiving hospital while the patient moves clinic: the
+    // case goes back to the step before the referral with no owner (TICKET-08 trigger 1).
     id: "CX-1002",
     patient_name: "R. Kumar",
     patient_age: 47,
     patient_language: "en",
-    owner_actor_id: null,
-    stage: "result_received",
-    status: "open",
+    expect: { stage: "patient_notified", owner_actor_id: null, final_outcome: null },
     events: [
       {
         id: "e_1002_1",
         type: "case_created",
         actor_id: "act_system",
-        at: "2026-11-16T08:00:00+07:00",
-        summary: "Referral received from clinic A, insufficient data",
+        at: "2026-11-12T08:00:00+07:00",
+        summary: "Case created from FIT result 4377/26 at clinic A",
+        payload: { owner_actor_id: "act_001" },
       },
       {
         id: "e_1002_2",
+        type: "patient_notified",
+        actor_id: "act_001",
+        at: "2026-11-13T09:30:00+07:00",
+        summary: "Patient told the result by phone and agreed to a colonoscopy",
+      },
+      {
+        id: "e_1002_3",
+        type: "referral_sent",
+        actor_id: "act_001",
+        at: "2026-11-14T10:00:00+07:00",
+        summary: "Referral sent to hospital B through e-Referral",
+      },
+      {
+        id: "e_1002_4",
         type: "referral_rejected",
         actor_id: "act_system",
         at: "2026-11-16T15:40:00+07:00",
-        summary: "Referral rejected: colonoscopy report missing; patient moved to clinic B",
+        summary: "Referral rejected by hospital B: colonoscopy request incomplete; patient moved to clinic B",
       },
     ],
   },
   {
-    // 3. "Done" that is not done — procedure marked finished, verification proposes reopen.
+    // 3. "Done" that is not done: every step was recorded as complete and closure was
+    // proposed, but the colonoscopy report says the caecum was never reached. The
+    // cached verification proposes reopening; the physician has not decided yet.
     id: "CX-1003",
     patient_name: "L. Fernandes",
     patient_age: 52,
     patient_language: "en",
-    owner_actor_id: "act_003",
-    stage: "closure_proposed",
-    status: "open",
-    // The engine proposed closure with this outcome; the physician's confirmation is
-    // what is missing, which is exactly what the three conditions test.
-    final_outcome: "returned_to_routine_screening",
+    expect: {
+      stage: "closure_proposed",
+      owner_actor_id: "act_003",
+      final_outcome: "returned_to_routine_screening",
+    },
     events: [
       {
         id: "e_1003_1",
         type: "case_created",
         actor_id: "act_system",
-        at: "2026-11-12T09:00:00+07:00",
+        at: "2026-10-14T09:00:00+07:00",
         summary: "Case created from FIT result 4302/26",
+        payload: { owner_actor_id: "act_005" },
       },
       {
         id: "e_1003_2",
-        type: "colonoscopy_performed",
+        type: "patient_notified",
         actor_id: "act_005",
-        at: "2026-11-15T10:00:00+07:00",
-        summary: "Colonoscopy recorded as completed",
+        at: "2026-10-15T10:30:00+07:00",
+        summary: "Patient told the result in clinic",
       },
       {
         id: "e_1003_3",
+        type: "referral_sent",
+        actor_id: "act_005",
+        at: "2026-10-16T09:00:00+07:00",
+        summary: "Referral sent to the endoscopy unit through e-Referral",
+      },
+      {
+        id: "e_1003_4",
+        type: "referral_accepted",
+        actor_id: "act_system",
+        at: "2026-10-17T14:00:00+07:00",
+        summary: "Endoscopy unit accepted the referral",
+      },
+      {
+        id: "e_1003_5",
+        type: "colonoscopy_booked",
+        actor_id: "act_005",
+        at: "2026-10-19T11:00:00+07:00",
+        summary: "Colonoscopy booked for 5 Nov",
+      },
+      {
+        id: "e_1003_6",
+        type: "colonoscopy_performed",
+        actor_id: "act_005",
+        at: "2026-11-05T10:00:00+07:00",
+        summary: "Colonoscopy recorded as completed",
+      },
+      {
+        id: "e_1003_7",
+        type: "pathology_ordered",
+        actor_id: "act_005",
+        at: "2026-11-05T10:30:00+07:00",
+        summary: "Pathology step opened by the endoscopy unit",
+      },
+      {
+        id: "e_1003_8",
+        type: "pathology_received",
+        actor_id: "act_system",
+        at: "2026-11-10T09:00:00+07:00",
+        summary: "Pathology return received: no specimen submitted",
+      },
+      {
+        id: "e_1003_9",
+        type: "owner_assigned",
+        actor_id: "act_005",
+        at: "2026-11-10T09:05:00+07:00",
+        summary: "Handed to Dr. Fulan for the closure decision",
+        payload: { owner_actor_id: "act_003", previous_owner_actor_id: "act_005" },
+      },
+      {
+        id: "e_1003_10",
+        type: "closure_proposed",
+        actor_id: "act_005",
+        at: "2026-11-12T09:00:00+07:00",
+        summary: "Closure proposed: returned to routine screening",
+        payload: { outcome: "returned_to_routine_screening" },
+      },
+      {
+        id: "e_1003_11",
         type: "extraction_completed",
         actor_id: "act_system",
         at: "2026-11-17T09:14:00+07:00",
         summary: "2 findings extracted with citations; proposal reopen",
       },
-      {
-        id: "e_1003_4",
-        type: "closure_proposed",
-        actor_id: "act_system",
-        at: "2026-11-17T09:20:00+07:00",
-        summary: "Closure proposed: returned to routine screening",
-      },
     ],
   },
 ];
+
+const ROLE_OF = new Map(ACTORS.map((a) => [a.id, a.role]));
+
+function recorded(e: SeedEvent): RecordedEvent {
+  return {
+    type: e.type,
+    actor_id: e.actor_id,
+    actor_role: ROLE_OF.get(e.actor_id) ?? "system",
+    occurred_at: e.at,
+    payload: { ...(e.payload ?? {}), summary: e.summary },
+  };
+}
+
+// The cached columns for one seed case, computed the way rebuildCase computes them.
+function replay(c: SeedCase): CaseState {
+  const state = foldEvents(c.events.map(recorded));
+  if (state === null) throw new Error(`Seed case ${c.id} has no case creation event.`);
+  const mismatch = (["stage", "owner_actor_id", "final_outcome"] as const).filter(
+    (key) => state[key] !== c.expect[key],
+  );
+  if (mismatch.length > 0) {
+    throw new Error(
+      `Seed case ${c.id} replays to ${JSON.stringify(state)}, which disagrees with its story on ` +
+        mismatch.join(", "),
+    );
+  }
+  return state;
+}
 
 const REPORT_TEXT =
   "Procedure: colonoscopy. Preparation was inadequate. The cecum was not reached. " +
@@ -146,7 +256,7 @@ const CACHED_FIELDS = [
     value: "no",
     quote: "Preparation was inadequate.",
     quote_offset: offsetOf("Preparation was inadequate."),
-    source: "colonoscopy-report-15-11.pdf",
+    source: "colonoscopy-report-05-11.pdf",
     read_at: "2026-11-17T09:14:00+07:00",
     validated: true,
   },
@@ -155,7 +265,7 @@ const CACHED_FIELDS = [
     value: "no",
     quote: "The cecum was not reached.",
     quote_offset: offsetOf("The cecum was not reached."),
-    source: "colonoscopy-report-15-11.pdf",
+    source: "colonoscopy-report-05-11.pdf",
     read_at: "2026-11-17T09:14:00+07:00",
     validated: true,
   },
@@ -164,7 +274,7 @@ const CACHED_FIELDS = [
     value: "unknown",
     quote: null,
     quote_offset: [0, 0],
-    source: "colonoscopy-report-15-11.pdf",
+    source: "colonoscopy-report-05-11.pdf",
     read_at: "2026-11-17T09:14:00+07:00",
     validated: false,
   },
@@ -191,7 +301,7 @@ export async function seed(
        owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at
      ) VALUES (
        @id, @patient_name, @patient_age, @patient_language, @pathway_id,
-       @owner_actor_id, @stage, @status, @final_outcome, @created_at, @created_at, @updated_at
+       @owner_actor_id, @stage, @status, @final_outcome, @stage_entered_at, @created_at, @updated_at
      )
      ON CONFLICT(id) DO UPDATE SET
        patient_name = excluded.patient_name,
@@ -201,6 +311,7 @@ export async function seed(
        stage = excluded.stage,
        status = excluded.status,
        final_outcome = excluded.final_outcome,
+       stage_entered_at = excluded.stage_entered_at,
        updated_at = excluded.updated_at`,
   );
 
@@ -246,31 +357,33 @@ export async function seed(
     for (const a of ACTORS) statements.push(upsertActor.bind(a));
 
     for (const c of CASES) {
+      const state = replay(c);
       statements.push(upsertCase.bind({
         id: c.id,
         patient_name: c.patient_name,
         patient_age: c.patient_age,
         patient_language: c.patient_language,
         pathway_id: "fit-colonoscopy",
-        owner_actor_id: c.owner_actor_id,
-        stage: c.stage,
-        status: c.status,
-        final_outcome: c.final_outcome ?? null,
+        owner_actor_id: state.owner_actor_id,
+        stage: state.stage,
+        status: state.status,
+        final_outcome: state.final_outcome,
+        stage_entered_at: state.stage_entered_at,
         created_at: c.events[0]?.at ?? NOW,
         updated_at: NOW,
       }));
 
-      const roles = new Map(ACTORS.map((a) => [a.id, a.role]));
       for (const e of c.events) {
+        const event = recorded(e);
         statements.push(insertEvent.bind({
           id: e.id,
           case_id: c.id,
-          type: e.type,
-          actor_id: e.actor_id,
-          actor_role: roles.get(e.actor_id) ?? "system",
-          occurred_at: e.at,
+          type: event.type,
+          actor_id: event.actor_id,
+          actor_role: event.actor_role,
+          occurred_at: event.occurred_at,
           recorded_at: e.at,
-          payload: JSON.stringify({ summary: e.summary }),
+          payload: JSON.stringify(event.payload),
         }));
       }
     }

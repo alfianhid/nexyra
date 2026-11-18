@@ -13,6 +13,28 @@ Scope: the HTTP surface for the prototype. It is deliberately small. Anything no
 - **Timestamps:** ISO 8601 with offset. `occurred_at` is demo-clock time (TICKET-06); `recorded_at` is real time. Responses carry both where they differ.
 - **No authentication** (out of scope by `TICKET-09`). Identity is the role picker, described under "Actor and trust model" below.
 
+## Pathway stages and events
+
+The stage list, deadlines, owners, escalation ladders, outcomes and the evidence each outcome needs come from the pathway template `server/pathways/fit-colonoscopy.json` (TICKET-04; see `docs/architecture.md`). `npm run pathway:deadlines` prints the deadlines with their sources. Every `stages[]` array in a response follows this order; the client renders what it receives and keeps no copy of the list.
+
+| # | Stage key | Moved on by (event → next stage) |
+|---|---|---|
+| 1 | `result_received` | `patient_notified` → `patient_notified` |
+| 2 | `patient_notified` | `referral_sent` → `referral_sent` |
+| 3 | `referral_sent` | `referral_accepted` → `referral_accepted`; `referral_rejected` → `patient_notified`, owner cleared (unowned) |
+| 4 | `referral_accepted` | `colonoscopy_booked` → `colonoscopy_booked` |
+| 5 | `colonoscopy_booked` | `colonoscopy_performed` → `procedure_completed` |
+| 6 | `procedure_completed` | `pathology_ordered` → `pathology_ordered`; `procedure_incomplete` → `referral_sent` |
+| 7 | `pathology_ordered` | `pathology_received` → `pathology_received`; `procedure_incomplete` → `referral_sent` |
+| 8 | `pathology_received` | `closure_proposed` → `closure_proposed`; `procedure_incomplete` → `referral_sent` |
+| 9 | `closure_proposed` | `closure_confirmed` → `closure_confirmed` (or straight to `closed` from the closure endpoint); `procedure_incomplete` → `referral_sent` |
+| 10 | `closure_confirmed` | `case_closed` → `closed`; `reopened` → `result_received` |
+| 11 | `closed` | `reopened` → `result_received` |
+
+Two events do not move the stage the usual way: `case_created` (the trigger, written by the engine or an ingest, payload `{ "owner_actor_id": "..." }`) and `owner_assigned` (any open stage, payload `{ "owner_actor_id": "..." }`; omitted means the caller takes the case). Event payload fields the engine reads: `outcome` (one of the three outcomes; recorded on the case), `owner_actor_id` (for events that assign an owner; the engine writes the owner it chose into the stored payload so the timeline alone can rebuild the case). `finalises` is reserved for the closure endpoint and is stripped from client payloads. `procedure_incomplete` and `reopened` clear the recorded outcome.
+
+Event types outside the template (`outreach_attempted`, `task_completed`, `deadline_missed`, `extraction_completed`, and anything a later ticket adds) are history: they appear in the timeline but do not change the stage, owner or outcome.
+
 ## Actor and trust model
 
 There is no login. The prototype still needs the server to know *who* is acting, because `TICKET-05` forbids closure by the `system` role or by coordination staff, and `TICKET-09`/`TICKET-15` require the server to reject a call made directly even when the UI hides the button.
@@ -32,11 +54,12 @@ A JSON object, because the role picker switches all three fields together. The s
 
 **What this is not.** This is not security. A prototype user can send any actor they like, and the deck must not claim otherwise. What it *does* guarantee is that no event can be recorded without an actor that exists, that the closure guard cannot be bypassed by omitting a role, and that a demo cannot accidentally attribute a clinician decision to the system. `docs/limitations.md` must say this plainly.
 
-**Permission table** (also enforced in the engine, per `TICKET-05`):
+**Permission table** (also enforced in the engine, per `TICKET-05`). Which role may record which stage event is data in `server/pathways/fit-colonoscopy.json` (`events.<type>.roles`); the table below summarises it. Telling the patient the result (`patient_notified`) is outreach work, so it is coordination staff and navigators only.
 
 | Action | coordination staff | navigator | responsible physician | program manager |
 |---|---|---|---|---|
-| Advance stages up to `referral_sent` | yes | yes | yes | no |
+| Advance a stage before closure (per event: the template's `roles`) | yes | yes | yes, except `patient_notified` | no |
+| Record an incomplete examination (`procedure_incomplete`) | no | no | yes | no |
 | Record patient outreach outcome | yes | yes | no | no |
 | Assign owner to an unowned case | yes | yes | yes | no |
 | Answer a consultation | no | no | yes | no |
@@ -64,8 +87,8 @@ Ordered server-side by clinical urgency from the pathway template, then by time 
     {
       "case_id": "c_018",
       "patient": { "display_name": "Patient 018", "age": 61, "language": "ar" },
-      "stage": "referral_received",
-      "stage_label": "Referral received",
+      "stage": "referral_accepted",
+      "stage_label": "Referral accepted",
       "owner": { "actor_id": "act_002", "display_name": "Nur H.", "role": "navigator" },
       "hours_left_stage": 96,
       "days_left_stage": 4,
@@ -76,6 +99,8 @@ Ordered server-side by clinical urgency from the pathway template, then by time 
   ]
 }
 ```
+
+`days_left_referral_limit` counts down the pathway's 31-day referral-to-colonoscopy limit (the template's one sourced deadline: HAAD standard, cited in BMC Cancer 2021). The count starts when the case first entered `referral_sent` and stops when it first reached `procedure_completed`; before the referral is sent it runs from the result, which is never more lenient than the limit. It can be negative.
 
 `flags_renderable` exists because `TICKET-09` requires status to be readable without colour: the UI prints these strings next to a shape marker, and never relies on a red dot.
 
@@ -96,8 +121,8 @@ Everything the case detail page needs in one call (`TICKET-09`): timeline, stage
   "case": {
     "case_id": "c_018",
     "patient": { "display_name": "Patient 018", "age": 61, "language": "ar" },
-    "stage": "pathology_ready",
-    "stage_label": "Pathology ready",
+    "stage": "pathology_received",
+    "stage_label": "Pathology received",
     "owner": { },
     "status": "open",
     "stage_due_label": "18 Nov 09:00",
@@ -108,7 +133,7 @@ Everything the case detail page needs in one call (`TICKET-09`): timeline, stage
       { "key": "oncology_accepted_therapy_started", "label": "Oncology accepted, therapy started" }
     ]
   },
-  "stages": [ { "key": "result_received", "state": "passed", "label": "Result received", "short_label": "Result" }, { "key": "pathology_ready", "state": "current", "label": "Pathology ready", "short_label": "Ready" } ],
+  "stages": [ { "key": "result_received", "state": "passed", "label": "Result received", "short_label": "Result" }, { "key": "pathology_received", "state": "current", "label": "Pathology received", "short_label": "Received" } ],
   "timeline": [ { "event_id": "e_91", "type": "pathology_recorded", "actor": { }, "occurred_at": "...", "recorded_at": "...", "summary": "Pathology report attached", "payload": { } } ],
   "documents": [ { "document_id": "d_4", "kind": "pathology", "title": "Pathology report" } ],
   "tasks": [ { "task_id": "t_7", "kind": "confirm_closure", "owner": { }, "due_at": "...", "status": "open" } ],
@@ -207,7 +232,7 @@ All writes go through the engine. None of them writes a table directly. Every su
 The single way a human advances a case.
 
 ```json
-{ "type": "patient_confirmed", "payload": { "channel": "patient_page" } }
+{ "type": "patient_notified", "payload": { "channel": "patient_page" } }
 ```
 
 The server validates the transition against the pathway template (`TICKET-05`) and rejects illegal ones with `409 invalid_transition`. It never trusts a client-supplied stage. Response is the updated case view plus `{ "recorded": "e_92" }`.
@@ -314,7 +339,7 @@ Body: `{ "days": 1 }` or `{ "until": "next_deadline" }` (`TICKET-06`). Runs `tic
 
 `cases_advanced` is always `0` in this prototype: time escalates a case, it never moves it through the pathway. Advancing the clock must not advance a stage, or the demo would show the engine closing work it cannot close.
 
-**The ladder is paced by the clock, not backfilled.** Level 1 fires the first time a case is seen past its deadline; levels 2 and 3 fire at most one per 24 demo-clock hours, escalating coordination → responsible physician → program manager and stopping at level 3. A case that is already days late does not emit three alerts on the first advance.
+**The ladder is paced by the clock, not backfilled.** Level 1 fires the first time a case is seen past its deadline; each further level fires at most once per `escalation_spacing_hours` (24) demo-clock hours. Level *n* alerts the *n*-th role in the stage's `escalation` ladder in the pathway template, and the ladder's length is the top level. In the FIT template every open stage escalates responsible physician → program manager → program manager, so it stops at level 3. A case that is already days late does not emit three alerts on the first advance.
 
 **`until: "next_deadline"`** moves the clock to the earliest stage deadline still ahead of `now` (or stays put when none is ahead), then ticks. It is a demo control for showing the next escalation without counting days.
 

@@ -1,4 +1,5 @@
 import { getDb, type Db } from "./db.js";
+import { REPORTED_LIMIT } from "./engine.js";
 
 // TICKET-06: the demo clock is a row in the database, not a constant, so it survives a
 // restart and every read measures deadlines against the same instant. Day 0 is the
@@ -14,7 +15,9 @@ export type Clock = {
   label: string;
 };
 
-export const REFERRAL_LIMIT_DAYS = 31;
+// The referral-to-colonoscopy limit, from the pathway template (the one limit with a
+// source: HAAD standard, cited in BMC Cancer 2021).
+export const REFERRAL_LIMIT_DAYS: number = REPORTED_LIMIT?.max_days ?? 0;
 
 // 17 Nov 2026 11:42 UTC+7, the moment the demo data was generated.
 export const DEMO_START = "2026-11-17T11:42:00+07:00";

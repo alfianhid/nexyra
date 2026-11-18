@@ -1,0 +1,271 @@
+{
+  "id": "fit-colonoscopy",
+  "version": 2,
+  "label": "Positive FIT to colonoscopy, pathology and follow-up",
+  "trigger": {
+    "description": "A positive faecal immunochemical test (FIT) result from the lab creates one case.",
+    "event": "case_created",
+    "initial_stage": "result_received",
+    "source": "unsourced, needs clinical review"
+  },
+  "terminal_stage": "closed",
+  "escalation_spacing_hours": 24,
+  "stages": [
+    {
+      "key": "result_received",
+      "label": "Result received",
+      "short_label": "Result",
+      "owner_role": "coordination_staff",
+      "sla_hours": 168,
+      "urgency": 10,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "patient_notified", "to": "patient_notified" }],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "patient_notified",
+      "label": "Patient notified",
+      "short_label": "Notified",
+      "owner_role": "coordination_staff",
+      "sla_hours": 72,
+      "urgency": 9,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "referral_sent", "to": "referral_sent" }],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "referral_sent",
+      "label": "Referral sent",
+      "short_label": "Referral",
+      "owner_role": "coordination_staff",
+      "sla_hours": 72,
+      "urgency": 8,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [
+        { "event": "referral_accepted", "to": "referral_accepted" },
+        { "event": "referral_rejected", "to": "patient_notified" }
+      ],
+      "source": "unsourced, needs clinical review",
+      "notes": "sla_hours is the acceptance deadline: an unanswered referral past it is TICKET-08 unowned trigger 2."
+    },
+    {
+      "key": "referral_accepted",
+      "label": "Referral accepted",
+      "short_label": "Accepted",
+      "owner_role": "coordination_staff",
+      "sla_hours": 72,
+      "urgency": 7,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "colonoscopy_booked", "to": "colonoscopy_booked" }],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "colonoscopy_booked",
+      "label": "Colonoscopy booked",
+      "short_label": "Booked",
+      "owner_role": "coordination_staff",
+      "sla_hours": 576,
+      "urgency": 6,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "colonoscopy_performed", "to": "procedure_completed" }],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "procedure_completed",
+      "label": "Colonoscopy done",
+      "short_label": "Done",
+      "owner_role": "responsible_physician",
+      "sla_hours": 48,
+      "urgency": 5,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [
+        { "event": "pathology_ordered", "to": "pathology_ordered" },
+        { "event": "procedure_incomplete", "to": "referral_sent" }
+      ],
+      "source": "unsourced, needs clinical review",
+      "notes": "The pathway always passes through pathology. Whether a complete colonoscopy with no specimen may skip it is a question for clinical review (TICKET-19), not a branch added here."
+    },
+    {
+      "key": "pathology_ordered",
+      "label": "Pathology ordered",
+      "short_label": "Ordered",
+      "owner_role": "responsible_physician",
+      "sla_hours": 336,
+      "urgency": 4,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [
+        { "event": "pathology_received", "to": "pathology_received" },
+        { "event": "procedure_incomplete", "to": "referral_sent" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "pathology_received",
+      "label": "Pathology received",
+      "short_label": "Received",
+      "owner_role": "responsible_physician",
+      "sla_hours": 168,
+      "urgency": 3,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "exits": [
+        { "event": "closure_proposed", "to": "closure_proposed" },
+        { "event": "procedure_incomplete", "to": "referral_sent" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "closure_proposed",
+      "label": "Closure proposed",
+      "short_label": "Proposed",
+      "owner_role": "responsible_physician",
+      "sla_hours": 48,
+      "urgency": 1,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "awaiting_closure": true,
+      "exits": [
+        { "event": "closure_confirmed", "to": "closure_confirmed" },
+        { "event": "procedure_incomplete", "to": "referral_sent" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "closure_confirmed",
+      "label": "Closure confirmed",
+      "short_label": "Confirmed",
+      "owner_role": "responsible_physician",
+      "sla_hours": 24,
+      "urgency": 2,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [
+        { "event": "case_closed", "to": "closed" },
+        { "event": "reopened", "to": "result_received" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "closed",
+      "label": "Closed",
+      "short_label": "Closed",
+      "owner_role": "responsible_physician",
+      "sla_hours": null,
+      "urgency": 11,
+      "escalation": [],
+      "exits": [{ "event": "reopened", "to": "result_received" }],
+      "source": "no deadline: terminal stage"
+    }
+  ],
+  "events": {
+    "case_created": {
+      "label": "Case created from a positive FIT",
+      "roles": ["system", "coordination_staff"],
+      "owner": "assign"
+    },
+    "patient_notified": {
+      "label": "Patient told the result and the next step",
+      "roles": ["coordination_staff", "navigator"]
+    },
+    "referral_sent": {
+      "label": "Referral for colonoscopy sent",
+      "roles": ["coordination_staff", "navigator", "responsible_physician"]
+    },
+    "referral_accepted": {
+      "label": "Receiving provider accepted the referral",
+      "roles": ["system", "coordination_staff", "navigator"]
+    },
+    "referral_rejected": {
+      "label": "Receiving provider rejected the referral",
+      "roles": ["system", "coordination_staff", "navigator", "responsible_physician"],
+      "owner": "clear"
+    },
+    "colonoscopy_booked": {
+      "label": "Colonoscopy appointment booked",
+      "roles": ["system", "coordination_staff", "navigator", "responsible_physician"]
+    },
+    "colonoscopy_performed": {
+      "label": "Colonoscopy performed",
+      "roles": ["system", "coordination_staff", "navigator", "responsible_physician"]
+    },
+    "procedure_incomplete": {
+      "label": "Examination incomplete, a new referral is needed",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "clears_outcome": true
+    },
+    "pathology_ordered": {
+      "label": "Pathology ordered",
+      "roles": ["system", "coordination_staff", "navigator", "responsible_physician"]
+    },
+    "pathology_received": {
+      "label": "Pathology result received",
+      "roles": ["system", "coordination_staff", "navigator", "responsible_physician"]
+    },
+    "closure_proposed": {
+      "label": "Closure proposed with an outcome",
+      "roles": ["coordination_staff", "navigator", "responsible_physician"]
+    },
+    "closure_confirmed": {
+      "label": "Responsible physician confirmed closure",
+      "roles": ["responsible_physician"],
+      "closure": true,
+      "finalises_to": "closed"
+    },
+    "case_closed": {
+      "label": "Case closed",
+      "roles": ["responsible_physician"],
+      "closure": true
+    },
+    "reopened": {
+      "label": "Case reopened",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "clears_outcome": true
+    },
+    "owner_assigned": {
+      "label": "Owner assigned or handed over",
+      "roles": ["coordination_staff", "navigator", "responsible_physician"],
+      "owner": "assign",
+      "moves_stage": false
+    }
+  },
+  "actions": {
+    "log_outreach": { "roles": ["coordination_staff", "navigator"] },
+    "assign_owner": { "roles": ["coordination_staff", "navigator", "responsible_physician"], "event": "owner_assigned" },
+    "answer_consultation": { "roles": ["responsible_physician"] },
+    "confirm_closure": { "event": "closure_confirmed" },
+    "reject_proposal": { "roles": ["responsible_physician"] },
+    "reopen_case": { "event": "reopened" }
+  },
+  "limits": [
+    {
+      "key": "referral_to_colonoscopy",
+      "label": "Referral to colonoscopy",
+      "from_stage": "referral_sent",
+      "to_stage": "procedure_completed",
+      "max_days": 31,
+      "reported_as": "referral_limit_days",
+      "source": "HAAD standard, cited in BMC Cancer 2021"
+    }
+  ],
+  "outcomes": [
+    {
+      "key": "returned_to_routine_screening",
+      "label": "Returned to routine screening",
+      "evidence": { "any_of": ["colonoscopy", "pathology"] },
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "surveillance_scheduled",
+      "label": "Surveillance scheduled",
+      "evidence": { "any_of": ["colonoscopy", "pathology"] },
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "oncology_accepted_therapy_started",
+      "label": "Oncology accepted, therapy started",
+      "evidence": { "all_of": ["pathology"] },
+      "source": "unsourced, needs clinical review"
+    }
+  ]
+}

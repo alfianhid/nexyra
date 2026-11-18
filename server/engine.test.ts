@@ -36,8 +36,14 @@ const closureReady = (): EngineCase =>
 
 describe("pathway transitions", () => {
   it("runs a case from result_received to closed through a valid sequence", () => {
+    // The template's stage list (TICKET-04): the referral hand-off and the procedure
+    // itself now sit between the result and pathology.
     const sequence = [
+      "patient_notified",
+      "referral_sent",
+      "referral_accepted",
       "colonoscopy_booked",
+      "colonoscopy_performed",
       "pathology_ordered",
       "pathology_received",
       "closure_proposed",
@@ -56,16 +62,22 @@ describe("pathway transitions", () => {
   });
 
   it.each([
-    ["colonoscopy_booked", "result_received"],
-    ["pathology_ordered", "colonoscopy_booked"],
+    ["patient_notified", "result_received"],
+    ["referral_sent", "patient_notified"],
+    ["referral_accepted", "referral_sent"],
+    ["colonoscopy_booked", "referral_accepted"],
+    ["colonoscopy_performed", "colonoscopy_booked"],
+    ["pathology_ordered", "procedure_completed"],
     ["pathology_received", "pathology_ordered"],
     ["closure_proposed", "pathology_received"],
     ["closure_confirmed", "closure_proposed"],
     ["case_closed", "closure_confirmed"],
-    ["procedure_incomplete", "colonoscopy_booked"],
+    ["procedure_incomplete", "procedure_completed"],
     ["procedure_incomplete", "pathology_ordered"],
     ["procedure_incomplete", "pathology_received"],
-    ["referral_rejected", "result_received"],
+    ["procedure_incomplete", "closure_proposed"],
+    ["referral_rejected", "referral_sent"],
+    ["reopened", "closure_confirmed"],
     ["reopened", "closed"],
   ])("allows %s from %s", (type, from) => {
     expect(transitionFor(from, type, "coordination_staff").ok).toBe(true);
@@ -79,6 +91,11 @@ describe("pathway transitions", () => {
     ["colonoscopy_booked", "pathology_received"],
     ["case_closed", "closed"],
     ["unknown_event", "result_received"],
+    // Legal in the old seven-stage list, skipped stages in the template's list.
+    ["colonoscopy_booked", "result_received"],
+    ["referral_rejected", "result_received"],
+    ["colonoscopy_booked", "patient_notified"],
+    ["procedure_incomplete", "colonoscopy_booked"],
   ])("rejects %s from %s (no skipped stages, no unknown events)", (type, from) => {
     const result = transitionFor(from, type, "coordination_staff");
     expect(result.ok).toBe(false);
@@ -86,7 +103,16 @@ describe("pathway transitions", () => {
   });
 
   it("keeps an owner on every forward transition", () => {
-    const forward = ["colonoscopy_booked", "pathology_ordered", "pathology_received", "closure_proposed"];
+    const forward = [
+      "patient_notified",
+      "referral_sent",
+      "referral_accepted",
+      "colonoscopy_booked",
+      "colonoscopy_performed",
+      "pathology_ordered",
+      "pathology_received",
+      "closure_proposed",
+    ];
     let stage = "result_received";
 
     for (const type of forward) {
@@ -104,7 +130,9 @@ describe("pathway transitions", () => {
     const result = transitionFor("pathology_received", "procedure_incomplete", "responsible_physician");
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.to).toBe("result_received");
+    // TICKET-05: an incomplete examination returns the case to referral_sent (the old
+    // seven-stage list had no referral stage, so it went back to result_received).
+    if (result.ok) expect(result.to).toBe("referral_sent");
     expect(ownerAfter(incomplete, "procedure_incomplete", "act_003")).toBe("act_003");
   });
 

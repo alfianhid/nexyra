@@ -14,7 +14,8 @@
     "demo:reset": "tsx server/reset.ts",
     "demo:reset:remote": "tsx --env-file=.env server/reset.ts",
     "verify:file": "tsx server/verify/cli.ts",
-    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts"
+    "eval": "tsx --env-file-if-exists=.env scripts/eval.ts",
+    "pathway:deadlines": "tsx server/pathways/deadlines.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

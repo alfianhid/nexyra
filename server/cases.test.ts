@@ -59,8 +59,10 @@ describe("GET /api/cases", () => {
     expect(status).toBe(200);
 
     const ids = body.cases.map((c: { case_id: string }) => c.case_id);
-    // Same stage urgency, so the case with less time left comes first.
-    expect(ids).toEqual(["CX-1001", "CX-1002"]);
+    // Ordered by the template's stage urgency: CX-1002 is back at patient_notified after
+    // its rejected referral, which ranks above CX-1001's result_received. (In the old
+    // seven-stage list both sat at result_received and time left decided.)
+    expect(ids).toEqual(["CX-1002", "CX-1001"]);
     expect(body.counts.open).toBe(2);
     expect(body.counts.unowned).toBe(1);
     expect(body.clock).toEqual({ now: "2026-11-17T11:42:00+07:00", is_demo: true, day: 0 });
@@ -113,7 +115,9 @@ describe("GET /api/cases/:case_id", () => {
       "current",
     );
 
-    expect(body.timeline).toHaveLength(4);
+    // The seeded history walks every stage up to the proposal (11 events since the
+    // template added the referral and procedure stages; it was 4).
+    expect(body.timeline).toHaveLength(11);
     expect(body.documents).toHaveLength(1);
     expect(body.tasks[0].kind).toBe("confirm_closure");
     expect(body.verification).toEqual({ status: "ready", proposal: "reopen" });

@@ -1,6 +1,12 @@
+// Mirrors server/pathways/fit-colonoscopy.json for the fixture adapter only; the live
+// app renders the stage list the server sends.
 export type StageId =
   | "result_received"
+  | "patient_notified"
+  | "referral_sent"
+  | "referral_accepted"
   | "colonoscopy_booked"
+  | "procedure_completed"
   | "pathology_ordered"
   | "pathology_received"
   | "closure_proposed"
@@ -9,7 +15,11 @@ export type StageId =
 
 export const stages: { id: StageId; label: string; short: string }[] = [
   { id: "result_received", label: "Result received", short: "Result" },
-  { id: "colonoscopy_booked", label: "Colonoscopy booked", short: "Colonoscopy" },
+  { id: "patient_notified", label: "Patient notified", short: "Notified" },
+  { id: "referral_sent", label: "Referral sent", short: "Referral" },
+  { id: "referral_accepted", label: "Referral accepted", short: "Accepted" },
+  { id: "colonoscopy_booked", label: "Colonoscopy booked", short: "Booked" },
+  { id: "procedure_completed", label: "Colonoscopy done", short: "Done" },
   { id: "pathology_ordered", label: "Pathology ordered", short: "Ordered" },
   { id: "pathology_received", label: "Pathology received", short: "Received" },
   { id: "closure_proposed", label: "Closure proposed", short: "Proposed" },
