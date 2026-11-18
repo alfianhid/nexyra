@@ -1,6 +1,5 @@
 import { actorFor } from "./actors";
 import { ApiError, type NexyraApi } from "./client";
-import { mockApi } from "./mock";
 import type {
   Actor,
   AdvanceResult,
@@ -9,13 +8,13 @@ import type {
   CaseFilter,
   Clock,
   MutationResult,
+  ProgramSummary,
   Role,
   Verification,
 } from "./types";
 
 // HTTP implementation of NexyraApi. Everything the server answers with is the shape in
-// docs/api.md; nothing here reshapes, derives or caches. The one exception is the
-// programme view, which has no server endpoint yet (Phase 8) and stays on the fixtures.
+// docs/api.md; nothing here reshapes, derives or caches.
 
 const BASE = "/api";
 
@@ -103,10 +102,8 @@ export const httpApi: NexyraApi = {
     return request<Verification>(`/cases/${encodeURIComponent(caseId)}/verification`, { role });
   },
 
-  // The programme summary has no endpoint yet, and the screen is already signed off on
-  // these numbers. Delegating keeps the interface honest instead of faking a server view.
-  getProgramme(role: Role) {
-    return mockApi.getProgramme(role);
+  getProgramme(role: Role): Promise<ProgramSummary> {
+    return request<ProgramSummary>(`/program/summary${queryRole(role)}`, { role });
   },
 
   confirmClosure(caseId: string, actor: Actor, finalOutcome?: string): Promise<CaseDetailResponse> {

@@ -278,30 +278,65 @@ export const mockApi: NexyraApi = {
     if (role !== "responsible_physician" && role !== "program_manager") {
       throw new ApiError("role_not_permitted", `The ${role} role may not read the program view.`);
     }
+    // The fixture predates the endpoint, so the sections it has no numbers for are empty
+    // rather than invented. The real figures come from GET /api/program/summary.
+    const total = programme.open + programme.closedThisWeek;
     return respond<ProgramSummary>({
+      clock: { now: clock.now, is_demo: clock.is_demo, day: clock.day },
+      synthetic_data_label:
+        "Synthetic data. Drop-off rates are input assumptions, not results.",
       counts: {
+        total,
         open: programme.open,
         unowned: programme.unowned,
         due_today: programme.dueToday,
+        due_today_unowned: 1,
         closed_this_week: programme.closedThisWeek,
+        past_referral_limit: 0,
+        closures_held: 0,
       },
       exceptions: programme.exceptions.map((e) => ({
         case_id: e.ref,
+        kind: "unowned" as const,
         reason: e.reason,
         owner: e.owner,
-        due_at: e.due,
+        stage_label: "",
+        due_at: null,
+        due_label: e.due,
       })),
+      unstitched: { available: false, count: 0, rows: [] },
       funnel: programme.byStage.map((s) => ({
+        key: s.stage.toLowerCase().replace(/\s+/g, "_"),
         stage: s.stage,
+        reached: s.open,
         open: s.open,
         unowned: s.unowned,
+        median_days_from_previous: null,
+        terminal: false,
       })),
-      escalations_per_role_per_day: [
-        { role: "responsible_physician", per_day: programme.pastDeadline },
-      ],
+      referral_to_colonoscopy: null,
       delay_reasons: [],
-      synthetic_data_label:
-        "Synthetic data. Drop-off rates are input assumptions, not results.",
+      escalations_per_role_per_day: [
+        {
+          role: "responsible_physician",
+          role_label: "Responsible physician",
+          total: programme.pastDeadline,
+          per_day: programme.pastDeadline,
+        },
+      ],
+      escalations_by_day: [],
+      scenario: {
+        title: "Scenario based on assumptions",
+        cohort_cases: total,
+        baseline_rate: 0.229,
+        outreach_rate: 0.31,
+        additional_completed: Math.round(total * (0.31 - 0.229)),
+        source:
+          "Atlas et al., JAMA 2023: follow-up completed 22.9% with usual care, 31.0% with reminder, letter and phone outreach",
+        caveat:
+          "One trial in one US health system. It does not say what would happen in Abu Dhabi, and it is not a result of Nexyra.",
+      },
+      pathway: { id: "fit-colonoscopy", label: "Positive FIT to colonoscopy, pathology and follow-up" },
     });
   },
 

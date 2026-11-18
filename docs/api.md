@@ -184,32 +184,79 @@ The dedicated unowned list (`TICKET-08`), one query, no client-side filtering. E
 
 ### `GET /api/program/summary`
 
-The program view (`TICKET-16`). Every row shape is fixed here so the page never guesses:
+The program view (`TICKET-16`), built in `server/programme.ts`. One call returns every section on the screen. The caller is resolved like every other read (`X-Nexyra-Actor` header, or `?role=` without one; a present-but-invalid header is refused). Only `responsible_physician` and `program_manager` may read it (permission table above); any other role gets `403 role_not_permitted`.
+
+Everything is computed at request time, at the demo clock's `now`, from `cases`, `events` and `extractions` (plus `unstitched` once it exists). Nothing is stored and nothing comes from a fixture. Stage history comes from replaying each case's events with the engine's own `nextState`, so the funnel cannot disagree with the case timeline. The read is a fixed number of queries whatever the cohort size, with no per-case query: about 0.2 s for 1,000 cases and 6,000 events on a local file.
 
 ```json
 {
-  "counts": { "open": 142, "unowned": 14, "due_today": 4, "closed_this_week": 38 },
+  "clock": { "now": "2026-11-17T11:42:00+07:00", "is_demo": true, "day": 0 },
+  "synthetic_data_label": "Synthetic data. Drop-off rates are input assumptions, not results.",
+  "counts": {
+    "total": 3, "open": 3, "unowned": 1, "due_today": 0, "due_today_unowned": 0,
+    "closed_this_week": 0, "past_referral_limit": 0, "closures_held": 1
+  },
   "exceptions": [
-    { "case_id": "c_018", "reason": "Unowned 26h", "owner": "—", "due_at": "2026-11-18T12:00:00+07:00" }
+    { "case_id": "CX-1002", "kind": "unowned", "reason": "Unowned 20h", "owner": "—",
+      "stage_label": "Patient notified", "due_at": "2026-11-19T15:40:00+07:00", "due_label": "19 Nov 15:40" },
+    { "case_id": "CX-1003", "kind": "closure_held", "reason": "Closure held: the latest reading proposes \"reopen\"",
+      "owner": "Dr. Fulan", "stage_label": "Closure proposed", "due_at": "2026-11-14T09:00:00+07:00", "due_label": "14 Nov 09:00" }
   ],
+  "unstitched": { "available": false, "count": 0, "rows": [] },
   "funnel": [
-    { "stage": "Result received", "open": 34, "unowned": 14 }
+    { "key": "result_received", "stage": "Result received", "reached": 3, "open": 1, "unowned": 0, "median_days_from_previous": null, "terminal": false },
+    { "key": "patient_notified", "stage": "Patient notified", "reached": 2, "open": 1, "unowned": 1, "median_days_from_previous": 1.1, "terminal": false }
   ],
+  "referral_to_colonoscopy": {
+    "limit_days": 31, "label": "Referral to colonoscopy", "source": "HAAD standard, cited in BMC Cancer 2021",
+    "completed": 1, "completed_within_limit": 1, "completed_over_limit": 0,
+    "waiting": 1, "waiting_over_limit": 0, "median_days_completed": 20,
+    "buckets": [ { "label": "0–7 days", "min_days": 0, "max_days": 7, "over_limit": false, "completed": 0, "waiting": 1 } ]
+  },
+  "delay_reasons": [ { "delay_reason": "fear", "label": "Fear", "count": 0 } ],
   "escalations_per_role_per_day": [
-    { "role": "responsible_physician", "per_day": 2 }
+    { "role": "responsible_physician", "role_label": "Responsible physician", "total": 1, "per_day": 0.3 }
   ],
-  "delay_reasons": [
-    { "delay_reason": "fear", "count": 6 }
+  "escalations_by_day": [
+    { "day": 2, "label": "Day 2 · 19 Nov", "per_role": [ { "role": "responsible_physician", "count": 1 }, { "role": "program_manager", "count": 0 } ] }
   ],
-  "synthetic_data_label": "Synthetic data. Drop-off rates are input assumptions, not results."
+  "scenario": {
+    "title": "Scenario based on assumptions", "cohort_cases": 3, "baseline_rate": 0.229, "outreach_rate": 0.31,
+    "additional_completed": 0,
+    "source": "Atlas et al., JAMA 2023: follow-up completed 22.9% with usual care, 31.0% with reminder, letter and phone outreach",
+    "caveat": "One trial in one US health system. It does not say what would happen in Abu Dhabi, and it is not a result of Nexyra."
+  },
+  "pathway": { "id": "fit-colonoscopy", "label": "Positive FIT to colonoscopy, pathology and follow-up" }
 }
 ```
 
-`reason` and `owner` are renderable strings, not enums: the page prints them as written. `due_at` is an ISO 8601 timestamp, unlike `dueLabel` in the prototype's fixtures. `delay_reason` uses the same five values as `POST /api/tasks/{task_id}/complete`.
+Arrays are shortened above: `funnel` carries every stage of the template in order, `buckets` has six rows, and `delay_reasons` always lists all five reasons.
 
-`counts` here is the programme's own summary and is distinct from the register `counts` in `GET /api/cases`: `due_today` and `closed_this_week` belong to the program view, `past_deadline` and `awaiting_clinician` belong to the worklist.
+`reason`, `owner`, `stage_label`, `due_label`, `label` and `role_label` are renderable strings: the page prints them as written and never derives a date. `due_at` is ISO 8601, or `null` for a stage with no deadline.
 
-Funnel numbers are computed from the `events` table at request time, never stored, so they cannot drift from the timeline.
+**Exceptions** (the actionable part, first on the screen). One row per case and reason, so a case can appear twice. Every row carries `case_id` and opens that case. Rows are ordered by kind, then by severity.
+
+| `kind` | when | `due_at` |
+|---|---|---|
+| `unowned` | an open case with no owner; `reason` says for how long, counted from the event that cleared the owner | the stage deadline |
+| `past_referral_limit` | an open case with no colonoscopy yet whose referral limit has run out, measured exactly as the worklist's `days_left_referral_limit` (from first entering `referral_sent`, or from the result before any referral) | when the 31 days ran out |
+| `closure_held` | a case waiting on closure (an `awaiting_closure` stage) whose latest reading proposes anything other than `propose_closure`. The reading is the latest `extractions` row, the same one the case detail's `verification` reads. A case never read is not listed | the stage deadline |
+
+**Unstitched** events have no case, so they are not exception rows. The section checks `sqlite_master` for an `unstitched` table (`TICKET-08`). Without the table it returns `{ "available": false, "count": 0, "rows": [] }` and no error. With it, each row not yet matched to a case (no `stitched_case_id`, `case_id`, `stitched_at` or `resolved_at`) becomes `{ id, received_at, received_label, reason, summary }`, read from the likely column names: `id`/`event_id`, `received_at`/`recorded_at`/`occurred_at`/`created_at`, `reason`/`status`, `summary`/`resource_type`/`kind`/`type`/`source`.
+
+**Funnel.** `reached` is the number of cases whose timeline ever entered the stage, a direct count over `events` (the test compares it with `SELECT count(DISTINCT case_id)` per entering event). A confirmation from the closure endpoint finalises to `closed` in one event and counts as reaching both `closure_confirmed` and `closed`. `open` and `unowned` are the cases at that stage now. `median_days_from_previous` is the median number of days from the latest earlier stage the case reached to its first entry here, to one decimal; `null` for the first stage or when no case has both.
+
+**Referral to colonoscopy.** Only cases that have been referred. `completed` cases have reached `procedure_completed`; `waiting` cases are open and have not, counted to `now`. Bucket edges fall on the limit, so each bucket is either within it or over it (`over_limit`).
+
+**Delay reasons.** One count per staff record that carries `delay_reason`: outreach events (`outreach_*`) and `task_completed`. All five values are always present.
+
+**Escalations** come from `deadline_missed` events. `payload.escalated_to` is the role; the demo day is the number of whole days since day 0 of the demo clock. `escalations_by_day` has a row for every demo day from 0 to the current one, and `per_day` is `total` divided by that number of days, to one decimal.
+
+**Counts.** `due_today` counts open cases whose stage deadline falls on the demo clock's calendar date. `closed_this_week` counts cases that entered `closed` in the seven demo days before `now`. These belong to the program view; the register's `counts` in `GET /api/cases` are a separate summary.
+
+**Scenario.** The only figure on the screen about a possible effect, and it is labelled as an assumption. `additional_completed` is `cohort_cases × (31.0% − 22.9%)`, rounded: the gap between usual care and the outreach arm in Atlas et al., JAMA 2023 (`docs/evidence.md`). It is not measured from the cohort and it is not a result of Nexyra.
+
+`synthetic_data_label` is always present and is printed at the top of the screen.
 
 ### `GET /api/ingest/unstitched`
 

@@ -6,6 +6,7 @@ import { databaseLabel, getDb } from "./db.js";
 import { advanceClock, tick } from "./escalation.js";
 import { applyEvent, completeTask, confirmCaseClosure, logOutreach, reopenCase } from "./events.js";
 import { HttpError, sendError } from "./errors.js";
+import { programmeSummary } from "./programme.js";
 import { runCaseVerification } from "./verify/caseVerification.js";
 
 // Reads and writes both lean on server/engine.ts for the rules. The handlers here parse
@@ -152,6 +153,20 @@ app.get(
     const db = await getDb();
     const role = await roleForRead(req, db);
     res.json(await getCaseDetail(db, param(req, "case_id"), role));
+  }),
+);
+
+// --- program view (TICKET-16) -----------------------------------------------
+// One read for the whole screen, computed from the event trail at the demo clock's now.
+// The role is resolved the same way as every other read; the permission check lives in
+// server/programme.ts.
+
+app.get(
+  "/api/program/summary",
+  handle(async (req, res) => {
+    const db = await getDb();
+    const role = await roleForRead(req, db);
+    res.json(await programmeSummary(db, role));
   }),
 );
 
