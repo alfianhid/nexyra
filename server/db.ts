@@ -107,6 +107,30 @@ CREATE TABLE IF NOT EXISTS timers (
 
 CREATE INDEX IF NOT EXISTS timers_by_case ON timers (case_id, status);
 
+-- ---- TICKET-10: patient outreach ladder (server/outreach/) ----------------------
+-- The simulated link in the automated message: one opaque token per case, no login.
+CREATE TABLE IF NOT EXISTS outreach_links (
+  token       TEXT PRIMARY KEY,
+  case_id     TEXT NOT NULL UNIQUE REFERENCES cases(id),
+  created_at  TEXT NOT NULL
+);
+
+-- One row per ladder step that fired (message, staff_call, callback, navigator). A run is
+-- one visit of the case to the ladder's stage, so the unique key makes tick() idempotent
+-- the same way the timers key does, and a reopened case starts a fresh run.
+CREATE TABLE IF NOT EXISTS outreach_steps (
+  id          TEXT PRIMARY KEY,
+  case_id     TEXT NOT NULL REFERENCES cases(id),
+  run_id      TEXT NOT NULL,
+  step        TEXT NOT NULL,
+  fired_at    TEXT NOT NULL,
+  reason      TEXT NOT NULL,
+  task_id     TEXT,
+  event_id    TEXT,
+  UNIQUE (case_id, run_id, step)
+);
+-- ---- end TICKET-10 ----------------------------------------------------------------
+
 -- Append-only is enforced by the database, not by convention in code.
 CREATE TRIGGER IF NOT EXISTS events_no_update
 BEFORE UPDATE ON events
@@ -239,6 +263,9 @@ const TABLES = [
   "consultations",
   "ownership_gaps",
   "referrals",
+  // TICKET-10
+  "outreach_steps",
+  "outreach_links",
   "extractions",
   "timers",
   "tasks",

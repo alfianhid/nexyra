@@ -173,7 +173,8 @@
     },
     "patient_notified": {
       "label": "Patient told the result and the next step",
-      "roles": ["coordination_staff", "navigator"]
+      "roles": ["coordination_staff", "navigator", "system"],
+      "notes": "system records it only when the patient confirms on the patient page that they understood (TICKET-10)."
     },
     "referral_sent": {
       "label": "Referral for colonoscopy sent",

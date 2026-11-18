@@ -1,0 +1,46 @@
+{
+  "id": "fit-positive-outreach",
+  "pathway_id": "fit-colonoscopy",
+  "message_template": "fit-positive-result",
+  "applies_to_stage": "result_received",
+  "acknowledge_event": "patient_notified",
+  "default_language": "en",
+  "languages": ["en", "ar", "ur", "hi", "tl"],
+  "clinic": {
+    "place": {
+      "en": "Demo Screening Clinic, Abu Dhabi",
+      "ar": "عيادة الفحص التجريبية، أبوظبي"
+    },
+    "phone": "+971 2 000 0000",
+    "source": "fictional clinic and number for the demo"
+  },
+  "parameters": {
+    "staff_call_after_hours": {
+      "hours": 48,
+      "label": "No answer to the automated message, then a staff call task",
+      "source": "unsourced, needs clinical review"
+    },
+    "staff_call_due_hours": {
+      "hours": 24,
+      "label": "Deadline of the staff call task",
+      "source": "unsourced, needs clinical review"
+    },
+    "callback_due_hours": {
+      "hours": 24,
+      "label": "Deadline of the call the patient asked for",
+      "source": "unsourced, needs clinical review"
+    },
+    "navigator_after_hours": {
+      "hours": 48,
+      "label": "Still no movement after the staff call step, then the navigator",
+      "source": "unsourced, needs clinical review"
+    },
+    "navigator_due_hours": {
+      "hours": 48,
+      "label": "Deadline of the navigator task",
+      "source": "unsourced, needs clinical review"
+    }
+  },
+  "escalate_to_navigator_on_barrier": true,
+  "notes": "Atlas et al. (JAMA 2023) sent letters in week 2 and phone calls in week 4. That is too slow for the 31-day referral-to-colonoscopy limit, so these values are deliberately shorter: message on day 0, staff call on day 2, navigator on day 4. They are starting values for the clinical review (TICKET-19), not findings."
+}

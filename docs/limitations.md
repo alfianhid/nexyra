@@ -29,12 +29,20 @@ Not in the code:
 
 - No live model call. The extraction shown for the demo case is a stored row.
 - No labelled test set and no evaluation run.
-- No patient messaging. Outreach attempts are entered by staff by hand. There are no Arabic templates.
+- No real patient messaging. The automated outreach message (TICKET-10) is recorded as sent but not delivered: there is no SMS or WhatsApp gateway, and the patient page is reached through a simulated link with no login.
 - The programme view reads the live case records through `GET /api/program/summary`, but its numbers are only as good as the synthetic data behind them. Its scenario panel applies one trial's effect size (Atlas et al., JAMA 2023) to the synthetic case count. That is an assumption, not a measurement.
 - No HL7 ingest, no Malaffi or e-Referral connection, no consultation monitoring, no second pathway.
 - No identity matching across providers.
 - No login. The role is picked from a menu, so the audit trail is only as honest as that menu.
 - The deployed version has not been run on Vercel at the time of writing.
+
+## Patient-facing language (TICKET-10)
+
+- **The Arabic template text is not yet reviewed by a native speaker.** It was written by the team in `server/outreach/templates/fit-positive-result.ar.json` and is marked `written_not_reviewed` there. It must not be called reviewed until a native speaker has checked it.
+- Urdu, Hindi and Tagalog exist only as slots marked "draft, not reviewed by a native speaker". They carry no text: a patient whose language is one of them receives the English message, and the patient page says why.
+- The English and Arabic wording about the result and the colonoscopy has not been reviewed by a clinician. `[CLINICAL REVIEW PENDING — TICKET-19]`
+- The ladder's step deadlines are unsourced (see [`assumptions.md`](assumptions.md)).
+- The navigator has no screen. Their task is visible to the program manager in the register and on the outreach screen, which records the navigator's call under the navigator's own actor.
 
 ## Product boundaries
 

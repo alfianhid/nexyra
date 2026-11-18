@@ -3,6 +3,8 @@ import type { InStatement } from "@libsql/client";
 import { databaseLabel, getDb, type Db } from "./db.js";
 import { eventDefinition, foldEvents, type CaseState, type RecordedEvent } from "./engine.js";
 import { ownershipGaps } from "./ownership.js";
+// TICKET-10
+import { composeMessage } from "./outreach/ladder.js";
 
 // TICKET-17: three cases, all fictional. Running this file twice must not duplicate
 // anything, so every row has a fixed id and every write is an upsert.
@@ -28,6 +30,8 @@ const ACTORS = [
   // TICKET-11: the receiving physician a consultation on CX-1002 is addressed to.
   { id: "act_006", role: "responsible_physician", display_name: "Dr. Fulana", provider_id: "prov_hospital_b" },
   { id: "act_system", role: "system", display_name: "system", provider_id: null },
+  // TICKET-10: the patient, acting only through the link in the outreach message.
+  { id: "act_patient", role: "patient", display_name: "Patient (via link)", provider_id: null },
 ];
 
 // The specialty a colonoscopy referral is addressed to, as a SNOMED CT coding.
@@ -36,6 +40,20 @@ const GASTROENTEROLOGY = {
   code: "394584008",
   display: "Gastroenterology",
 };
+
+// ---- TICKET-10: CX-1001's automated message ------------------------------------------
+// The silent patient got the ladder's step 1 on 16 Nov and has not answered. The text is
+// composed by the same function the ladder uses, so the seeded message is exactly what
+// the template sends. The token is fixed so the demo link is the same after every reset.
+export const CX1001_TOKEN = "hq7m3kx9va";
+const CX1001_RUN = "result_received@2026-11-15T09:12:00+07:00";
+const CX1001_MESSAGE_AT = "2026-11-16T10:20:00+07:00";
+const CX1001_MESSAGE = composeMessage(
+  { patient_name: "Y. Al Hammadi", patient_language: "ar" },
+  CX1001_TOKEN,
+  CX1001_MESSAGE_AT,
+);
+// ---- end TICKET-10 --------------------------------------------------------------------
 
 type SeedEvent = {
   id: string;
@@ -68,8 +86,9 @@ type SeedCase = {
 
 const CASES: SeedCase[] = [
   {
-    // 1. The silent patient: the result is in, calls and an Arabic SMS go unanswered, so
-    // the patient has not been told yet and the case sits at result_received.
+    // 1. The silent patient: the result is in and the automated Arabic message (TICKET-10
+    // step 1) goes unanswered, so the patient has not been told yet and the case sits at
+    // result_received. Advancing the clock climbs the ladder: staff call, then navigator.
     id: "CX-1001",
     patient_name: "Y. Al Hammadi",
     patient_age: 58,
@@ -87,10 +106,11 @@ const CASES: SeedCase[] = [
       },
       {
         id: "e_1001_2",
-        type: "outreach_attempted",
-        actor_id: "act_005",
-        at: "2026-11-16T10:20:00+07:00",
-        summary: "First call unanswered, SMS sent in Arabic",
+        type: "outreach_message_sent",
+        actor_id: "act_system",
+        at: CX1001_MESSAGE_AT,
+        summary: CX1001_MESSAGE.summary,
+        payload: { run_id: CX1001_RUN, step: "message", ...CX1001_MESSAGE },
       },
     ],
   },
@@ -561,6 +581,23 @@ export async function seed(
       created_at: "2026-11-17T09:14:00+07:00",
     }));
 
+    // ---- TICKET-10: the link and the fired message step for CX-1001 ----------------
+    statements.push(
+      db
+        .prepare("INSERT OR IGNORE INTO outreach_links (token, case_id, created_at) VALUES (?, ?, ?)")
+        .bind(CX1001_TOKEN, "CX-1001", CX1001_MESSAGE_AT),
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO outreach_steps
+             (id, case_id, run_id, step, fired_at, reason, task_id, event_id)
+           VALUES (?, ?, ?, 'message', ?, 'case_at_stage', NULL, ?)`,
+        )
+        .bind("os_1001_message", "CX-1001", CX1001_RUN, CX1001_MESSAGE_AT, "e_1001_2"),
+    );
+    // ---- end TICKET-10 ------------------------------------------------------------
+
+    // The owner's standing to-do on the case (tell the patient). The ladder's own call and
+    // navigator tasks are created by tick() when their deadlines pass.
     statements.push(upsertTask.bind({
       id: "t_1001_outreach",
       case_id: "CX-1001",

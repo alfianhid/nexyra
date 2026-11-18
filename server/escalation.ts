@@ -4,6 +4,8 @@ import { addHours, advanceDays, getClock, hoursBetween, setClock, type Clock } f
 import { type Db } from "./db.js";
 import { CONSULTATION, PATHWAY, UNOWNED, stageDefinition, type Role } from "./engine.js";
 import { SYSTEM_ACTOR, consultationTimerStage, prepareEvent } from "./events.js";
+// TICKET-10
+import { tickOutreach, type OutreachTickResult } from "./outreach/ladder.js";
 
 // TICKET-06: a case that passes its stage deadline escalates on its own, without anyone
 // pressing a button. The escalation lives in three tables that already exist: an event
@@ -44,6 +46,8 @@ export type TickResult = {
   // TICKET-08: cases this tick made unowned because their referral went unanswered.
   unowned_triggered?: number;
   unowned_cases?: string[];
+  // TICKET-10
+  outreach?: OutreachTickResult;
 };
 
 function stageDeadline(row: OpenCaseRow): string | null {
@@ -175,6 +179,13 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
   await db.batch(statements);
 
   result.per_role = [...counts.entries()].map(([role, count]) => ({ role, count }));
+
+  // ---- TICKET-10: the patient outreach ladder runs on the same clock ----------------
+  // Its steps are not stage escalations, so they are reported apart and never counted in
+  // `escalations` (the alert-fatigue figure TICKET-06 asks for).
+  result.outreach = await tickOutreach(db, at);
+  // ---- end TICKET-10 ------------------------------------------------------------------
+
   return result;
 }
 
@@ -190,6 +201,8 @@ export type AdvanceResult = {
   cases_advanced: number;
   escalations_per_role: { role: Role; count: number }[];
   unowned_triggered: number;
+  // TICKET-10
+  outreach?: OutreachTickResult;
 };
 
 // Advance is: move the clock, then tick. The clock moves first so every event the tick
@@ -225,6 +238,8 @@ export async function advanceClock(
     cases_advanced: 0,
     escalations_per_role: ticked.per_role,
     unowned_triggered: ticked.unowned_triggered ?? 0,
+    // TICKET-10
+    ...(ticked.outreach ? { outreach: ticked.outreach } : {}),
   };
 }
 
