@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** draft 19 Nov, submit 20 Nov · **Estimate:** 2 hours · **Assignee:** human submits, Claude Code drafts the text
 - **Depends on:** TICKET-21, TICKET-23, TICKET-26
-- **Status:** not started
+- **Status:** in progress
 
 ## Goal
 
