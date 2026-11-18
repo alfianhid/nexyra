@@ -20,3 +20,7 @@ data/*.sqlite*
 
 # Vercel CLI project link (created by `npx vercel`)
 .vercel
+
+# Vercel CLI writes its OIDC token here
+.env.local
+.env.*.local
