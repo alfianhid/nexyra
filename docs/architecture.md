@@ -38,11 +38,38 @@ The template holds:
 
 **Sources.** Only the 31-day referral-to-colonoscopy limit has one ("HAAD standard, cited in BMC Cancer 2021"). Every stage deadline and every outcome's evidence rule says `"unsourced, needs clinical review"`. These are starting values for the clinical review (TICKET-19), which works from the printout of `npm run pathway:deadlines`.
 
-**Validation.** The loader collects every problem before it fails, then throws `PathwayTemplateError` naming the file and each bad field. The template is imported by the engine, so a broken file stops `npm run server`, the Vercel function and every test at startup. Besides types, it checks that exits point at real stages and events, that every open stage can move forward, that only closure events reach the terminal stage, that no closure event lists `system` or `coordination_staff`, that the creation event assigns an owner, and that the stage deadlines inside a limit add up to no more than the limit.
+**Validation.** The loader collects every problem before it fails, then throws `PathwayTemplateError` naming the file and each bad field. Every template in `server/pathways/` is loaded when the engine is imported, so a broken file stops `npm run server`, the Vercel function and every test at startup. Besides types, it checks that exits point at real stages and events, that every open stage can move forward, that only closure events reach the terminal stage, that no closure event lists `system` or `coordination_staff`, that the creation event assigns an owner, and that the stage deadlines inside a limit add up to no more than the limit.
 
 Three optional blocks (TICKET-08, TICKET-11) are validated the same way. **`unowned`** names the acceptance stage whose deadline is the referral acceptance deadline, the unanswered and moved events, and who gets the assign-owner task and how soon. **`consultation`** gives the roles that ask and answer, the answer deadline, the more-data deadline and the escalation ladder. **`stitching`** lists which FHIR resource in which status records which event. Events may carry `sets_provider`, `referral_status` and `consultation_answer`. A consultation answer must assign an owner and may not be recorded by `system`.
 
-**Adding a pathway** (TICKET-18) means writing a second JSON file and registering it in `server/pathways/index.ts`. The engine currently runs the default pathway for every case; routing by `cases.pathway_id` is the remaining step.
+## Several pathways (TICKET-18)
+
+Every case runs the template its `cases.pathway_id` names. `server/pathways/index.ts` loads and validates every `*.json` file in `server/pathways/` at startup, and refuses two files with the same `id`. Every rule in `server/engine.ts` takes the pathway as an optional last argument (a template or an id), and the rules that take a case read `pathway_id` from it. An id no template carries throws `UnknownPathwayError`, which lists the known ids; creating a case with one is `400 validation_failed`. Leaving the pathway out runs the default, FIT, which is how every caller worked before. The write path (`prepareEvent`, `createCase`, `rebuildCase`, closure, reopen, consultations, stitching), `tick` (deadlines, ladders, spacing, unanswered referrals, overdue consultations), the case view (stage list, labels, outcomes, `available_actions`, reported limit) and the seed all pass the case's own pathway. The files are read from disk, not imported, so `vercel.json` adds `server/pathways/*.json` to the API function's `includeFiles`. That route has not been tested on a real Vercel deploy yet.
+
+The second template is `server/pathways/mammography-biopsy.json`: abnormal screening mammogram, recall, referral for diagnostic assessment, diagnostic imaging, then either biopsy and pathology or (when imaging needs no tissue) straight to the closure proposal, then closure. It has owners (a breast care navigator for the recall and booking, the responsible physician from imaging on), an escalation ladder per stage, an `unowned` block and a `consultation` block, one limit (referral to diagnostic imaging, 21 days), and three outcomes with their evidence (`diagnostic_imaging`, `pathology`). Every deadline is `"unsourced, needs clinical review"`. DoH's breast cancer screening and diagnosis standard (version 2, effective August 2025) has not been read, and the template's `description` says so. It is a configuration demonstration only. The seed holds three fictional cases on it (MM-2001 to MM-2003) in the same worklist as the FIT cases.
+
+What stays FIT-only, by design for now, and how each one steps aside for another pathway:
+
+- **Outreach ladder and patient messages** (`server/outreach/`). The ladder file names `pathway_id: "fit-colonoscopy"`. `tick` only runs it on cases of that pathway, and `GET /api/cases/{id}/outreach` is `404` for any other.
+- **Report verification** (`server/verify/`). The prompt and fields are written for colonoscopy and pathology reports. A case on another pathway gets `needs_human_reading` with `origin: "pathway_not_verified"`, and no model call is made.
+- **Programme view** (`server/programme.ts`). It is the FIT funnel and counts FIT cases only.
+- **FHIR stitching** (`server/ingest.ts`). It uses the matched case's own `stitching` block; the mammography template has none, so a matched resource is stitched as history and moves nothing.
+
+### Adding a pathway
+
+To add a third pathway, write these files:
+
+| File | Needed | What it holds |
+|---|---|---|
+| `server/pathways/<id>.json` | **Required. This is the only file needed.** | Stages, events, owners, deadlines with sources, escalation ladders, limits, actions, closure outcomes **and the evidence each outcome requires** (`outcomes[].evidence`), and optionally `unowned`, `consultation` and `stitching` blocks. The closure evidence rules live here, so they are a JSON edit as well. |
+| `server/outreach/templates/<ladder>.ladder.json` and `<message>.<lang>.json` | Optional: only if the pathway needs automated patient messages | Today `server/outreach/templates.ts` loads one ladder. A second ladder would need a small change there (load a list instead of one file), not in the engine. Not done in TICKET-18. |
+| Seed cases in `server/seed.ts` | Optional: only for demo data | Fictional cases with `pathway_id` set. The seed replays them through the engine and refuses to run if a story does not match. |
+
+The following files need no change for a new pathway: `server/engine.ts`, `server/events.ts`, `server/escalation.ts`, `server/caseView.ts`, `server/pathways/index.ts`, `server/db.ts` (`cases.pathway_id` already exists), `server/index.ts` and the frontend, which renders the `stages[]`, `outcomes` and `available_actions` it receives.
+
+`server/secondPathway.test.ts` checks this. It writes a third template as a JSON file into an empty directory, loads it with the same loader the server uses, and runs the engine on it with no code change. It also reads `server/engine.ts` and fails if any mammography stage name, event name, deadline number or pathway id appears in it. TICKET-18 changes the engine only to add the routing; after that, a new pathway does not touch it.
+
+Two pieces of a pathway are code, not configuration: report verification (an extraction prompt, field list and outcome mapping per report type in `server/verify/`) and FHIR document kinds (`documentKindOf` in `server/ingest.ts` knows `pathology` and `colonoscopy`). Both are optional. A pathway without them still runs, and its reports are read by a person.
 
 ## Unowned cases and event stitching (TICKET-08)
 

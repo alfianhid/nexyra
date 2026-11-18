@@ -1,4 +1,4 @@
-import { DEFAULT_PATHWAY, type Pathway } from "./index.js";
+import { DEFAULT_PATHWAY, getPathway, type Pathway } from "./index.js";
 
 // `npm run pathway:deadlines`: every deadline in the template with its owner and its
 // source, printed for the clinical review (TICKET-19). It reads the same validated
@@ -94,6 +94,8 @@ export function deadlineReport(pathway: Pathway): string {
   ].join("\n");
 }
 
+// TICKET-18: `npm run pathway:deadlines -- mammography-biopsy` prints another template.
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("server/pathways/deadlines.ts")) {
-  console.log(deadlineReport(DEFAULT_PATHWAY));
+  const id = process.argv[2];
+  console.log(deadlineReport(id ? getPathway(id) : DEFAULT_PATHWAY));
 }

@@ -17,6 +17,15 @@ Scope: the HTTP surface for the prototype. It is deliberately small. Anything no
 
 The stage list, deadlines, owners, escalation ladders, outcomes and the evidence each outcome needs come from the pathway template `server/pathways/fit-colonoscopy.json` (TICKET-04; see `docs/architecture.md`). `npm run pathway:deadlines` prints the deadlines with their sources. Every `stages[]` array in a response follows this order; the client renders what it receives and keeps no copy of the list.
 
+**Second pathway (TICKET-18).** Each case runs the template named by its `pathway_id`. The second template is `server/pathways/mammography-biopsy.json` (abnormal screening mammogram → diagnostic imaging → biopsy → pathology → follow-up; `npm run pathway:deadlines -- mammography-biopsy`). It is a configuration demonstration only and has not been clinically reviewed. A mammography case has its own stage keys, events, outcomes and limit, and the same response shapes as a FIT case: `stages[]`, `case.outcomes`, `available_actions` and `days_left_referral_limit` are always the case's own template's. The table below is the FIT pathway. What the payloads add:
+
+- worklist rows (`GET /api/cases`) and unowned rows (`GET /api/unowned`) carry `pathway_id`;
+- the case view carries `case.pathway`: `{ "id", "version", "label" }`;
+- an event from another pathway's template is `400 validation_failed` (`"<type>" is not a case event.`);
+- `GET /api/cases/{id}/outreach` on a non-FIT case is `404 not_found`: the outreach ladder and its message templates are FIT-only, and the ladder never fires for another pathway;
+- `POST /api/cases/{id}/verification` on a non-FIT case returns `proposal: "needs_human_reading"` with `origin: "pathway_not_verified"` and never calls the model;
+- `GET /api/program/summary` stays the FIT programme: its funnel, counts and escalations cover FIT cases only (`pathway.id` says which).
+
 | # | Stage key | Moved on by (event → next stage) |
 |---|---|---|
 | 1 | `result_received` | `patient_notified` → `patient_notified` |
@@ -114,6 +123,7 @@ Ordered server-side by clinical urgency from the pathway template, then by time 
       "patient": { "display_name": "Patient 018", "age": 61, "language": "ar" },
       "stage": "referral_accepted",
       "stage_label": "Referral accepted",
+      "pathway_id": "fit-colonoscopy",
       "owner": { "actor_id": "act_002", "display_name": "Nur H.", "role": "navigator" },
       "hours_left_stage": 96,
       "days_left_stage": 4,
@@ -156,7 +166,8 @@ Everything the case detail page needs in one call (`TICKET-09`): timeline, stage
       { "key": "returned_to_routine_screening", "label": "Returned to routine screening" },
       { "key": "surveillance_scheduled", "label": "Surveillance scheduled" },
       { "key": "oncology_accepted_therapy_started", "label": "Oncology accepted, therapy started" }
-    ]
+    ],
+    "pathway": { "id": "fit-colonoscopy", "version": 3, "label": "Positive FIT to colonoscopy, pathology and follow-up" }
   },
   "stages": [ { "key": "result_received", "state": "passed", "label": "Result received", "short_label": "Result" }, { "key": "pathology_received", "state": "current", "label": "Pathology received", "short_label": "Received" } ],
   "timeline": [ { "event_id": "e_91", "type": "pathology_recorded", "actor": { }, "occurred_at": "...", "recorded_at": "...", "summary": "Pathology report attached", "payload": { } } ],
@@ -404,7 +415,7 @@ Requires the `X-Nexyra-Actor` header (any human role). Optional body `{ "documen
 
 What it writes: one `extractions` row (keyed by the sha256 of the report text) and one `extraction_completed` event with `actor_role: "system"` and a payload of `{ prompt_version, model, proposal, proposal_reason, document_id, text_hash, extraction_id, requested_by }`. Both are written only when the model actually read the report: a cache hit and an unavailable result write nothing. It never touches the case row, so no extraction result can move, propose or close a case; closure stays `POST /closure/confirm` under `TICKET-05`'s rules.
 
-The `POST` response adds `origin` (`model`, `cache`, `unavailable`, or `no_report`) to the `GET` shape, plus `proposed_outcome` (the outcome key a `propose_closure` asks the physician to confirm, otherwise `null`). Since TICKET-15's follow-up the `GET` carries `extraction.proposed_outcome` too, computed by the same `proposedOutcomeFor`.
+The `POST` response adds `origin` (`model`, `cache`, `unavailable`, `no_report`, or `pathway_not_verified` for a case on a pathway without report verification, TICKET-18) to the `GET` shape, plus `proposed_outcome` (the outcome key a `propose_closure` asks the physician to confirm, otherwise `null`). Since TICKET-15's follow-up the `GET` carries `extraction.proposed_outcome` too, computed by the same `proposedOutcomeFor`.
 
 **Fields.** Always these six, in this order. A field whose citation fails validation is `unknown` with `validated: false` and `quote: null`.
 

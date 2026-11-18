@@ -1,0 +1,340 @@
+{
+  "id": "mammography-biopsy",
+  "version": 1,
+  "label": "Abnormal screening mammogram to diagnostic imaging, biopsy, pathology and follow-up",
+  "description": "TICKET-18. A configuration demonstration only: this pathway has not been clinically reviewed and must not be used for patient care. The Department of Health has a breast cancer screening and diagnosis standard (version 2, effective August 2025); the team has not read it, so no time limit here comes from it, and no published local follow-up numbers exist for this pathway. Every deadline below is a placeholder marked for clinical review. There is no report verification, no report test set and no patient message template for this pathway.",
+  "trigger": {
+    "description": "An abnormal screening mammogram (recall for assessment) creates one case.",
+    "event": "case_created",
+    "initial_stage": "mammogram_abnormal",
+    "source": "unsourced, needs clinical review"
+  },
+  "terminal_stage": "closed",
+  "escalation_spacing_hours": 24,
+  "stages": [
+    {
+      "key": "mammogram_abnormal",
+      "label": "Abnormal mammogram received",
+      "short_label": "Result",
+      "owner_role": "navigator",
+      "sla_hours": 120,
+      "urgency": 10,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "patient_recalled", "to": "patient_recalled" }],
+      "source": "unsourced, needs clinical review",
+      "notes": "The breast care navigator owns the recall. Not checked against the DoH breast cancer screening and diagnosis standard (v2, Aug 2025)."
+    },
+    {
+      "key": "patient_recalled",
+      "label": "Patient recalled for assessment",
+      "short_label": "Recalled",
+      "owner_role": "navigator",
+      "sla_hours": 72,
+      "urgency": 9,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "exits": [
+        { "event": "assessment_referred", "to": "assessment_referred" },
+        { "event": "consultation_accepted", "to": "assessment_accepted" },
+        { "event": "consultation_redirected", "to": "assessment_referred" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "assessment_referred",
+      "label": "Referred for diagnostic breast assessment",
+      "short_label": "Referral",
+      "owner_role": "navigator",
+      "sla_hours": 72,
+      "urgency": 8,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "exits": [
+        { "event": "assessment_accepted", "to": "assessment_accepted" },
+        { "event": "assessment_rejected", "to": "patient_recalled" },
+        { "event": "consultation_accepted", "to": "assessment_accepted" },
+        { "event": "consultation_redirected", "to": "assessment_referred" }
+      ],
+      "source": "unsourced, needs clinical review",
+      "notes": "sla_hours is the acceptance deadline: an unanswered referral past it makes the case unowned (the unowned block below)."
+    },
+    {
+      "key": "assessment_accepted",
+      "label": "Assessment referral accepted",
+      "short_label": "Accepted",
+      "owner_role": "navigator",
+      "sla_hours": 72,
+      "urgency": 7,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "diagnostic_imaging_booked", "to": "imaging_booked" }],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "imaging_booked",
+      "label": "Diagnostic imaging booked",
+      "short_label": "Booked",
+      "owner_role": "navigator",
+      "sla_hours": 240,
+      "urgency": 6,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [{ "event": "diagnostic_imaging_done", "to": "imaging_done" }],
+      "source": "unsourced, needs clinical review",
+      "notes": "Diagnostic mammography views and breast ultrasound, as one step."
+    },
+    {
+      "key": "imaging_done",
+      "label": "Diagnostic imaging done",
+      "short_label": "Imaging",
+      "owner_role": "responsible_physician",
+      "sla_hours": 72,
+      "urgency": 5,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "exits": [
+        { "event": "biopsy_performed", "to": "biopsy_done" },
+        { "event": "closure_proposed", "to": "closure_proposed" },
+        { "event": "assessment_incomplete", "to": "assessment_referred" }
+      ],
+      "source": "unsourced, needs clinical review",
+      "notes": "The one branch: imaging that needs tissue goes to biopsy; imaging that does not may propose closure straight away (routine screening or short-interval follow-up). Which imaging results may skip biopsy is a question for clinical review, not a rule this template decides."
+    },
+    {
+      "key": "biopsy_done",
+      "label": "Biopsy done, pathology awaited",
+      "short_label": "Biopsy",
+      "owner_role": "responsible_physician",
+      "sla_hours": 168,
+      "urgency": 4,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [
+        { "event": "pathology_received", "to": "pathology_received" },
+        { "event": "assessment_incomplete", "to": "assessment_referred" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "pathology_received",
+      "label": "Pathology received",
+      "short_label": "Pathology",
+      "owner_role": "responsible_physician",
+      "sla_hours": 120,
+      "urgency": 3,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "exits": [
+        { "event": "closure_proposed", "to": "closure_proposed" },
+        { "event": "assessment_incomplete", "to": "assessment_referred" }
+      ],
+      "source": "unsourced, needs clinical review",
+      "notes": "A non-diagnostic biopsy, or pathology that does not match the imaging, goes back to a new assessment referral."
+    },
+    {
+      "key": "closure_proposed",
+      "label": "Closure proposed",
+      "short_label": "Proposed",
+      "owner_role": "responsible_physician",
+      "sla_hours": 48,
+      "urgency": 1,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "consultation": true,
+      "awaiting_closure": true,
+      "exits": [
+        { "event": "closure_confirmed", "to": "closure_confirmed" },
+        { "event": "assessment_incomplete", "to": "assessment_referred" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "closure_confirmed",
+      "label": "Closure confirmed",
+      "short_label": "Confirmed",
+      "owner_role": "responsible_physician",
+      "sla_hours": 24,
+      "urgency": 2,
+      "escalation": ["responsible_physician", "program_manager", "program_manager"],
+      "exits": [
+        { "event": "case_closed", "to": "closed" },
+        { "event": "reopened", "to": "mammogram_abnormal" }
+      ],
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "closed",
+      "label": "Closed",
+      "short_label": "Closed",
+      "owner_role": "responsible_physician",
+      "sla_hours": null,
+      "urgency": 11,
+      "escalation": [],
+      "exits": [{ "event": "reopened", "to": "mammogram_abnormal" }],
+      "source": "no deadline: terminal stage"
+    }
+  ],
+  "events": {
+    "case_created": {
+      "label": "Case created from an abnormal screening mammogram",
+      "roles": ["system", "coordination_staff", "navigator"],
+      "owner": "assign",
+      "sets_provider": true
+    },
+    "patient_recalled": {
+      "label": "Patient told the result and recalled for assessment",
+      "roles": ["navigator", "coordination_staff", "responsible_physician"]
+    },
+    "assessment_referred": {
+      "label": "Referral for diagnostic breast assessment sent",
+      "roles": ["navigator", "coordination_staff", "responsible_physician"]
+    },
+    "assessment_accepted": {
+      "label": "Breast imaging centre accepted the referral",
+      "roles": ["system", "navigator", "coordination_staff"],
+      "referral_status": "accepted"
+    },
+    "assessment_rejected": {
+      "label": "Breast imaging centre rejected the referral",
+      "roles": ["system", "navigator", "coordination_staff", "responsible_physician"],
+      "owner": "clear",
+      "referral_status": "rejected"
+    },
+    "diagnostic_imaging_booked": {
+      "label": "Diagnostic imaging appointment booked",
+      "roles": ["system", "navigator", "coordination_staff", "responsible_physician"]
+    },
+    "diagnostic_imaging_done": {
+      "label": "Diagnostic imaging performed",
+      "roles": ["system", "navigator", "coordination_staff", "responsible_physician"]
+    },
+    "biopsy_performed": {
+      "label": "Breast biopsy performed",
+      "roles": ["system", "navigator", "responsible_physician"]
+    },
+    "pathology_received": {
+      "label": "Biopsy pathology result received",
+      "roles": ["system", "navigator", "responsible_physician"]
+    },
+    "assessment_incomplete": {
+      "label": "Assessment incomplete or discordant, a new referral is needed",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "clears_outcome": true
+    },
+    "closure_proposed": {
+      "label": "Closure proposed with an outcome",
+      "roles": ["navigator", "coordination_staff", "responsible_physician"]
+    },
+    "closure_confirmed": {
+      "label": "Responsible physician confirmed closure",
+      "roles": ["responsible_physician"],
+      "closure": true,
+      "finalises_to": "closed"
+    },
+    "case_closed": {
+      "label": "Case closed",
+      "roles": ["responsible_physician"],
+      "closure": true
+    },
+    "reopened": {
+      "label": "Case reopened",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "clears_outcome": true
+    },
+    "owner_assigned": {
+      "label": "Owner assigned or handed over",
+      "roles": ["navigator", "coordination_staff", "responsible_physician"],
+      "owner": "assign",
+      "moves_stage": false
+    },
+    "referral_unanswered": {
+      "label": "Assessment referral not answered by the acceptance deadline",
+      "roles": ["system"],
+      "owner": "clear",
+      "moves_stage": false,
+      "referral_status": "expired"
+    },
+    "patient_moved_provider": {
+      "label": "Patient moved to another provider while the case is open",
+      "roles": ["system", "navigator", "coordination_staff"],
+      "owner": "clear",
+      "moves_stage": false,
+      "sets_provider": true
+    },
+    "consultation_accepted": {
+      "label": "Consultation answered: assessment referral accepted",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "consultation_answer": "accepted",
+      "referral_status": "accepted"
+    },
+    "consultation_redirected": {
+      "label": "Consultation answered: referral redirected to another provider",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "consultation_answer": "redirected",
+      "referral_status": "redirected"
+    },
+    "consultation_more_data_requested": {
+      "label": "Consultation answered: more data requested",
+      "roles": ["responsible_physician"],
+      "owner": "assign_if_unowned",
+      "moves_stage": false,
+      "consultation_answer": "more_data_requested"
+    }
+  },
+  "actions": {
+    "log_outreach": { "roles": ["navigator", "coordination_staff"] },
+    "assign_owner": { "roles": ["navigator", "coordination_staff", "responsible_physician"], "event": "owner_assigned" },
+    "answer_consultation": { "roles": ["responsible_physician"] },
+    "request_consultation": { "roles": ["responsible_physician"] },
+    "confirm_closure": { "event": "closure_confirmed" },
+    "reject_proposal": { "roles": ["responsible_physician"] },
+    "reopen_case": { "event": "reopened" }
+  },
+  "limits": [
+    {
+      "key": "referral_to_diagnostic_imaging",
+      "label": "Referral to diagnostic imaging",
+      "from_stage": "assessment_referred",
+      "to_stage": "imaging_done",
+      "max_days": 21,
+      "reported_as": "referral_limit_days",
+      "source": "unsourced, needs clinical review"
+    }
+  ],
+  "outcomes": [
+    {
+      "key": "returned_to_routine_screening",
+      "label": "Returned to routine screening",
+      "evidence": { "any_of": ["diagnostic_imaging", "pathology"] },
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "short_interval_follow_up",
+      "label": "Short-interval follow-up imaging scheduled",
+      "evidence": { "all_of": ["diagnostic_imaging"] },
+      "source": "unsourced, needs clinical review"
+    },
+    {
+      "key": "breast_service_accepted_treatment_started",
+      "label": "Breast surgery or oncology accepted, treatment started",
+      "evidence": { "all_of": ["pathology"] },
+      "source": "unsourced, needs clinical review"
+    }
+  ],
+  "unowned": {
+    "acceptance_stage": "assessment_referred",
+    "unanswered_event": "referral_unanswered",
+    "moved_event": "patient_moved_provider",
+    "assign_owner_role": "navigator",
+    "assign_owner_hours": 24,
+    "source": "unsourced, needs clinical review"
+  },
+  "consultation": {
+    "request_roles": ["responsible_physician"],
+    "answer_roles": ["responsible_physician"],
+    "answer_hours": 48,
+    "more_data_hours": 72,
+    "escalation": ["responsible_physician", "program_manager"],
+    "source": "unsourced, needs clinical review"
+  }
+}

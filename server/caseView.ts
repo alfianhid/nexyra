@@ -2,15 +2,12 @@ import type { Actor } from "./actor.js";
 import { addHours, embeddedClock, formatDue, hoursBetween } from "./clock.js";
 import type { Db } from "./db.js";
 import {
-  CLOSURE_CONFIRMATION_EVENT,
-  OUTCOMES,
-  REPORTED_LIMIT,
-  STAGES,
   availableActions,
   eventDefinition,
   isAwaitingClosure,
   isClosed,
   nextState,
+  rulesOf,
   stageDefinition,
   stageLabel,
   stageOrder,
@@ -55,6 +52,8 @@ type CaseRow = {
   provider_id: string | null;
   provider_name: string | null;
   patient_identifier: string | null;
+  // TICKET-18: the template every rule for this row runs.
+  pathway_id: string;
 };
 
 type TaskRow = {
@@ -103,7 +102,7 @@ function caseRows(db: Db): Promise<CaseRow[]> {
       `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.status,
               c.owner_actor_id, c.final_outcome, c.stage_entered_at, c.created_at, c.updated_at,
               a.display_name AS owner_name, a.role AS owner_role,
-              c.provider_id, p.name AS provider_name, c.patient_identifier
+              c.provider_id, p.name AS provider_name, c.patient_identifier, c.pathway_id
          FROM cases c
          LEFT JOIN actors a ON a.id = c.owner_actor_id
          LEFT JOIN providers p ON p.id = c.provider_id`,
@@ -124,14 +123,14 @@ function documentsFor(
     .all<{ id: string; kind: string; title: string }>(caseId);
 }
 
-async function physicianConfirmed(db: Db, caseId: string): Promise<boolean> {
-  const row = await db
+async function physicianConfirmed(db: Db, row: CaseRow): Promise<boolean> {
+  const found = await db
     .prepare(
       `SELECT count(*) AS n FROM events
         WHERE case_id = ? AND type = ? AND actor_role = 'responsible_physician'`,
     )
-    .get<{ n: number }>(caseId, CLOSURE_CONFIRMATION_EVENT);
-  return (row?.n ?? 0) > 0;
+    .get<{ n: number }>(row.id, rulesOf(row.pathway_id).closureConfirmationEvent);
+  return (found?.n ?? 0) > 0;
 }
 
 async function toEngineCase(db: Db, row: CaseRow): Promise<EngineCase> {
@@ -141,14 +140,15 @@ async function toEngineCase(db: Db, row: CaseRow): Promise<EngineCase> {
     owner_actor_id: row.owner_actor_id,
     final_outcome: row.final_outcome,
     documents: (await documentsFor(db, row.id)).map((doc) => ({ kind: doc.kind })),
-    physician_confirmed: await physicianConfirmed(db, row.id),
+    physician_confirmed: await physicianConfirmed(db, row),
     open_consultation: await hasOpenConsultation(db, row.id),
+    pathway_id: row.pathway_id,
   };
 }
 
 // Hours to the stage deadline; null for a closed case, negative once it has passed.
 function hoursLeftStage(row: CaseRow, now: string): number | null {
-  const definition = stageDefinition(row.stage);
+  const definition = stageDefinition(row.stage, row.pathway_id);
   if (!definition || definition.sla_hours === null || isClosed(toClosedShape(row))) return null;
   const entered = row.stage_entered_at ?? row.created_at;
   return Math.round(hoursBetween(now, addHours(entered, definition.sla_hours)));
@@ -164,6 +164,7 @@ function toClosedShape(row: CaseRow): EngineCase {
     final_outcome: row.final_outcome,
     documents: [],
     physician_confirmed: false,
+    pathway_id: row.pathway_id,
   };
 }
 
@@ -216,7 +217,7 @@ function passesFilter(
   if (!filter) return true;
   if (filter === "late") return hoursLeft !== null && hoursLeft < 0;
   if (filter === "unowned") return row.owner_actor_id === null && !isClosed(toClosedShape(row));
-  return isAwaitingClosure(row.stage) && !isClosed(toClosedShape(row));
+  return isAwaitingClosure(row.stage, row.pathway_id) && !isClosed(toClosedShape(row));
 }
 
 function taskRows(db: Db): Promise<TaskRow[]> {
@@ -248,10 +249,10 @@ function taskRolesByCase(tasks: TaskRow[]): Map<string, Set<string>> {
 // stage the count runs from the result, which is never more lenient than the limit.
 type LimitSpan = { start: string | null; end: string | null };
 
-async function limitSpans(db: Db): Promise<Map<string, LimitSpan>> {
+async function limitSpans(db: Db, cases: readonly CaseRow[]): Promise<Map<string, LimitSpan>> {
   const spans = new Map<string, LimitSpan>();
-  const limit = REPORTED_LIMIT;
-  if (!limit) return spans;
+  // TICKET-18: each case is measured against its own template's limit.
+  const pathwayOfCase = new Map(cases.map((c) => [c.id, c.pathway_id]));
 
   const rows = await db
     .prepare(
@@ -269,11 +270,14 @@ async function limitSpans(db: Db): Promise<Map<string, LimitSpan>> {
   }
 
   for (const [caseId, events] of byCase) {
+    const pathway = pathwayOfCase.get(caseId);
+    const limit = rulesOf(pathway).reportedLimit;
+    if (!limit) continue;
     const span: LimitSpan = { start: null, end: null };
     let state: CaseState | null = null;
     try {
       for (const event of events) {
-        state = nextState(state, { ...event, payload: parsePayload(event.payload) });
+        state = nextState(state, { ...event, payload: parsePayload(event.payload) }, pathway);
         if (!state) continue;
         if (span.start === null && state.stage === limit.from_stage) span.start = state.stage_entered_at;
         if (span.start !== null && span.end === null && state.stage === limit.to_stage) {
@@ -290,7 +294,7 @@ async function limitSpans(db: Db): Promise<Map<string, LimitSpan>> {
 }
 
 function daysLeftOnLimit(row: CaseRow, span: LimitSpan | undefined, now: string): number {
-  const limit = REPORTED_LIMIT;
+  const limit = rulesOf(row.pathway_id).reportedLimit;
   if (!limit) return 0;
   const start = span?.start ?? row.created_at;
   const end = span?.end ?? now;
@@ -305,7 +309,7 @@ export async function listCases(
 ) {
   const rows = await caseRows(db);
   const rolesByCase = taskRolesByCase(await taskRows(db));
-  const spans = await limitSpans(db);
+  const spans = await limitSpans(db, rows);
 
   const visible = rows
     .filter((row) => visibleToRole(row, rolesByCase.get(row.id) ?? new Set(), role))
@@ -314,8 +318,8 @@ export async function listCases(
 
   // Server-side ordering: clinical urgency from the pathway, then time remaining.
   visible.sort((a, b) => {
-    const urgency = (stageDefinition(a.row.stage)?.urgency ?? 99) -
-      (stageDefinition(b.row.stage)?.urgency ?? 99);
+    const urgency = (stageDefinition(a.row.stage, a.row.pathway_id)?.urgency ?? 99) -
+      (stageDefinition(b.row.stage, b.row.pathway_id)?.urgency ?? 99);
     if (urgency !== 0) return urgency;
     const leftA = a.hoursLeft ?? Number.POSITIVE_INFINITY;
     const leftB = b.hoursLeft ?? Number.POSITIVE_INFINITY;
@@ -331,7 +335,9 @@ export async function listCases(
       language: row.patient_language,
     },
     stage: row.stage,
-    stage_label: stageLabel(row.stage),
+    stage_label: stageLabel(row.stage, row.pathway_id),
+    // TICKET-18: which pathway the row runs, so one worklist can hold several.
+    pathway_id: row.pathway_id,
     owner: ownerOf(row),
     hours_left_stage: hoursLeft,
     days_left_stage: hoursLeft === null ? 0 : Math.round(hoursLeft / 24),
@@ -347,7 +353,7 @@ export async function listCases(
       open: open.length,
       unowned: open.filter(({ row }) => row.owner_actor_id === null).length,
       past_deadline: open.filter(({ hoursLeft }) => hoursLeft !== null && hoursLeft < 0).length,
-      awaiting_clinician: open.filter(({ row }) => isAwaitingClosure(row.stage)).length,
+      awaiting_clinician: open.filter(({ row }) => isAwaitingClosure(row.stage, row.pathway_id)).length,
       closed_this_week: visible.length - open.length,
     },
     cases,
@@ -507,9 +513,11 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
   }
 
   const engineCase = await toEngineCase(db, row);
-  const currentOrder = stageOrder(row.stage);
+  // TICKET-18: the stage list, labels and outcomes are the case's own template's.
+  const rules = rulesOf(row.pathway_id);
+  const currentOrder = stageOrder(row.stage, rules.pathway);
   const entered = row.stage_entered_at ?? row.created_at;
-  const definition = stageDefinition(row.stage);
+  const definition = stageDefinition(row.stage, rules.pathway);
   // A stage with no SLA (or no definition) has no deadline to compute, so the label says
   // when the case last moved: stage_entered_at is demo-clock time, unlike updated_at.
   const deadline =
@@ -529,14 +537,19 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
         identifier: row.patient_identifier,
       },
       stage: row.stage,
-      stage_label: stageLabel(row.stage),
+      stage_label: stageLabel(row.stage, rules.pathway),
       owner: ownerOf(row),
       status: row.status,
       stage_due_label: formatDue(deadline),
       final_outcome: row.final_outcome,
-      outcomes: OUTCOMES.map((outcome) => ({ key: outcome.key, label: outcome.label })),
+      outcomes: rules.outcomes.map((outcome) => ({ key: outcome.key, label: outcome.label })),
+      pathway: {
+        id: rules.pathway.id,
+        version: rules.pathway.version,
+        label: rules.pathway.label,
+      },
     },
-    stages: STAGES.map((stage) => ({
+    stages: rules.stages.map((stage) => ({
       key: stage.key,
       label: stage.label,
       short_label: stage.short_label,
@@ -593,12 +606,12 @@ type GapRow = {
   hours_to_owner: number | null;
 };
 
-function gapView(gap: GapRow) {
+function gapView(gap: GapRow, pathwayId: string) {
   return {
     trigger: {
       event_id: gap.trigger_event_id,
       type: gap.trigger_type,
-      label: eventDefinition(gap.trigger_type)?.label ?? gap.trigger_type,
+      label: eventDefinition(gap.trigger_type, pathwayId)?.label ?? gap.trigger_type,
       reason: gap.reason,
     },
     previous_owner_actor_id: gap.previous_owner_actor_id,
@@ -679,7 +692,7 @@ async function ownershipView(db: Db, row: CaseRow) {
     ownership: {
       state: row.owner_actor_id === null ? "unowned" : "owned",
       unowned_since: row.owner_actor_id === null ? (open?.unowned_at ?? null) : null,
-      gaps: gaps.map(gapView),
+      gaps: gaps.map((gap) => gapView(gap, row.pathway_id)),
     },
     referrals: referrals.map((r) => ({
       referral_id: r.id,
@@ -717,7 +730,7 @@ async function ownershipView(db: Db, row: CaseRow) {
 export async function listUnowned(db: Db, now: string) {
   const rows = await db
     .prepare(
-      `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage,
+      `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.pathway_id,
               c.provider_id, p.name AS provider_name,
               COALESCE(g.unowned_at, c.stage_entered_at, c.created_at) AS unowned_since,
               g.trigger_event_id, g.trigger_type, g.reason, g.previous_owner_actor_id,
@@ -743,6 +756,7 @@ export async function listUnowned(db: Db, now: string) {
       patient_age: number;
       patient_language: string;
       stage: string;
+      pathway_id: string;
       provider_id: string | null;
       provider_name: string | null;
       unowned_since: string;
@@ -767,7 +781,8 @@ export async function listUnowned(db: Db, now: string) {
         case_id: r.id,
         patient: { display_name: r.patient_name, age: r.patient_age, language: r.patient_language },
         stage: r.stage,
-        stage_label: stageLabel(r.stage),
+        stage_label: stageLabel(r.stage, r.pathway_id),
+        pathway_id: r.pathway_id,
         provider: providerOf(r.provider_id, r.provider_name),
         unowned_since: r.unowned_since,
         hours_unowned: hours,
@@ -778,7 +793,7 @@ export async function listUnowned(db: Db, now: string) {
             : {
                 event_id: r.trigger_event_id,
                 type: r.trigger_type,
-                label: eventDefinition(r.trigger_type)?.label ?? r.trigger_type,
+                label: eventDefinition(r.trigger_type, r.pathway_id)?.label ?? r.trigger_type,
                 reason: r.reason ?? "",
               },
         previous_owner:

@@ -159,12 +159,19 @@ function summaryOf(type: string, status: string, provider: string | null, provid
   }
 }
 
-type ReferralMatch = { case_id: string; stage: string; status: string; patient_identifier: string | null };
+type ReferralMatch = {
+  case_id: string;
+  stage: string;
+  status: string;
+  patient_identifier: string | null;
+  // TICKET-18: the stitching rules are the case's own template's.
+  pathway_id: string;
+};
 
 async function caseForReferral(db: Db, referralId: string): Promise<ReferralMatch | undefined> {
   return db
     .prepare(
-      `SELECT c.id AS case_id, c.stage, c.status, c.patient_identifier
+      `SELECT c.id AS case_id, c.stage, c.status, c.patient_identifier, c.pathway_id
          FROM referrals r JOIN cases c ON c.id = r.case_id
         WHERE r.id = ?`,
     )
@@ -282,12 +289,12 @@ async function ingestOne(
       `Referral ${resource.referral_id} belongs to a case for a different patient identifier.`,
     );
   }
-  if (isClosed({ stage: match.stage, status: match.status })) {
+  if (isClosed({ stage: match.stage, status: match.status, pathway_id: match.pathway_id })) {
     return queue("case_closed", `The case for referral ${resource.referral_id} is closed.`);
   }
 
   const documentKind = type === "DiagnosticReport" ? documentKindOf(raw) : null;
-  const rule = stitchingRule(type, status, documentKind);
+  const rule = stitchingRule(type, status, documentKind, match.pathway_id);
   const text = type === "DiagnosticReport" ? reportTextOf(raw) : "";
   const stitched = await stitchResource(db, {
     caseId: match.case_id,

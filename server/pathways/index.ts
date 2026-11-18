@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   ACTIONS,
   EVENT_ROLES,
@@ -7,7 +9,6 @@ import {
   type EventRole,
   type Role,
 } from "../vocabulary.js";
-import fitColonoscopy from "./fit-colonoscopy.json" with { type: "json" };
 
 // TICKET-04: a pathway is data. This file reads a template, checks it by hand (no schema
 // library), and hands the engine a typed, frozen object. A template that fails a check
@@ -118,6 +119,8 @@ export type Pathway = {
   id: string;
   version: number;
   label: string;
+  // TICKET-18: optional free text, e.g. that a template has not been clinically reviewed.
+  description: string | null;
   trigger: { description: string; event: string; initial_stage: string; source: string };
   terminal_stage: string;
   escalation_spacing_hours: number;
@@ -256,6 +259,7 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
   const id = c.string(raw, "id", "template");
   const version = c.number(raw, "version", "template", "positive");
   const label = c.string(raw, "label", "template");
+  const description = c.optionalString(raw, "description", "template");
   const terminal = c.string(raw, "terminal_stage", "template");
   const spacing = c.number(raw, "escalation_spacing_hours", "template", "positive");
 
@@ -526,6 +530,7 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
     id,
     version,
     label,
+    description,
     trigger,
     terminal_stage: terminal,
     escalation_spacing_hours: spacing,
@@ -681,19 +686,56 @@ export function loadPathwayFile(path: string): Pathway {
   return validatePathway(raw, path);
 }
 
-// Imported, not read from disk at runtime, so the template travels inside the Vercel
-// function bundle. Validation runs on import: a broken file stops the server here.
-export const FIT_COLONOSCOPY: Pathway = validatePathway(
-  fitColonoscopy,
-  "server/pathways/fit-colonoscopy.json",
-);
+// ---- TICKET-18: the pathway registry ------------------------------------------------
+// Every `*.json` file in this directory is a pathway template, validated with the checks
+// above when this module loads. A broken file, or two files claiming the same id, stops
+// the server, the Vercel function and every test at startup. Adding a pathway is adding
+// a file here; nothing in the engine or in this module changes. The files are read from
+// disk rather than imported, so vercel.json lists them in the function's includeFiles.
 
-const REGISTRY: Readonly<Record<string, Pathway>> = { [FIT_COLONOSCOPY.id]: FIT_COLONOSCOPY };
+export const PATHWAY_DIRECTORY = fileURLToPath(new URL(".", import.meta.url));
 
-export const DEFAULT_PATHWAY: Pathway = FIT_COLONOSCOPY;
+export function loadPathwayDirectory(dir: string): Pathway[] {
+  const files = readdirSync(dir)
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+  const owners = new Map<string, string>();
+  return files.map((name) => {
+    const pathway = loadPathwayFile(join(dir, name));
+    const first = owners.get(pathway.id);
+    if (first !== undefined) {
+      throw new PathwayTemplateError(join(dir, name), [
+        `template.id "${pathway.id}" is already used by ${first}`,
+      ]);
+    }
+    owners.set(pathway.id, name);
+    return pathway;
+  });
+}
+
+export const PATHWAYS: readonly Pathway[] = Object.freeze(loadPathwayDirectory(PATHWAY_DIRECTORY));
+
+const REGISTRY: ReadonlyMap<string, Pathway> = new Map(PATHWAYS.map((p) => [p.id, p]));
+
+export class UnknownPathwayError extends Error {
+  constructor(readonly pathwayId: string) {
+    super(
+      `No pathway template carries the id "${pathwayId}". ` +
+        `Known pathways: ${[...REGISTRY.keys()].join(", ")}.`,
+    );
+    this.name = "UnknownPathwayError";
+  }
+}
 
 export function getPathway(id: string): Pathway {
-  const pathway = REGISTRY[id];
-  if (!pathway) throw new Error(`No pathway template carries the id "${id}".`);
+  const pathway = REGISTRY.get(id);
+  if (!pathway) throw new UnknownPathwayError(id);
   return pathway;
 }
+
+// The FIT pathway is the default: a case created without a pathway id runs it, as every
+// case did before a second template existed.
+export const FIT_COLONOSCOPY: Pathway = getPathway("fit-colonoscopy");
+
+export const DEFAULT_PATHWAY: Pathway = FIT_COLONOSCOPY;
+// ---- end TICKET-18 ------------------------------------------------------------------

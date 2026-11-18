@@ -3,8 +3,8 @@
 //
 // The rules are generic; the pathway they run is data (TICKET-04). Stage names,
 // deadlines, owners, escalation ladders, outcomes and the evidence each outcome needs
-// come from server/pathways/fit-colonoscopy.json through server/pathways/index.ts.
-// Nothing in this file names a FIT stage or a deadline.
+// come from the case's own template in server/pathways/ (TICKET-18: `cases.pathway_id`)
+// through server/pathways/index.ts. Nothing in this file names a stage or a deadline.
 //
 // The HTTP layer renders these answers; it never re-implements them. That is what
 // keeps `available_actions` and the guards from drifting apart: one function
@@ -14,6 +14,8 @@
 import {
   CONSULTATION_ANSWERS,
   DEFAULT_PATHWAY,
+  PATHWAYS,
+  getPathway,
   type ConsultationAnswer,
   type Pathway,
   type PathwayConsultation,
@@ -43,63 +45,116 @@ export type { Action, EventRole, Role };
 // The pathway template
 // ---------------------------------------------------------------------------
 
+// The default pathway: what a rule runs when its caller names no pathway.
 export const PATHWAY: Pathway = DEFAULT_PATHWAY;
 
 export type StageKey = string;
 export type StageDefinition = PathwayStage;
-
-export const STAGES: readonly StageDefinition[] = PATHWAY.stages;
-
-export const INITIAL_STAGE: string = PATHWAY.trigger.initial_stage;
-export const TERMINAL_STAGE: string = PATHWAY.terminal_stage;
-
-export function stageDefinition(stage: string): StageDefinition | undefined {
-  return STAGES.find((s) => s.key === stage);
-}
-
-export function stageLabel(stage: string): string {
-  return stageDefinition(stage)?.label ?? stage;
-}
-
-export function stageOrder(stage: string): number {
-  return stageDefinition(stage)?.order ?? -1;
-}
-
-export function eventDefinition(type: string): PathwayEvent | undefined {
-  return PATHWAY.events[type];
-}
-
-// The stage(s) where a closure decision is waiting on the responsible physician.
-export function isAwaitingClosure(stage: string): boolean {
-  return stageDefinition(stage)?.awaiting_closure === true;
-}
-
-// The event that records the physician's closure confirmation (the one the three
-// conditions guard), read from the template's `confirm_closure` action.
-export const CLOSURE_CONFIRMATION_EVENT: string | null =
-  PATHWAY.actions.confirm_closure?.event ?? null;
-
-export const REOPEN_EVENT: string | null = PATHWAY.actions.reopen_case?.event ?? null;
-
-export const ASSIGN_OWNER_EVENT: string | null = PATHWAY.actions.assign_owner?.event ?? null;
-
-// The limit the clock reports (the referral limit in the FIT pathway).
-export const REPORTED_LIMIT: PathwayLimit | null =
-  PATHWAY.limits.find((limit) => limit.reported_as !== null) ?? null;
 
 export type Outcome = {
   key: string;
   label: string;
 };
 
-// The closed vocabulary a closure decision may choose from (docs/api.md).
-export const OUTCOMES: readonly Outcome[] = PATHWAY.outcomes.map((o) => ({
-  key: o.key,
-  label: o.label,
-}));
+// ---- TICKET-18: routing by the case's own pathway --------------------------------
+// Every rule below takes the pathway it runs as an optional last argument: a template,
+// or a pathway id as stored in `cases.pathway_id`. Rules that take a case read
+// `pathway_id` from it. An id no template carries throws UnknownPathwayError. Leaving
+// the argument out runs the default pathway, which is how every caller worked before a
+// second template existed; the exported constants below are the default's.
+export type PathwayRef = Pathway | string | null | undefined;
 
-export function isValidOutcome(key: unknown): key is string {
-  return typeof key === "string" && OUTCOMES.some((outcome) => outcome.key === key);
+export function pathwayOf(ref?: PathwayRef): Pathway {
+  if (ref === undefined || ref === null) return PATHWAY;
+  return typeof ref === "string" ? getPathway(ref) : ref;
+}
+
+// What a pathway's template implies once, so callers do not each re-derive it.
+export type PathwayRules = {
+  pathway: Pathway;
+  stages: readonly StageDefinition[];
+  initialStage: string;
+  terminalStage: string;
+  // The event that records the physician's closure confirmation (the one the three
+  // conditions guard), read from the template's `confirm_closure` action.
+  closureConfirmationEvent: string | null;
+  reopenEvent: string | null;
+  assignOwnerEvent: string | null;
+  // The limit the worklist and the clock report (the referral limit).
+  reportedLimit: PathwayLimit | null;
+  // The closed vocabulary a closure decision may choose from (docs/api.md).
+  outcomes: readonly Outcome[];
+  unowned: PathwayUnowned | null;
+  consultation: PathwayConsultation | null;
+  stitching: PathwayStitching | null;
+};
+
+const RULES = new WeakMap<Pathway, PathwayRules>();
+
+export function rulesOf(ref?: PathwayRef): PathwayRules {
+  const pathway = pathwayOf(ref);
+  const known = RULES.get(pathway);
+  if (known) return known;
+  const rules: PathwayRules = Object.freeze({
+    pathway,
+    stages: pathway.stages,
+    initialStage: pathway.trigger.initial_stage,
+    terminalStage: pathway.terminal_stage,
+    closureConfirmationEvent: pathway.actions.confirm_closure?.event ?? null,
+    reopenEvent: pathway.actions.reopen_case?.event ?? null,
+    assignOwnerEvent: pathway.actions.assign_owner?.event ?? null,
+    reportedLimit: pathway.limits.find((limit) => limit.reported_as !== null) ?? null,
+    outcomes: pathway.outcomes.map((o) => ({ key: o.key, label: o.label })),
+    unowned: pathway.unowned,
+    consultation: pathway.consultation,
+    stitching: pathway.stitching,
+  });
+  RULES.set(pathway, rules);
+  return rules;
+}
+// ---- end TICKET-18 ------------------------------------------------------------------
+
+const DEFAULT_RULES = rulesOf(PATHWAY);
+
+export const STAGES: readonly StageDefinition[] = DEFAULT_RULES.stages;
+
+export const INITIAL_STAGE: string = DEFAULT_RULES.initialStage;
+export const TERMINAL_STAGE: string = DEFAULT_RULES.terminalStage;
+
+export function stageDefinition(stage: string, pathway?: PathwayRef): StageDefinition | undefined {
+  return pathwayOf(pathway).stages.find((s) => s.key === stage);
+}
+
+export function stageLabel(stage: string, pathway?: PathwayRef): string {
+  return stageDefinition(stage, pathway)?.label ?? stage;
+}
+
+export function stageOrder(stage: string, pathway?: PathwayRef): number {
+  return stageDefinition(stage, pathway)?.order ?? -1;
+}
+
+export function eventDefinition(type: string, pathway?: PathwayRef): PathwayEvent | undefined {
+  return pathwayOf(pathway).events[type];
+}
+
+// The stage(s) where a closure decision is waiting on the responsible physician.
+export function isAwaitingClosure(stage: string, pathway?: PathwayRef): boolean {
+  return stageDefinition(stage, pathway)?.awaiting_closure === true;
+}
+
+export const CLOSURE_CONFIRMATION_EVENT: string | null = DEFAULT_RULES.closureConfirmationEvent;
+
+export const REOPEN_EVENT: string | null = DEFAULT_RULES.reopenEvent;
+
+export const ASSIGN_OWNER_EVENT: string | null = DEFAULT_RULES.assignOwnerEvent;
+
+// The limit the clock reports (the referral limit in the FIT pathway).
+export const REPORTED_LIMIT: PathwayLimit | null = DEFAULT_RULES.reportedLimit;
+
+export const OUTCOMES: readonly Outcome[] = DEFAULT_RULES.outcomes;
+
+export function isValidOutcome(key: unknown, pathway?: PathwayRef): key is string {
+  return typeof key === "string" && rulesOf(pathway).outcomes.some((outcome) => outcome.key === key);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,13 +171,17 @@ export type EngineCase = {
   physician_confirmed: boolean;
   // TICKET-11: true while a consultation on the case is waiting for its answer.
   open_consultation?: boolean;
+  // TICKET-18: the case's template; absent means the default pathway.
+  pathway_id?: string | null;
 };
 
-export function isClosed(c: { stage: string; status: string }): boolean {
-  return c.stage === TERMINAL_STAGE || c.status === CASE_CLOSED;
+type CaseRef = { stage: string; status: string; pathway_id?: string | null };
+
+export function isClosed(c: CaseRef): boolean {
+  return c.stage === pathwayOf(c.pathway_id).terminal_stage || c.status === CASE_CLOSED;
 }
 
-export function isOpen(c: { stage: string; status: string }): boolean {
+export function isOpen(c: CaseRef): boolean {
   return !isClosed(c);
 }
 
@@ -136,22 +195,22 @@ export function ownershipState(c: { owner_actor_id: string | null }): OwnershipS
 // Transitions
 // ---------------------------------------------------------------------------
 
-export function rolesForEvent(type: string): readonly EventRole[] | null {
-  return eventDefinition(type)?.roles ?? null;
+export function rolesForEvent(type: string, pathway?: PathwayRef): readonly EventRole[] | null {
+  return eventDefinition(type, pathway)?.roles ?? null;
 }
 
 // The template's exits from one stage, with each exit's event definition.
-export function exitsFrom(stage: string): { event: PathwayEvent; to: string }[] {
-  const definition = stageDefinition(stage);
+export function exitsFrom(stage: string, pathway?: PathwayRef): { event: PathwayEvent; to: string }[] {
+  const definition = stageDefinition(stage, pathway);
   if (!definition) return [];
   return definition.exits.flatMap((exit) => {
-    const event = eventDefinition(exit.event);
+    const event = eventDefinition(exit.event, pathway);
     return event ? [{ event, to: exit.to }] : [];
   });
 }
 
-function isForward(from: string, to: string): boolean {
-  return stageOrder(to) > stageOrder(from);
+function isForward(from: string, to: string, pathway: Pathway): boolean {
+  return stageOrder(to, pathway) > stageOrder(from, pathway);
 }
 
 export type TransitionResult =
@@ -174,15 +233,17 @@ export function transitionFor(
   stage: string,
   type: string,
   role: Role | "system",
+  pathway?: PathwayRef,
 ): TransitionResult {
-  const event = eventDefinition(type);
+  const p = pathwayOf(pathway);
+  const event = eventDefinition(type, p);
   if (!event) {
     return { ok: false, code: "invalid_transition", message: `Unknown event type "${type}".` };
   }
 
   let to: string;
   if (event.moves_stage) {
-    const exit = stageDefinition(stage)?.exits.find((e) => e.event === type);
+    const exit = stageDefinition(stage, p)?.exits.find((e) => e.event === type);
     if (!exit) {
       return {
         ok: false,
@@ -192,7 +253,7 @@ export function transitionFor(
     }
     to = exit.to;
   } else {
-    if (!stageDefinition(stage) || stage === TERMINAL_STAGE) {
+    if (!stageDefinition(stage, p) || stage === p.terminal_stage) {
       return {
         ok: false,
         code: "invalid_transition",
@@ -226,8 +287,9 @@ export function ownerAfter(
   c: { owner_actor_id: string | null },
   type: string,
   fallbackOwnerId: string | null,
+  pathway?: PathwayRef,
 ): string | null {
-  const event = eventDefinition(type);
+  const event = eventDefinition(type, pathway);
   if (!event) return c.owner_actor_id;
   switch (event.owner) {
     case "clear":
@@ -283,8 +345,13 @@ function payloadOwner(event: RecordedEvent): string | null {
 // `rebuildCase` uses it to replay the timeline, so the two cannot disagree.
 // Event types the template does not define (outreach, tasks, escalations, extraction)
 // are recorded history but do not change the cached columns.
-export function nextState(state: CaseState | null, event: RecordedEvent): CaseState | null {
-  const definition = eventDefinition(event.type);
+export function nextState(
+  state: CaseState | null,
+  event: RecordedEvent,
+  pathway?: PathwayRef,
+): CaseState | null {
+  const p = pathwayOf(pathway);
+  const definition = eventDefinition(event.type, p);
   if (!definition) return state;
 
   const role = event.actor_role as EventRole;
@@ -295,7 +362,7 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
     );
   }
 
-  if (event.type === PATHWAY.trigger.event) {
+  if (event.type === p.trigger.event) {
     if (state !== null) {
       throw new ReplayError("invalid_transition", `"${event.type}" on a case that already exists.`);
     }
@@ -304,7 +371,7 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
       throw new ReplayError("validation_failed", `"${event.type}" must name owner_actor_id.`);
     }
     return {
-      stage: INITIAL_STAGE,
+      stage: p.trigger.initial_stage,
       status: CASE_OPEN,
       owner_actor_id: owner,
       final_outcome: null,
@@ -320,11 +387,11 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
     );
   }
 
-  const transition = transitionFor(state.stage, event.type, role);
+  const transition = transitionFor(state.stage, event.type, role, p);
   if (!transition.ok) throw new ReplayError(transition.code, transition.message);
 
   const fallback = payloadOwner(event) ?? (role === "system" ? null : event.actor_id);
-  const owner = ownerAfter(state, event.type, fallback);
+  const owner = ownerAfter(state, event.type, fallback, p);
   if (owner === null && (definition.owner === "assign" || definition.owner === "assign_if_unowned")) {
     throw new ReplayError("validation_failed", `"${event.type}" must name owner_actor_id.`);
   }
@@ -335,7 +402,7 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
   const outcome = event.payload.outcome;
   const finalOutcome = definition.clears_outcome
     ? null
-    : isValidOutcome(outcome)
+    : isValidOutcome(outcome, p)
       ? outcome
       : state.final_outcome;
 
@@ -349,7 +416,7 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
 
   return {
     stage: target,
-    status: target === TERMINAL_STAGE ? CASE_CLOSED : CASE_OPEN,
+    status: target === p.terminal_stage ? CASE_CLOSED : CASE_OPEN,
     owner_actor_id: owner,
     final_outcome: finalOutcome,
     stage_entered_at:
@@ -363,22 +430,23 @@ function payloadProvider(event: RecordedEvent): string | null {
   return typeof provider === "string" && provider.length > 0 ? provider : null;
 }
 
-export function foldEvents(events: readonly RecordedEvent[]): CaseState | null {
-  return events.reduce<CaseState | null>((state, event) => nextState(state, event), null);
+export function foldEvents(events: readonly RecordedEvent[], pathway?: PathwayRef): CaseState | null {
+  const p = pathwayOf(pathway);
+  return events.reduce<CaseState | null>((state, event) => nextState(state, event, p), null);
 }
 
 // ---------------------------------------------------------------------------
 // Permissions
 // ---------------------------------------------------------------------------
 
-function actionAllowedByTemplate(action: Action, stage: string, role: Role): boolean {
-  const definition = PATHWAY.actions[action];
+function actionAllowedByTemplate(action: Action, stage: string, role: Role, p: Pathway): boolean {
+  const definition = p.actions[action];
   if (!definition) return false;
   if (definition.roles !== null && !definition.roles.includes(role)) return false;
   if (definition.event !== null) {
-    const event = eventDefinition(definition.event);
+    const event = eventDefinition(definition.event, p);
     if (!event || !event.roles.includes(role)) return false;
-    if (event.moves_stage && !stageDefinition(stage)?.exits.some((e) => e.event === definition.event)) {
+    if (event.moves_stage && !stageDefinition(stage, p)?.exits.some((e) => e.event === definition.event)) {
       return false;
     }
   }
@@ -388,8 +456,9 @@ function actionAllowedByTemplate(action: Action, stage: string, role: Role): boo
 // THE function. The case view sends its result as `available_actions`, and the
 // guards ask it rather than keeping a second copy of these rules.
 export function availableActions(c: EngineCase, role: Role): Action[] {
+  const p = pathwayOf(c.pathway_id);
   const open = isOpen(c);
-  const stage = stageDefinition(c.stage);
+  const stage = stageDefinition(c.stage, p);
   if (!stage) return [];
 
   const allowed = (action: Action): boolean => {
@@ -401,40 +470,40 @@ export function availableActions(c: EngineCase, role: Role): Action[] {
         // answering an open consultation (TICKET-11).
         return (
           open &&
-          exitsFrom(c.stage).some(
+          exitsFrom(c.stage, p).some(
             ({ event, to }) =>
               !event.closure &&
               event.consultation_answer === null &&
-              isForward(c.stage, to) &&
+              isForward(c.stage, to, p) &&
               event.roles.includes(role),
           )
         );
       case "log_outreach":
-        return open && actionAllowedByTemplate(action, c.stage, role);
+        return open && actionAllowedByTemplate(action, c.stage, role, p);
       case "assign_owner":
-        return open && c.owner_actor_id === null && actionAllowedByTemplate(action, c.stage, role);
+        return open && c.owner_actor_id === null && actionAllowedByTemplate(action, c.stage, role, p);
       // TICKET-11: a question can be asked at a stage the template marks `consultation`,
       // one at a time, and answered only while one is open.
       case "answer_consultation":
         return (
           open &&
           c.open_consultation === true &&
-          consultationRoleAllowed("answer", role) &&
-          actionAllowedByTemplate(action, c.stage, role)
+          consultationRoleAllowed("answer", role, p) &&
+          actionAllowedByTemplate(action, c.stage, role, p)
         );
       case "request_consultation":
         return (
           open &&
           stage.consultation &&
           c.open_consultation !== true &&
-          consultationRoleAllowed("request", role) &&
-          actionAllowedByTemplate(action, c.stage, role)
+          consultationRoleAllowed("request", role, p) &&
+          actionAllowedByTemplate(action, c.stage, role, p)
         );
       case "reject_proposal":
-        return open && stage.awaiting_closure && actionAllowedByTemplate(action, c.stage, role);
+        return open && stage.awaiting_closure && actionAllowedByTemplate(action, c.stage, role, p);
       case "confirm_closure":
       case "reopen_case":
-        return actionAllowedByTemplate(action, c.stage, role);
+        return actionAllowedByTemplate(action, c.stage, role, p);
     }
   };
 
@@ -449,27 +518,34 @@ export function canPerform(c: EngineCase, role: Role, action: Action): boolean {
 // TICKET-08 / TICKET-11: unowned triggers, consultations, stitching (all template data)
 // ---------------------------------------------------------------------------
 
-export const UNOWNED: PathwayUnowned | null = PATHWAY.unowned;
-export const CONSULTATION: PathwayConsultation | null = PATHWAY.consultation;
-export const STITCHING: PathwayStitching | null = PATHWAY.stitching;
+export const UNOWNED: PathwayUnowned | null = DEFAULT_RULES.unowned;
+export const CONSULTATION: PathwayConsultation | null = DEFAULT_RULES.consultation;
+export const STITCHING: PathwayStitching | null = DEFAULT_RULES.stitching;
 
-function consultationRoleAllowed(kind: "request" | "answer", role: Role): boolean {
-  if (!CONSULTATION) return false;
-  return (kind === "request" ? CONSULTATION.request_roles : CONSULTATION.answer_roles).includes(role);
+function consultationRoleAllowed(kind: "request" | "answer", role: Role, p: Pathway): boolean {
+  const consultation = p.consultation;
+  if (!consultation) return false;
+  return (kind === "request" ? consultation.request_roles : consultation.answer_roles).includes(role);
 }
 
 // Every event the template marks `owner: "clear"` is an unowned trigger.
-export function clearsOwner(type: string): boolean {
-  return eventDefinition(type)?.owner === "clear";
+export function clearsOwner(type: string, pathway?: PathwayRef): boolean {
+  return eventDefinition(type, pathway)?.owner === "clear";
 }
 
-export function isConsultationAnswerEvent(type: string): boolean {
-  return (eventDefinition(type)?.consultation_answer ?? null) !== null;
+export function isConsultationAnswerEvent(type: string, pathway?: PathwayRef): boolean {
+  return (eventDefinition(type, pathway)?.consultation_answer ?? null) !== null;
 }
 
 // The event that records one kind of consultation answer.
-export function consultationAnswerEvent(answer: ConsultationAnswer): PathwayEvent | null {
-  return Object.values(PATHWAY.events).find((event) => event.consultation_answer === answer) ?? null;
+export function consultationAnswerEvent(
+  answer: ConsultationAnswer,
+  pathway?: PathwayRef,
+): PathwayEvent | null {
+  return (
+    Object.values(pathwayOf(pathway).events).find((event) => event.consultation_answer === answer) ??
+    null
+  );
 }
 
 export function isConsultationAnswer(value: unknown): value is ConsultationAnswer {
@@ -482,10 +558,12 @@ export function stitchingRule(
   resource: string,
   status: string,
   documentKind: string | null,
+  pathway?: PathwayRef,
 ): StitchingRule | null {
-  if (!STITCHING) return null;
+  const stitching = pathwayOf(pathway).stitching;
+  if (!stitching) return null;
   return (
-    STITCHING.rules.find(
+    stitching.rules.find(
       (rule) =>
         rule.resource === resource &&
         rule.statuses.includes(status) &&
@@ -494,8 +572,11 @@ export function stitchingRule(
   );
 }
 
+// The resource types any pathway stitches: ingest checks the type before it knows which
+// case (and so which pathway) a resource belongs to.
 export function stitchedResourceTypes(): string[] {
-  return [...new Set((STITCHING?.rules ?? []).map((rule) => rule.resource))];
+  const rules = PATHWAYS.flatMap((p) => p.stitching?.rules ?? []);
+  return [...new Set(rules.map((rule) => rule.resource))];
 }
 
 // ---------------------------------------------------------------------------
@@ -508,8 +589,8 @@ export type ClosureDetails = {
   physician_confirmation: boolean;
 };
 
-function evidenceSatisfies(outcomeKey: string, kinds: ReadonlySet<string>): boolean {
-  const outcome = PATHWAY.outcomes.find((o) => o.key === outcomeKey);
+function evidenceSatisfies(outcomeKey: string, kinds: ReadonlySet<string>, p: Pathway): boolean {
+  const outcome = p.outcomes.find((o) => o.key === outcomeKey);
   if (!outcome) return false;
   const all = outcome.evidence.all_of.every((kind) => kinds.has(kind));
   const any =
@@ -523,10 +604,12 @@ function evidenceSatisfies(outcomeKey: string, kinds: ReadonlySet<string>): bool
 export function evidenceAttached(
   finalOutcome: string | null,
   documents: readonly { kind: string }[],
+  pathway?: PathwayRef,
 ): boolean {
+  const p = pathwayOf(pathway);
   const kinds = new Set(documents.map((doc) => doc.kind));
-  if (isValidOutcome(finalOutcome)) return evidenceSatisfies(finalOutcome, kinds);
-  return PATHWAY.outcomes.some((outcome) => evidenceSatisfies(outcome.key, kinds));
+  if (isValidOutcome(finalOutcome, p)) return evidenceSatisfies(finalOutcome, kinds, p);
+  return p.outcomes.some((outcome) => evidenceSatisfies(outcome.key, kinds, p));
 }
 
 // The three conditions from TICKET-05. `actingRole` is passed only by the confirm
@@ -534,8 +617,8 @@ export function evidenceAttached(
 // confirmation event satisfies it on every other read.
 export function closureConditions(c: EngineCase, actingRole?: Role | "system"): ClosureDetails {
   return {
-    final_outcome: isValidOutcome(c.final_outcome),
-    evidence_attached: evidenceAttached(c.final_outcome, c.documents),
+    final_outcome: isValidOutcome(c.final_outcome, c.pathway_id),
+    evidence_attached: evidenceAttached(c.final_outcome, c.documents, c.pathway_id),
     physician_confirmation: c.physician_confirmed || actingRole === "responsible_physician",
   };
 }

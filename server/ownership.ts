@@ -1,5 +1,5 @@
 import { hoursBetween } from "./clock.js";
-import { nextState, type CaseState, type RecordedEvent } from "./engine.js";
+import { nextState, type CaseState, type PathwayRef, type RecordedEvent } from "./engine.js";
 
 // TICKET-08: the "time from trigger to owned again" metric, as a fold over the timeline.
 // applyEvent keeps `ownership_gaps` up to date one event at a time; the seed uses this
@@ -29,13 +29,14 @@ export function roundHours(hours: number): number {
   return Math.round(hours * 10) / 10;
 }
 
-export function ownershipGaps(events: readonly RecordedEvent[]): OwnershipGap[] {
+// TICKET-18: `pathway` is the case's template (the default pathway when absent).
+export function ownershipGaps(events: readonly RecordedEvent[], pathway?: PathwayRef): OwnershipGap[] {
   const gaps: OwnershipGap[] = [];
   let state: CaseState | null = null;
 
   events.forEach((event, index) => {
     const before = state;
-    state = nextState(state, event);
+    state = nextState(state, event, pathway);
     if (!before || !state) return;
 
     const open = gaps.find((gap) => gap.owned_at === null);
