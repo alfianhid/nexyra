@@ -1,0 +1,6 @@
+COLONOSCOPY | TEST-0017 | 2026-09-02 | Dr. A. Example
+Ind +FIT; BBPS 2/3/3 (8); caecum reached (IC valve, AO, TI intubated); W/D 8 min.
+Polyps x3 - 5 mm rectum, 7 mm sigmoid, 8 mm hepatic flexure (all sessile). All cold snare, retrieved. Bx: nil other.
+Spec: A rectum, B sigmoid, C HF. Sent.
+PATH (Example Path Lab, fictional; rep 2026-09-09; Dr. C. Placeholder): A hyperplastic polyp. B TA, LGD. C TA, LGD. No HGD / no ca.
+Plan: 2 small TAs, completely excised -> surveillance colonoscopy 3 yrs. Notify pt + GP.

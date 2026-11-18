@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 16 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code writes, Fulan checks the labels
 - **Depends on:** TICKET-02
-- **Status:** not started
+- **Status:** in progress
 
 ## Goal
 
@@ -29,10 +29,10 @@ Real reports from any hospital. Arabic reports.
 
 ## Done when
 
-- [ ] 24 reports and `label.json` exist, and the distribution matches the list above
+- [x] 24 reports and `label.json` exist, and the distribution matches the list above (file is named `labels.json`)
 - [ ] Labels are checked by Fulan before TICKET-13 is run on this set
 - [ ] Labels are not changed after seeing extraction results, unless a label was genuinely wrong, and every change is recorded with its reason
-- [ ] Four to six reports are flagged to show the clinical reviewer (TICKET-19)
+- [x] Four to six reports are flagged to show the clinical reviewer (TICKET-19)
 
 ## Notes
 

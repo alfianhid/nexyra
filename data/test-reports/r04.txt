@@ -1,0 +1,37 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0004          Date of procedure: 2026-07-29
+Endoscopist: Dr. A. Example
+
+INDICATION
+Positive FIT (screening programme).
+
+BOWEL PREPARATION
+BBPS 3/2/3, total 8. Good.
+
+EXTENT OF EXAMINATION
+Caecum reached, confirmed by appendiceal orifice and ileocaecal valve. Withdrawal time 10 minutes.
+
+FINDINGS
+1. 7 mm sessile polyp, transverse colon (Paris Is).
+2. 6 mm sessile polyp, sigmoid colon (Paris Is).
+Mild sigmoid diverticulosis.
+
+INTERVENTIONS
+Both polyps resected completely by cold snare. Both retrieved.
+
+SPECIMENS
+A: transverse colon polyp. B: sigmoid polyp.
+
+--------------------------------------------------------------
+HISTOPATHOLOGY REPORT (Example Pathology Lab, fictional)
+Patient: TEST-0004   Received: 2026-07-30   Reported: 2026-08-05
+A. Transverse colon polyp: tubular adenoma with low-grade dysplasia. Fragments 7 mm.
+B. Sigmoid polyp: tubular adenoma with low-grade dysplasia.
+No high-grade dysplasia. No invasive malignancy in either specimen.
+Pathologist: Dr. C. Placeholder
+--------------------------------------------------------------
+
+RECOMMENDATIONS
+Two small adenomas, completely excised. Surveillance colonoscopy in 3 years. Patient and GP to be informed of the result.

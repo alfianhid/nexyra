@@ -1,0 +1,8 @@
+COLONOSCOPY | TEST-0010 | 2026-09-10 | Dr. A. Example
+Ind: +FIT (screening)
+Prep: BBPS 3/3/3
+Caecum reached - IC valve, appendiceal orifice, tri-radiate fold. TI intubated ~8 cm, normal. CIT 6 min, W/D 9 min.
+Findings: mild L-sided diverticulosis. Nil else. No polyps, no mass.
+No bx. No polypectomy.
+Impression: normal colonoscopy to TI.
+Rec: no further colonoscopy; routine FIT in 2 yrs; letter to GP.

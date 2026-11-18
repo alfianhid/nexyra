@@ -1,0 +1,26 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0018          Date of procedure: 2026-09-24
+Endoscopist: Dr. A. Example   Sedation: midazolam 2 mg
+
+INDICATION
+Positive FIT.
+
+BOWEL PREPARATION (as entered on the form)
+Excellent. BBPS 3/3/3, total 9.
+
+EXTENT OF EXAMINATION
+Caecum reached with the appendiceal orifice and ileocaecal valve identified. Withdrawal time 9 minutes.
+
+FINDINGS
+The right colon was covered with a large amount of residual faeces which could not be cleared by washing; the mucosa of the caecum and ascending colon was obscured in places. The left colon was clean. No polyps or masses seen in the visible mucosa.
+
+INTERVENTIONS / SPECIMENS
+None.
+
+CONCLUSION
+Normal colonoscopy.
+
+RECOMMENDATIONS
+No further action; routine screening in 2 years.

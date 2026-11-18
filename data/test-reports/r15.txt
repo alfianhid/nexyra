@@ -1,0 +1,7 @@
+COLONOSCOPY + PATH | Pt TEST-0015 | 2026-08-28 | Dr. A. Example | ind: +FIT
+Prep: BBPS 2/2/2 (6), adequate.
+Extent: scope to descending colon (~40 cm). Marked looping, fixed sigmoid (prior pelvic surgery), pt in pain. Unable to progress to caecum despite pressure/posn change. Aborted, W/D 5 min. Caecum NOT reached; proximal colon not examined.
+Findings: 4 mm sessile polyp rectum, removed cold forceps, retrieved. Otherwise nil in colon examined.
+Spec: A rectal polyp -> histology.
+Histology (Example Pathology Lab, fictional, rep'd 2026-09-04, Dr. C. Placeholder): A. hyperplastic polyp. No adenoma. No dysplasia/malignancy.
+Rec: incomplete colonoscopy -> CT colonography to assess the right colon; discuss at screening MDT. Polyp itself needs no further action.

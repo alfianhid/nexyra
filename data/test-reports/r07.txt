@@ -1,0 +1,23 @@
+EXAMPLE GENERAL HOSPITAL (FICTIONAL) - ENDOSCOPY UNIT
+COLONOSCOPY REPORT
+
+Patient: TEST-0007          Date of procedure: 2026-09-03
+Endoscopist: Dr. B. Sample   Sedation: midazolam 2 mg
+
+HEADER SUMMARY
+Indication: positive FIT.   Caecum reached: Yes.   Bowel prep: good, BBPS 3/3/3.
+
+PROCEDURE NOTES
+Rectum and sigmoid examined with good views. Progress through the descending colon was slow because of fixed angulation at the sigmoid-descending junction. The scope was advanced to the splenic flexure, where the patient became distressed with pain; no further advancement was possible and the procedure was terminated. The scope was withdrawn carefully with a second look at the left colon.
+
+FINDINGS
+Left-sided diverticulosis. No polyps or masses in the segments seen.
+
+SPECIMENS
+None.
+
+CONCLUSION
+Normal examination. No lesions.
+
+RECOMMENDATIONS
+None recorded.
