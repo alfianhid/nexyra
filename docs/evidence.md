@@ -54,7 +54,7 @@ DoH Circular 144/2026 (number and gist only): all referral transactions go to Ma
 
 The harness is ready (`npm run eval`, 24 labelled synthetic reports) and has not been run, because no model key was available. When it runs, it reports closure verification as fractions with denominators, with every error listed, wrong closures first. It measures the mechanism on synthetic reports. It does not measure clinical accuracy or patient outcomes.
 
-What does exist is prior testing of the mechanism: 300 automated tests in 24 files, including one that replays all three demo cases through the API after a reset, and tests that every proposal rule and every quote check behaves as documented. These show the code does what it says, not that it is clinically right.
+What does exist is prior testing of the mechanism: 317 automated tests in 26 files, including one that replays all three demo cases through the API after a reset, and tests that every proposal rule and every quote check behaves as documented. These show the code does what it says, not that it is clinically right.
 
 ## Clinical review
 

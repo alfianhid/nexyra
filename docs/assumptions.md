@@ -75,7 +75,7 @@ Parameters in `server/outreach/templates/fit-positive.ladder.json`, each marked 
 
 - Three FIT cases (CX-1001 to CX-1003) and three mammography cases (MM-2001 to MM-2003), fictional people. **Demo setting**.
 - Demo start time: 17 Nov 2026 11:42 UTC+7. The clock moves only when a user advances it. **Demo setting**.
-- The stored reading of the report for CX-1003 was produced for the demo, from a report written by the team. **Demo setting**.
+- The stored readings for CX-1003 (the first report, and the repeat colonoscopy read with its pathology) are demo readings stored for offline use, not output of a verified live model call; the reports were written by the team. **Demo setting**.
 - The hosted demo is reset every day at 21:00 UTC. **Demo setting**.
 - Navigator, receiving-provider and coordinator-at-clinic-B actors are invented for the demo.
 

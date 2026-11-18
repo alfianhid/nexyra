@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** first deploy 18 Nov, video 19 Nov · **Estimate:** 3 hours deploy, 3 hours video · **Assignee:** human, assisted by Claude Code
 - **Depends on:** TICKET-17
-- **Status:** in progress. 18 Nov: the daily reset exists (`POST /api/demo/reset`, a Vercel cron in `vercel.json`, `CRON_SECRET`), not yet run on Vercel. `docs/video-script.md` drafted. Deploy and video not done.
+- **Status:** in progress. 18 Nov: deployed at https://nexyra-health.vercel.app (Vercel project `nexyra`, API and Turso in Mumbai; hosted reset verified, 1,006 cases, 6 to 9 s; daily Vercel Cron with `CRON_SECRET`). `docs/video-script.md` drafted (about 2:35). Video not recorded.
 
 ## Goal
 

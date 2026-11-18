@@ -6,8 +6,8 @@ Rules for whoever builds the deck:
 
 - `[TEAM TO FILL]` marks something only a team member can supply. Do not invent it.
 - Keep every figure exactly as written. Do not add claims about patient outcomes.
-- Screenshots are in `docs/shots/`. Those marked **to be captured** are being produced and may not exist yet. If one is missing at build time, use the nearest existing file named in the same line and say nothing false in the caption.
-- Placeholders `[PENDING — TICKET-21]`, `[EVAL RESULTS PENDING — TICKET-14]` and `[CLINICAL REVIEW PENDING — TICKET-19]` stay until the real value exists. Replace them in the deck, never leave a bracket in the final PDF.
+- Screenshots are in `docs/shots/` and all named below exist (captured 18 Nov against the latest build). Do not use `closure.png`, `detail.png`, `worklist.png`, `outreach.png`, `programme.png` or `notfound.png`: they are stale.
+- The prototype link is https://nexyra-health.vercel.app. Only the demo video link is still `[PENDING — TICKET-21]`. Placeholders `[PENDING — TICKET-21]` (video), `[EVAL RESULTS PENDING — TICKET-14]` and `[CLINICAL REVIEW PENDING — TICKET-19]` stay until the real value exists. Replace them in the deck, never leave a bracket in the final PDF.
 
 ---
 
@@ -60,9 +60,9 @@ Diagram (draw it; the text below is the same content for software readers):
 7. Programme view: exceptions, funnel, 31-day referral-to-colonoscopy limit, delay reasons, escalations per role per day, scenario panel (labelled assumption).
 
 Built: everything above, on synthetic data. Designed, not built: probabilistic identity matching, Malaffi connection, SMS gateway, login.
-Stack: React and Vite, Express, Turso, any OpenAI-compatible model endpoint (DeepSeek default; Meta Muse Spark via the Meta Model API possible). 300 automated tests.
+Hosted: https://nexyra-health.vercel.app (Vercel; API and Turso database in Mumbai; daily reset). Stack: React and Vite, Express, Turso, any OpenAI-compatible model endpoint (DeepSeek default; Meta Muse Spark via the Meta Model API possible). 317 automated tests in 26 files.
 
-Screenshots: `docs/shots/detail.png` (case detail with timeline), `docs/shots/case2-2-case-unowned.png` (unowned case). Diagram is drawn from `docs/architecture.md`.
+Screenshots: `docs/shots/case2-2-case-unowned.png` (unowned case with its task and clock), `docs/shots/case3-8-closed.png` (closure confirmed by the physician with quotes). The diagram is drawn from `docs/architecture.md`.
 
 ---
 
@@ -73,7 +73,7 @@ Heading: **For the people who own a positive result, and the programme that must
 Users:
 - Coordination staff: work the cases they own, with deadlines, outreach tasks and the unowned queue.
 - Navigator: gets the patients who did not respond to the message or the staff call.
-- Responsible physician: confirms or rejects closure after reading the report and its quotes.
+- Responsible physician: reads the latest report and its quotes, then confirms closure, reopens the case, or rejects the AI proposal with a reason. Dr. Fulana (receiving physician) and Nur H. (navigator) act through their own forms on the case page.
 - Program manager: sees exceptions, the funnel, the 31-day limit and alert load per role.
 - Patient: receives the result in English or Arabic and one next step.
 
@@ -81,7 +81,7 @@ Intended outcome (a design aim, not a result): every positive result has one nam
 
 Challenge fit: closes the loop between a screening result and care without a risk model.
 
-Screenshot: `docs/shots/worklist.png` (worklist), and `patient-ar.png` (patient page in Arabic; **to be captured**).
+Screenshots: `docs/shots/case1-1-ladder.png` (outreach ladder for a silent patient), `docs/shots/patient-ar.png` (patient page in Arabic).
 
 ---
 
@@ -91,7 +91,7 @@ Heading: **Two kinds of measure: the mechanism now, programme outcomes in a pilo
 
 Measured now, on synthetic data:
 - Closure verification: for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. `[EVAL RESULTS PENDING — TICKET-14]` The harness is ready (`npm run eval`); no model key has been available yet.
-- Behaviour of the engine: 300 automated tests, including the whole demo replayed through the API.
+- Behaviour of the engine: 317 automated tests in 26 files, including the whole demo replayed through the API. The live extraction path is tested with a fake model only.
 
 Proposed for a pilot, to be agreed with the programme and clinicians `[TEAM TO CONFIRM]`:
 - Share of positive results with a named owner within a set time.
@@ -99,11 +99,11 @@ Proposed for a pilot, to be agreed with the programme and clinicians `[TEAM TO C
 - Time unowned cases wait for a new owner.
 - Colonoscopy follow-up after a positive FIT, against the 30.5% baseline (2015 to 2016).
 - Alerts per role per day, so alert fatigue is seen early.
-- Share of AI proposals the physician rejects.
+- Share of AI proposals the physician rejects. The prototype already counts this (`ai_divergence`: rejections plus closures confirmed against the last reading), on synthetic data.
 
 Drop-off rates in the synthetic cohort are inputs, not findings.
 
-Screenshot: `docs/shots/programme.png` (current programme view); new `programme-*` files **to be captured**.
+Screenshot: `docs/shots/programme-2-delays.png` (referral-to-colonoscopy bands, delay reasons counted once per barrier, physician against the AI reading). Optional: `docs/shots/programme-1-top.png`.
 
 ---
 
@@ -117,7 +117,7 @@ Heading: **Outreach drove follow-up in the trials; risk prediction did not chang
 - Abu Dhabi: colonoscopy follow-up after a positive FIT was 30.5% (2015 to 2016). Referral to colonoscopy within 31 days is the HAAD standard, cited in BMC Cancer 2021. `[FULL CITATION FOR 30.5% — TEAM TO ADD]`
 - DoH Circular 144/2026: all referral transactions go to Malaffi as HL7 REF messages by 31 August 2026; e-Referral is for referral management, status tracking and referrer-receiver communication.
 - What follows for the design: an outreach ladder that starts early, escalation to people, no risk model. We do not claim that risk-targeted navigation works.
-- Prior testing: 300 automated tests; evaluation of report reading `[EVAL RESULTS PENDING — TICKET-14]`.
+- Prior testing: 317 automated tests; evaluation of report reading `[EVAL RESULTS PENDING — TICKET-14]`.
 
 Screenshot: none (text slide).
 
@@ -147,16 +147,17 @@ Screenshot: none.
 
 Heading: **Responsible AI: AI reads and proposes, a physician decides, and every claim is checkable.**
 
-- Human oversight: AI never closes a case. The system role is blocked in code and in tests. Only the responsible physician's confirmation closes one, with a valid outcome and attached evidence. Proposals are labelled as AI proposals.
+- Human oversight: AI never closes a case. The system role is blocked in code and in tests. Only the responsible physician's confirmation closes one, with a valid outcome and attached evidence. Proposals are labelled as AI proposals. The physician can reopen the case or reject a proposal with a reason (`proposal_rejected` never moves the case), and the programme view counts physician-AI divergence.
 - Explainability: every extracted answer carries a quote. Code checks that the quote is in the report; if not, the field becomes unknown. Rules in code, not the model, turn the fields into a proposal. Cancer never yields a closure proposal.
 - Failure modes: a doubt ends as "needs human reading"; a case staying open is the safe direction of error. No model key gives no model call. A model can still quote correctly and choose the wrong value, so the physician reads the quote.
 - Bias: no risk score and no patient features beyond age and language in invented cases. Real-data bias, including Arabic reports, is untested.
 - Privacy and security: no personal data. No login, security review or privacy assessment yet; a pilot needs them first.
-- Misuse: a user can confirm closure wrongly; the audit trail records who did.
+- Misuse: a user can confirm closure wrongly; the audit trail records who did. Consultation answers are enforced to the addressed physician (server 403 otherwise). The role is still self-declared: no login.
+- Demo readings: the two readings stored for case 3 are stored demo readings, not model output. The first has a model label that was not a verified live call; the second is hand-written (`hand-written demo reading (no model call)`). The live path is tested with a fake model only.
 - Patient wording: Arabic not reviewed by a native speaker; Urdu, Hindi and Tagalog are empty drafts; English and Arabic not reviewed by a clinician.
 - Evaluation: `[EVAL RESULTS PENDING — TICKET-14]`. Clinical review: `[CLINICAL REVIEW PENDING — TICKET-19]`. No clinician is on the team.
 
-Screenshot: `docs/shots/closure.png` (closure review with AI proposal and quotes); `case3-*` **to be captured**.
+Screenshots: `docs/shots/case3-2-closure-reopen.png` (AI proposal, not a decision: reopen, with quotes), `docs/shots/case3-3-reopened.png` (case reopened by the physician, reasons recorded).
 
 ---
 
@@ -174,13 +175,13 @@ Screenshot: none.
 
 Heading: **No login needed. Open the link and pick a role.**
 
-- Prototype link: `[PENDING — TICKET-21]`
+- Prototype link: https://nexyra-health.vercel.app (public)
 - Demo video (under 3 minutes): `[PENDING — TICKET-21]`
-- The app has no login. A role picker (coordinator, physician, program manager) gives guest access to every feature. All data is synthetic.
+- The app has no login. A role picker with three seats (coordinator, physician, program manager) gives guest access to every feature; the receiving physician and the navigator act through their own forms on the case page. All data is synthetic.
 - The hosted demo resets itself every day, so a reviewer always starts at day 0. The demo clock is moved from the screen header.
 - Suggested first minute: pick Physician, open case CX-1003, Closure review; then pick Program manager, open Programme.
 
-Screenshot: `docs/shots/worklist.png`.
+Screenshot: `docs/shots/case3-1-register.png` (the register as the physician sees it).
 
 ---
 
@@ -195,7 +196,7 @@ Heading: **From a synthetic demonstration to a supervised pilot on one screening
 - Timeline assumption `[TEAM TO CONFIRM]`: clinical review of the pathway first, then a read-only pilot on one FIT screening site, then owner and escalation with staff.
 - Sustainability and commercial path `[TEAM TO FILL]`: who pays and who runs it. Not decided; no pricing is claimed.
 
-Screenshot: `docs/shots/programme.png`.
+Screenshot: `docs/shots/programme-1-top.png`.
 
 ---
 
@@ -233,20 +234,21 @@ Screenshot: none.
 Heading: **What works today, what is a demonstration, and what is not done.**
 
 Working solution and demo (all synthetic):
-- Case 3: a case marked done is reopened because the AI reading quotes "Preparation was inadequate." and "The cecum was not reached." A physician closes only after the repeat colonoscopy and pathology.
+- Case 3: a case marked done is reopened because the AI reading quotes "Preparation was inadequate." and "The cecum was not reached." After the repeat colonoscopy and pathology, the closure review reads the latest report (both reports together) and the physician confirms closure. Both readings are stored demo readings, not model output.
 - Case 2: a referral is rejected, the case is unowned, the patient moves, a consultation is answered, and an incoming booking is stitched to the case.
 - Case 1: a silent patient. Message, staff call task, then navigator; the patient page in Arabic.
-- Programme view over 1,000 synthetic cases: exceptions, funnel, 31-day limit, delay reasons.
+- Programme view over 1,000 synthetic cases: exceptions, funnel, 31-day limit, delay reasons, physician-AI divergence.
+- Hosted at https://nexyra-health.vercel.app, resets itself every day.
 
 Demonstration only: mammography pathway, not clinically reviewed.
 
 Assumptions: deadlines other than the 31-day limit are team assumptions; drop-off rates are inputs, not findings; the scenario panel applies one trial's effect size and is labelled an assumption.
 
-Not done: evaluation run `[EVAL RESULTS PENDING — TICKET-14]`, clinical review `[CLINICAL REVIEW PENDING — TICKET-19]`, Malaffi connection, real messaging, login, security review.
+Not done: evaluation run `[EVAL RESULTS PENDING — TICKET-14]` (no model key; no live model call verified), clinical review `[CLINICAL REVIEW PENDING — TICKET-19]`, Malaffi connection, real messaging, login, security review.
 
 Nexyra is not a referral tracker and not a messaging channel, and it builds no risk model.
 
-Screenshots (a row of three): `case3-*` **to be captured** (fallback `docs/shots/closure.png`), `case1-*` **to be captured** (fallback `docs/shots/outreach.png`), `docs/shots/case2-3-moved.png`. Optional: `docs/shots/case2-7-unstitched.png`, `programme-*` **to be captured**.
+Screenshots (a row of three): `docs/shots/case3-3-reopened.png`, `docs/shots/case1-1-ladder.png`, `docs/shots/case2-4-consultation.png`. Optional: `docs/shots/case2-7-unstitched.png`, `docs/shots/programme-3-escalations.png`.
 
 ---
 

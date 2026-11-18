@@ -12,13 +12,7 @@ Decided 18 Nov 2026. The frontend is a static Vite build; the API is the same Ex
 
 1. Create the Vercel project (step 3 below), without environment variables yet.
 2. In the Vercel project, open **Storage** (or the Marketplace), add **Turso Cloud**, create a database, and connect it to the project. The integration sets `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, the same names `server/db.ts` reads.
-3. Copy those values to your machine and fill the database once:
-   ```bash
-   npx vercel env pull .env
-   ```
-   ```bash
-   npm run demo:reset:remote
-   ```
+3. The values are marked sensitive in Vercel and cannot be pulled with `vercel env pull`. Fill the database through the hosted reset (see "Deployed" below).
 4. Redeploy, then run the check in step 5 below.
 
 ## Manual route (done by a team member, from their own accounts)
@@ -33,10 +27,19 @@ Decided 18 Nov 2026. The frontend is a static Vite build; the API is the same Ex
 4. **Set the environment variables** in the Vercel project (Settings → Environment Variables): `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, plus `CRON_SECRET` (a random string of 16 or more characters) for the daily reset below. Redeploy after adding them.
 5. **Check from a logged-out browser:** the worklist loads, `/api/clock` returns JSON, confirming closure on `CX-1003` works as the physician and is refused as the coordinator, and "+1 day" moves the clock.
 
+## Deployed (18 Nov 2026)
+
+The prototype is live at **https://nexyra-health.vercel.app** (Vercel project `nexyra`, public). The API runs in Mumbai (`bom1`), next to the Turso database, also in Mumbai and the closest region to Abu Dhabi.
+
+- **Deploys run from the local folder** with `npx vercel deploy --prod --yes`. The GitHub repository is owned by a teammate, so there is no Git integration: pushing does not deploy.
+- **Turso values are marked sensitive in Vercel** and cannot be read back with `vercel env pull`. Seed the hosted database through the hosted reset below, not with `npm run demo:reset:remote` from a laptop.
+- **Hosted reset:** `curl -X POST -H "Authorization: Bearer <CRON_SECRET>" https://nexyra-health.vercel.app/api/demo/reset`. Verified on the hosted app: 1,006 cases including the 1,000-case synthetic cohort, in about 6 to 9 s.
+- **Daily reset:** a Vercel Cron entry in `vercel.json` calls the same route at 21:00 UTC (Hobby allows one run a day, at some point in that hour) with `Authorization: Bearer $CRON_SECRET`. Without `CRON_SECRET` (or `DEMO_RESET_SECRET`) the route answers 404 and the cron does nothing. Still reset before the judges look and after every rehearsal.
+- **Idle connections:** a database call is retried once when Turso has closed an idle connection (seen on Vercel). SQL errors are never retried.
+
 ## Not done yet
 
-- The daily reset (TICKET-21) is configured but has not run on Vercel yet. `vercel.json` has a cron entry that calls `/api/demo/reset` at 21:00 UTC every day (Hobby allows one run a day, at some point in that hour); Vercel sends `Authorization: Bearer $CRON_SECRET`, and without `CRON_SECRET` (or `DEMO_RESET_SECRET`) the route answers 404 and the cron does nothing. To reset by hand: `curl -X POST -H "Authorization: Bearer <secret>" https://<deployment>/api/demo/reset`, or `npm run demo:reset:remote` from a laptop. Still reset before the judges look and after every rehearsal. The reset builds the state in an in-memory libSQL database inside the function, which needs the libSQL native module to load there (it already does, since `@libsql/client` imports it); check the first cron run in the Vercel logs.
-- The deployed app has not been run on Vercel yet. Locally, the libSQL version passes all 95 tests, and its escalation sequence matches the previous `better-sqlite3` build step for step.
+- The first scheduled cron run has not been checked in the Vercel logs.
 
 ## Things to keep out of git
 

@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 15 Nov · **Estimate:** 2–3 hours · **Assignee:** Claude Code
 - **Depends on:** –
-- **Status:** done (checked 18 Nov against the code). Project runs: `npm test` (300 tests in 24 files), `npm run build`, `npm run typecheck:server`, `npm run demo:reset`. Stack as in `tickets/README.md` (libSQL replaced better-sqlite3).
+- **Status:** done (checked 18 Nov against the code). Project runs: `npm test` (317 tests in 26 files), `npm run build`, `npm run typecheck:server`, `npm run demo:reset`. Stack as in `tickets/README.md` (libSQL replaced better-sqlite3).
 
 ## Goal
 

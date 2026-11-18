@@ -11,7 +11,7 @@ Nexyra builds on Malaffi e-Referral data (DoH Circular 144/2026). It is not a re
 - **Unowned cases.** A rejected referral, an unanswered referral or a patient who moves provider leaves the case with no owner. It goes to an unowned queue with a task and a clock. Incoming FHIR Appointment, Procedure and DiagnosticReport resources are stitched to the case on two exact keys; anything that does not match goes to an unstitched queue and is never dropped.
 - **Consultation monitoring.** One question from referring to receiving provider, with an owner, a deadline and escalation. It sits on top of e-Referral and is not a messaging channel.
 - **HL7 v2 ingest.** REF and ORU messages are turned into the same case events. The structure is generic HL7 v2.5; the Malaffi specification has not been seen.
-- **Report extraction with citations.** A model reads a colonoscopy or pathology report and returns six fields, each with a quote. Code checks that every quote is in the report; a field whose quote fails becomes unknown. Plain rules in code, not the model, turn the fields into a proposal. A physician confirms or rejects.
+- **Report extraction with citations.** A model reads a colonoscopy or pathology report and returns six fields, each with a quote. Code checks that every quote is in the report; a field whose quote fails becomes unknown. Plain rules in code, not the model, turn the fields into a proposal. A physician confirms, or rejects the proposal with a reason. Closure review reads the case's latest report (the latest colonoscopy report together with any later pathology report) and also offers **Reopen case**. The programme view counts physician-AI divergence.
 - **Evaluation harness.** `npm run eval` compares extraction with 24 labelled synthetic reports. It has not been run: no model key. `[EVAL RESULTS PENDING — TICKET-14]`
 - **Programme view.** Exceptions, funnel, referral to colonoscopy against the 31-day limit, delay reasons, escalations per role per day, and a scenario panel labelled as an assumption. It reads a synthetic cohort of 1,000 cases whose drop-off rates are inputs, not findings.
 - **Demo reset.** `npm run demo:reset` gives the same state every time (about 6 s). The hosted demo resets itself every day.
@@ -20,7 +20,7 @@ Nexyra builds on Malaffi e-Referral data (DoH Circular 144/2026). It is not a re
 
 - Node.js 22 or newer, with npm.
 - No database server. Locally the app uses a SQLite file (`data/nexyra.sqlite`, created on first run). Deployed, it uses Turso (libSQL).
-- No API key is needed to run the demo: the extraction for demo case 3 is stored. With `LLM_BASE_URL` and `LLM_API_KEY` set, the extraction step calls any OpenAI-compatible model endpoint (DeepSeek is the default; Meta Muse Spark through the Meta Model API is possible). Only synthetic data is ever sent.
+- No API key is needed to run the demo: the two readings for demo case 3 are stored demo readings, not model output (the first carries a model label but was not produced by a verified live model call; the second is labelled `hand-written demo reading (no model call)`). With `LLM_BASE_URL` and `LLM_API_KEY` set, the extraction step calls any OpenAI-compatible model endpoint (DeepSeek is the default; Meta Muse Spark through the Meta Model API is possible). Only synthetic data is ever sent.
 
 ## Install
 
@@ -47,14 +47,14 @@ Other commands: `npm run demo:step -- list` (send a demo step from a terminal), 
 ## Tests
 
 ```bash
-npm test                  # 300 tests in 24 files (Vitest)
+npm test                  # 317 tests in 26 files (Vitest)
 npm run typecheck:server  # type check for server/
 npm run build             # type check and build the frontend
 ```
 
 ## Deploy
 
-Vercel serves the frontend and runs the API as one function; Turso is the database. Steps are in [`docs/deploy.md`](docs/deploy.md). Environment variables are listed in `.env.example`. Never commit `.env`. Deployment URL: `[PENDING — TICKET-21]`. Demo video: `[PENDING — TICKET-21]`.
+Vercel serves the frontend and runs the API as one function; Turso is the database. Steps are in [`docs/deploy.md`](docs/deploy.md). Environment variables are listed in `.env.example`. Never commit `.env`. The prototype is deployed at **https://nexyra-health.vercel.app** (public, no login; API and Turso database both in Mumbai; daily reset by Vercel Cron). Demo video: `[PENDING — TICKET-21]`.
 
 ## Documentation
 

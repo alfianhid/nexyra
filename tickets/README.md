@@ -98,7 +98,7 @@ These settle every question the frontend would otherwise have to guess at. They 
 
 ## Status on 18 Nov
 
-Read from the ticket files and the code (300 tests pass in 24 files). "Human" means a person must act; the code cannot finish it.
+Read from the ticket files and the code (317 tests pass in 26 files). "Human" means a person must act; the code cannot finish it.
 
 | Ticket | Status | What is left |
 |---|---|---|
@@ -112,17 +112,17 @@ Read from the ticket files and the code (300 tests pass in 24 files). "Human" me
 | 08 Unowned cases and stitching | done | Probabilistic matching designed, not built |
 | 09 Worklist and case detail | done | |
 | 10 Outreach ladder | done | Arabic native-speaker review (human); Urdu, Hindi, Tagalog empty |
-| 11 Consultation monitoring | done | Screens being built in parallel |
+| 11 Consultation monitoring | done | Answers enforced to the addressed physician (403 otherwise); Dr. Fulana and Nur H. act through forms on the case page |
 | 12 Labelled test set | in progress (human) | A person must check `labels.json` before the evaluation runs |
 | 13 Report extraction | done in code | Not run against a real model |
 | 14 Closure verification evaluation | in progress | Harness ready; needs a model key and the checked labels. `[EVAL RESULTS PENDING — TICKET-14]` |
-| 15 Closure confirmation screen | in progress | Re-audit the boxes; `proposal/reject` and divergence count not built |
+| 15 Closure confirmation screen | done | `proposal/reject` (`proposal_rejected`), Reopen case (`procedure_incomplete`) and the `ai_divergence` count are built; the closure review reads the latest report |
 | 16 Program view | done | Check the delay-reason count after a logged call (see `docs/demo-script.md`) |
-| 17 Demo cases and reset | in progress | UI walk and a timed rehearsal |
+| 17 Demo cases and reset | in progress | Demo walk done; a timed rehearsal remains (video path about 2:35) |
 | 18 Second pathway | done | Demonstration only, not clinically reviewed |
 | 19 Clinical review | not started (human) | Fulan. `[CLINICAL REVIEW PENDING — TICKET-19]` |
 | 20 Submission documentation | in progress | Docs updated 18 Nov; update again after 14 and 19 |
-| 21 Video and prototype link | in progress (human) | Deploy to Vercel and Turso, record the video. `[PENDING — TICKET-21]` |
+| 21 Video and prototype link | in progress (human) | Deployed: https://nexyra-health.vercel.app (reset verified). Record the video. `[PENDING — TICKET-21]` |
 | 22 Rehearsal and Q&A | not started (human) | |
 | 23 From-scratch check | not started | After all P0 tickets |
 | 24 Update the brief | not started | After 19 |

@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 17 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-09, TICKET-13
-- **Status:** in progress (screen exists from phase 5; boxes not re-audited here). 18 Nov: `GET /api/cases/{id}/verification` (`extraction.proposed_outcome`) and the case payload's `verification.proposed_outcome` now name the outcome a `propose_closure` asks for, via `proposedOutcomeFor` (tests `TICKET-15: the verification carries proposed_outcome` in `server/consultation.test.ts`).
+- **Status:** done (18 Nov). `POST /api/cases/{id}/proposal/reject` records `proposal_rejected` with a reason and never moves the case; **Reopen case** records `procedure_incomplete` with the AI reading's reasons; the closure review reads the case's latest report; the programme view counts `ai_divergence` (rejections plus closures confirmed against the last reading). Earlier note: 18 Nov: `GET /api/cases/{id}/verification` (`extraction.proposed_outcome`) and the case payload's `verification.proposed_outcome` now name the outcome a `propose_closure` asks for, via `proposedOutcomeFor` (tests `TICKET-15: the verification carries proposed_outcome` in `server/consultation.test.ts`).
 
 ## Goal
 

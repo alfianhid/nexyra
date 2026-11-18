@@ -29,14 +29,14 @@ Two lists: what a pilot needs and does not have yet, and what the prototype itse
 | Express 4 | API, run as one Vercel function in deployment | `server/`, `api/index.ts` |
 | `@libsql/client` | Database client. Local SQLite file, or Turso when `TURSO_DATABASE_URL` is set. | `server/db.ts` |
 | `hl7v2` (npm) | HL7 v2 parsing. Pure JavaScript, no native build. | `server/ingest/hl7v2/` |
-| Vitest 2 | 300 tests in 24 files | `server/*.test.ts`, `src/*.test.ts` |
-| Vercel | Hosting and the daily demo-reset cron. Not yet confirmed running there. | `vercel.json`, `docs/deploy.md` |
-| Turso | Hosted libSQL database | `docs/deploy.md` |
+| Vitest 2 | 317 tests in 26 files | `server/*.test.ts`, `src/*.test.ts` |
+| Vercel | Hosting and the daily demo-reset cron. Running at https://nexyra-health.vercel.app (API in Mumbai). | `vercel.json`, `docs/deploy.md` |
+| Turso | Hosted libSQL database (Mumbai). Calls retry once when an idle connection was closed. | `docs/deploy.md` |
 | An OpenAI-compatible model endpoint | Report extraction. DeepSeek is the default; Meta Muse Spark through the Meta Model API is possible. Configured with `LLM_BASE_URL`, `LLM_API_KEY` and `NEXYRA_MODEL`. | `server/verify/llm.ts`, `.env.example` |
 
 ## Model dependency, stated plainly
 
-- The demo does not need a model. The reading for demo case 3 is stored, and an extraction already seen is served from a cache keyed by a hash of the report text.
+- The demo does not need a model. The two readings for demo case 3 are stored demo readings (one with a `deepseek/...` model label that was not a verified live call, one written by hand and labelled `hand-written demo reading (no model call)`), and an extraction already seen is served from a cache keyed by a hash of the report text.
 - The live path exists: with `LLM_BASE_URL` and `LLM_API_KEY` set, `POST /api/cases/{id}/verification` and `npm run verify:file` call the model, check every quote against the report in code, and apply the proposal rules. Without a key and without a cached reading, the answer is "needs human reading".
 - The live path has been tested with a fake model and has not yet been run against a real provider. `[EVAL RESULTS PENDING — TICKET-14]`
 - A provider's terms can allow use of content for product improvement while free credits are used. For that reason only synthetic data is ever sent to any model.

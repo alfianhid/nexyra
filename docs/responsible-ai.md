@@ -32,6 +32,17 @@ AI is also not used for anything else in the product. Deadlines, escalation, own
 | A confirmation or rejection is an event with the actor | `server/events.ts` | `server/writes.test.ts` |
 | A cached reading is reused for the same report text, so the same report always gives the same answer | `server/verify/index.ts` | "re-running on the same report hits the cache" |
 
+## Physician and AI: reject, reopen, divergence
+
+- The closure review reads the case's latest report: the latest colonoscopy report read together with any later pathology report.
+- The physician can **Reopen case** (records `procedure_incomplete` with the AI reading's reasons) or **Reject proposal** with a reason (`proposal_rejected`; it never moves the case). Both are events with the actor.
+- The programme view counts physician-AI divergence (`ai_divergence`): proposals rejected, plus closures confirmed against the last reading. This is a count on synthetic demo data, not a measure of AI quality.
+- Consultation answers are enforced to the addressed physician (server 403 otherwise).
+
+## Demo readings are not model output
+
+The two readings stored for demo case 3 are demo data. The first carries a `deepseek/...` model label but was not produced by a verified live model call. The second was written by hand and is labelled `hand-written demo reading (no model call)`. Do not describe either as a model result. The live extraction path is tested with a fake model only.
+
 ## Planned, not in the code
 
 - Recording and counting divergence between the physician's decision and the AI proposal. The endpoint `POST /api/cases/{id}/proposal/reject` is in the contract (`docs/api.md`) but is not implemented.

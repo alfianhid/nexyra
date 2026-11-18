@@ -24,19 +24,19 @@ What this prototype does not do, does not prove, or has not had checked. Written
 
 ## What the code does and does not contain
 
-Exists: a case engine with ten stages plus closed on the FIT pathway, role-guarded actions, an append-only event trail, a closure rule that needs a valid outcome, evidence and a responsible physician, a demo clock with escalation by role, unowned triggers with FHIR stitching and an unstitched queue, consultation monitoring, an outreach ladder with a patient page, HL7 v2 REF and ORU ingest, report extraction with code-checked quotes and rule-based proposals, an evaluation harness, a programme view, a reset that rebuilds the demo state, and 300 automated tests.
+Exists: a case engine with ten stages plus closed on the FIT pathway, role-guarded actions, an append-only event trail, a closure rule that needs a valid outcome, evidence and a responsible physician, a demo clock with escalation by role, unowned triggers with FHIR stitching and an unstitched queue, consultation monitoring, an outreach ladder with a patient page, HL7 v2 REF and ORU ingest, report extraction with code-checked quotes and rule-based proposals, an evaluation harness, a programme view, a reset that rebuilds the demo state, and 317 automated tests in 26 files.
 
 Not in the code, or not proven:
 
 - **No evaluation numbers.** The model has not been run over the test set.
-- **The live extraction path has not been exercised against a real model in this build.** It is tested with a fake model that returns scripted answers. The demo reads a stored result for case 3. A provider's output format may need prompt changes.
+- **The live extraction path has not been exercised against a real model in this build.** It is tested with a fake model that returns scripted answers. The two readings for demo case 3 are stored demo readings, not model output: the first carries a model label (`deepseek/...`) but was not produced by a verified live model call, and the second (repeat colonoscopy plus pathology) was written by hand and is labelled `model: "hand-written demo reading (no model call)"`. A provider's output format may need prompt changes.
 - **No real patient messaging.** The automated message is recorded as sent but not delivered: there is no SMS or WhatsApp gateway, and the patient page is reached through a simulated link with no login.
 - **No Malaffi or e-Referral connection.** HL7 v2 messages are read from files or posted to an endpoint. The structure is generic HL7 v2.5; the Malaffi message specification has not been seen. MLLP transport, ADT and SIU messages are out of scope. Consultation questions and answers are recorded through two endpoints that stand in for the e-Referral feed.
 - **Identity matching is exact only.** A resource is stitched when the patient identifier and the originating referral both match. Probabilistic matching is designed in `docs/architecture.md`, not built, and would always need a coordinator's confirmation.
-- **No login.** The role is picked from a menu, so the audit trail is only as honest as that menu.
+- **No login.** The role is picked from a menu (three seats), so the audit trail is only as honest as that menu. Dr. Fulana (receiving physician) and Nur H. (navigator) have no seat; they act through their own forms on the case page. The server refuses (403) a consultation answer from anyone but the addressed physician, but who is acting is still self-declared.
 - **The programme view is only as good as the synthetic data behind it.** Its scenario panel applies one trial's effect size (Atlas et al., JAMA 2023) to the synthetic case count. That is an assumption, not a measurement.
 - **Performance at scale is not tested.** Request times were measured against a local file and with an added delay per round trip, not under load. The daily reset takes about 6 s and a request that arrives during it may see a partly loaded database.
-- **The hosted deployment has not been confirmed running on Vercel with Turso** at the time of writing. `[PENDING — TICKET-21]`
+- **The hosted prototype runs on Vercel with Turso** (https://nexyra-health.vercel.app, API and database in Mumbai). The hosted reset was checked by hand (1,006 cases, 6 to 9 s). The scheduled daily run has not been checked in the logs yet. A database call is retried once when Turso has closed an idle connection; SQL errors are not retried. No load test.
 
 ## Patient-facing language
 

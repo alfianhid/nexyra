@@ -39,7 +39,7 @@ Status key: **ready** = the text is written from material in the repository. **p
 
 - Evaluation numbers: `[EVAL RESULTS PENDING — TICKET-14]` (slides 6, 7, 9).
 - Clinical review status: `[CLINICAL REVIEW PENDING — TICKET-19]` (slides 3, 9, 12).
-- Deployment URL and video link: `[PENDING — TICKET-21]` (slides 4, 11, 15).
+- Deployment URL: https://nexyra-health.vercel.app (slides 4, 11, 15). Video link: `[PENDING — TICKET-21]`.
 - Screenshots `case1-*`, `case3-*`, `programme-*`, `patient-ar.png`: being captured (see `deck-content.md`).
 
 ## Content the ticket says must appear, and where it fits
