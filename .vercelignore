@@ -1,0 +1,17 @@
+# Files `vercel` (the CLI) must never upload. Vercel builds from source on its side,
+# so local build output, dependencies and databases stay here.
+
+# Old Itmam material, including the DoH circular, which is not for publication
+arsip-itmam
+
+# Secrets and local data
+.env
+.env.*
+!.env.example
+data
+.impeccable
+
+# Rebuilt on Vercel
+node_modules
+dist
+*.tsbuildinfo

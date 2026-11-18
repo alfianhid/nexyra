@@ -17,3 +17,6 @@ data/*.sqlite*
 .impeccable/questions/
 .impeccable/review/
 .impeccable/mocks/
+
+# Vercel CLI project link (created by `npx vercel`)
+.vercel
