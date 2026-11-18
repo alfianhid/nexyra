@@ -95,10 +95,135 @@ export type OutreachAttempt = {
   minutes: number;
 };
 
+// The closed set the engine sends as `available_actions` (server/vocabulary.ts, ACTIONS).
+// A typo in a page's `includes(...)` is a compile error instead of a button that never shows.
+export type Action =
+  | "log_outreach"
+  | "advance_case"
+  | "assign_owner"
+  | "answer_consultation"
+  | "confirm_closure"
+  | "reject_proposal"
+  | "reopen_case"
+  | "request_consultation";
+
+// ---- TICKET-08 / TICKET-11: provider, ownership, referrals, consultations ------------
+
+export type Provider = { provider_id: string; name: string };
+
+export type ProviderOption = Provider & { kind: string };
+
+export type OwnershipTrigger = {
+  event_id: string | null;
+  type: string;
+  label: string;
+  reason: string;
+};
+
+export type OwnershipGap = {
+  trigger: OwnershipTrigger;
+  previous_owner_actor_id: string | null;
+  unowned_at: string;
+  owned_at: string | null;
+  owner_actor_id: string | null;
+  owner_event_type: string | null;
+  // null while the spell is still open.
+  hours_to_owner: number | null;
+};
+
+export type Ownership = {
+  state: "owned" | "unowned";
+  unowned_since: string | null;
+  gaps: OwnershipGap[];
+};
+
+export type Referral = {
+  referral_id: string;
+  from_provider_id: string | null;
+  to_provider: Provider | null;
+  // pending, accepted, rejected, expired or redirected
+  status: string;
+  // routine, asap or stat (the HL7 v2 referral priorities)
+  priority: string;
+  specialty: { system: string; code: string; display: string };
+  replaces_referral_id: string | null;
+  sent_at: string;
+  updated_at: string;
+};
+
+export type ConsultationOutcome = "accepted" | "redirected" | "more_data_requested";
+
+export type Consultation = {
+  consultation_id: string;
+  question: string;
+  requested_by_actor_id: string;
+  to_provider: Provider | null;
+  to_actor_id: string | null;
+  referral_id: string | null;
+  requested_at: string;
+  due_at: string;
+  task_id: string;
+  // open or answered
+  status: string;
+  outcome: ConsultationOutcome | null;
+  answer_note: string | null;
+  answered_by_actor_id: string | null;
+  answered_at: string | null;
+  hours_to_answer: number | null;
+};
+
+// Body of POST /api/consultations/{id}/answer.
+export type ConsultationAnswer = {
+  outcome: ConsultationOutcome;
+  note?: string;
+  owner_actor_id?: string;
+  redirect_to_provider_id?: string;
+};
+
+// GET /api/unowned
+export type UnownedRow = {
+  case_id: string;
+  patient: { display_name: string; age: number; language: string };
+  stage: string;
+  stage_label: string;
+  provider: Provider | null;
+  unowned_since: string;
+  hours_unowned: number;
+  unowned_label: string;
+  trigger: OwnershipTrigger | null;
+  previous_owner: { actor_id: string; display_name: string } | null;
+  assign_owner_task: { task_id: string; owner: Actor | null; due_at: string | null } | null;
+};
+
+export type UnownedResponse = { clock: Clock; count: number; cases: UnownedRow[] };
+
+// GET /api/ingest/unstitched. reason_code is one of no_patient_identifier,
+// no_referral_reference, unknown_referral, patient_mismatch, case_closed.
+export type UnstitchedItem = {
+  unstitched_id: string;
+  resource_type: string;
+  resource_id: string;
+  source_provider: Provider | null;
+  patient_identifier: string | null;
+  referral_id: string | null;
+  reason_code: string;
+  reason: string;
+  received_at: string;
+  recorded_at: string;
+  // queued or stitched
+  status: string;
+  stitched_case_id: string | null;
+};
+
+export type UnstitchedResponse = { count: number; items: UnstitchedItem[] };
+
+// ---- end TICKET-08 / TICKET-11 -------------------------------------------------------
+
 export type CaseDetailResponse = {
   case: {
     case_id: string;
-    patient: { display_name: string; age: number; language: string };
+    // `identifier` is what incoming FHIR resources are matched on (TICKET-08).
+    patient: { display_name: string; age: number; language: string; identifier?: string };
     stage: string;
     stage_label: string;
     owner: Actor | null;
@@ -118,8 +243,13 @@ export type CaseDetailResponse = {
     status: string;
   }[];
   outreach_attempts: OutreachAttempt[];
-  available_actions: string[];
+  available_actions: Action[];
   verification: VerificationSummary;
+  // TICKET-08 / TICKET-11
+  provider: Provider | null;
+  ownership: Ownership;
+  referrals: Referral[];
+  consultations: Consultation[];
 };
 
 export type VerificationField = {

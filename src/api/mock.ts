@@ -10,6 +10,7 @@ import {
 } from "../data";
 import { ApiError, type NexyraApi } from "./client";
 import type {
+  Action,
   Actor,
   AdvanceResult,
   CaseDetailResponse,
@@ -111,8 +112,8 @@ function passesFilter(c: Case, filter?: CaseFilter): boolean {
   return c.stage === "closure_proposed";
 }
 
-function actionsFor(stage: StageId, role: Role): string[] {
-  const actions: string[] = [];
+function actionsFor(stage: StageId, role: Role): Action[] {
+  const actions: Action[] = [];
   const closed = stage === "closed";
 
   if (!closed && (role === "coordination_staff" || role === "navigator")) {
@@ -185,6 +186,11 @@ function toDetail(c: Case, role: Role, stageOverride?: StageId): CaseDetailRespo
       status: c.evidence.length > 0 ? "ready" : "pending",
       proposal: stage === "closure_proposed" ? "propose_closure" : "needs_human_reading",
     },
+    // The fixtures carry no providers or referrals; TICKET-08 data lives in the seed.
+    provider: null,
+    ownership: { state: c.owner === null ? "unowned" : "owned", unowned_since: null, gaps: [] },
+    referrals: [],
+    consultations: [],
   };
 }
 

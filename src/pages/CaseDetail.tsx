@@ -4,10 +4,12 @@ import { Page, useRole, roleLabels } from "../components/Shell";
 import { api, ApiError } from "../api";
 import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
+// TICKET-08 / TICKET-11
+import { HandoffActions, HandoffRecords, OwnershipSection } from "../components/Handoff";
 
 export default function CaseDetail() {
   const { ref = "" } = useParams();
-  const { role, clockVersion } = useRole();
+  const { role, actor, clockVersion } = useRole();
   const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role, clockVersion]);
   const verification = useAsync(() => api.getVerification(ref, roleFor[role]), [
     ref,
@@ -37,7 +39,8 @@ export default function CaseDetail() {
     );
   }
 
-  if (detail.loading || !detail.data) {
+  // Keep the last case on screen while a write re-reads it, so the page does not blank.
+  if (!detail.data) {
     return (
       <Page>
         <p className="notice">Reading the case…</p>
@@ -62,9 +65,23 @@ export default function CaseDetail() {
           <br />
           Stage <b>{c.case.stage_label}</b>
           <br />
+          Provider <b>{c.provider?.name ?? "—"}</b>
+          <br />
           Acting as <b>{roleLabels[role]}</b>
         </div>
       </div>
+
+      <OwnershipSection detail={c} />
+
+      <HandoffActions
+        detail={c}
+        actor={actor}
+        onDone={() => {
+          detail.reload();
+          // Bring the owner state back into view: it is what each hand-over changes.
+          document.getElementById("ownership-h")?.scrollIntoView({ block: "start" });
+        }}
+      />
 
       <section className="section">
         <h2>Stage</h2>
@@ -87,6 +104,8 @@ export default function CaseDetail() {
           ))}
         </div>
       </section>
+
+      <HandoffRecords detail={c} />
 
       <section className="section">
         <h2>Evidence</h2>
