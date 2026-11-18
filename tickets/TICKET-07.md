@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 16 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-03, TICKET-04
-- **Status:** done (the command is `npm run seed:cohort`, run after `npm run demo:reset`; `npm run seed` is still the three-case demo seed). Clinical sources for the pathology mix and screening age band are still team guesses, awaiting TICKET-19.
+- **Status:** done (the command is `npm run seed:cohort`; since 18 Nov `npm run demo:reset` loads the cohort itself, see TICKET-17; `npm run seed` is still the three-case demo seed). Clinical sources for the pathology mix and screening age band are still team guesses, awaiting TICKET-19.
 
 ## Goal
 

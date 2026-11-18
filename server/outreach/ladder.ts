@@ -4,6 +4,8 @@ import { addHours, formatDue, getClock, hoursBetween } from "../clock.js";
 import type { Db } from "../db.js";
 import { applyEvent, DELAY_REASONS, outreachEventStatement, type WriteActor } from "../events.js";
 import { HttpError } from "../errors.js";
+// TICKET-17
+import { cohortFilterSql, type TickOptions } from "../cohort.js";
 import {
   LADDER,
   clinicPlace,
@@ -159,7 +161,12 @@ export async function runFacts(
         ORDER BY rowid`,
     )
     .all<FactEvent>(caseId, OUTREACH_EVENTS.acknowledged, OUTREACH_EVENTS.callback_requested);
+  return factsFrom(rows, runId, since);
+}
 
+// TICKET-17: the same reading from rows already loaded, so tick can load every case's
+// rows in one query.
+function factsFrom(rows: readonly FactEvent[], runId: string, since: string | null): RunFacts {
   const facts: RunFacts = { acknowledged: null, callback: null, barrier: null };
   for (const row of rows) {
     const payload = parse(row.payload);
@@ -281,13 +288,16 @@ export function composeMessage(
   };
 }
 
-async function openLadderTasks(db: Db, caseId: string): Promise<{ id: string; kind: string }[]> {
+type OpenTask = { id: string; kind: string };
+
+async function openLadderTasks(db: Db, caseId: string): Promise<OpenTask[]> {
   return db
     .prepare(
       `SELECT t.id, t.kind FROM tasks t JOIN outreach_steps s ON s.task_id = t.id
-        WHERE s.case_id = ? AND t.status = 'open'`,
+        WHERE s.case_id = ? AND t.status = 'open'
+        ORDER BY s.rowid`,
     )
-    .all<{ id: string; kind: string }>(caseId);
+    .all<OpenTask>(caseId);
 }
 
 // Stopping the ladder cancels the tasks it opened and says so in the timeline.
@@ -297,7 +307,16 @@ async function stopStatements(
   reason: "patient_acknowledged" | "stage_moved" | "case_closed",
   at: string,
 ): Promise<InStatement[]> {
-  const open = await openLadderTasks(db, c.id);
+  return stopStatementsFor(db, c, await openLadderTasks(db, c.id), reason, at);
+}
+
+function stopStatementsFor(
+  db: Db,
+  c: LadderCase,
+  open: readonly OpenTask[],
+  reason: "patient_acknowledged" | "stage_moved" | "case_closed",
+  at: string,
+): InStatement[] {
   if (open.length === 0) return [];
   const { statement } = outreachEventStatement(
     db,
@@ -329,40 +348,122 @@ async function stopStatements(
 
 export type LadderFiring = { case_id: string; step: Step | "stopped"; reason: string };
 
-// One case, one instant: decide which step is due and write it. At most one step fires per
-// evaluation, so a case that is days behind climbs one rung per tick, as escalation does.
-// `stopOnly` is for writes that move a case: they may stop the ladder, never climb it.
-export async function evaluateCase(
-  db: Db,
-  caseId: string,
-  now: string,
-  options: { stopOnly?: boolean } = {},
-): Promise<LadderFiring[]> {
-  const c = await loadLadderCase(db, caseId);
+// ---- TICKET-17: everything one evaluation reads, loaded for many cases at once --------
+// Deployed, every query is a round trip to Turso. tick() used to evaluate each case with
+// its own five or six queries; now it loads the rows of every candidate case in one query
+// per table, decides each case in memory with the same rules, and writes one batch.
 
+type Actors = {
+  names: Map<string, string>;
+  firstOfRole: Map<string, { id: string; display_name: string }>;
+};
+
+type LadderContext = {
+  steps: Map<string, StepRow[]>;
+  facts: Map<string, FactEvent[]>;
+  openTasks: Map<string, OpenTask[]>;
+  tokens: Map<string, string>;
+  actors: Actors;
+};
+
+// `scope` is a subquery returning case ids, with its arguments.
+type Scope = { sql: string; args: string[] };
+
+function group<T extends { case_id: string }>(rows: readonly T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = map.get(row.case_id) ?? [];
+    list.push(row);
+    map.set(row.case_id, list);
+  }
+  return map;
+}
+
+async function loadContext(db: Db, scope: Scope): Promise<LadderContext> {
+  const steps = await db
+    .prepare(
+      `SELECT case_id, id, run_id, step, fired_at, reason, task_id, event_id FROM outreach_steps
+        WHERE case_id IN (${scope.sql}) ORDER BY rowid`,
+    )
+    .all<StepRow & { case_id: string }>(...scope.args);
+  const facts = await db
+    .prepare(
+      `SELECT case_id, id, type, actor_role, occurred_at, payload FROM events
+        WHERE case_id IN (${scope.sql}) AND type IN (?, ?, 'outreach_attempted', 'task_completed')
+        ORDER BY rowid`,
+    )
+    .all<FactEvent & { case_id: string }>(
+      ...scope.args,
+      OUTREACH_EVENTS.acknowledged,
+      OUTREACH_EVENTS.callback_requested,
+    );
+  const openTasks = await db
+    .prepare(
+      `SELECT s.case_id, t.id, t.kind FROM tasks t JOIN outreach_steps s ON s.task_id = t.id
+        WHERE s.case_id IN (${scope.sql}) AND t.status = 'open'
+        ORDER BY s.rowid`,
+    )
+    .all<OpenTask & { case_id: string }>(...scope.args);
+  const tokens = await db
+    .prepare(`SELECT case_id, token FROM outreach_links WHERE case_id IN (${scope.sql})`)
+    .all<{ case_id: string; token: string }>(...scope.args);
+  const actorRows = await db
+    .prepare("SELECT id, role, display_name FROM actors ORDER BY id")
+    .all<{ id: string; role: string; display_name: string }>();
+
+  const actors: Actors = { names: new Map(), firstOfRole: new Map() };
+  for (const a of actorRows) {
+    actors.names.set(a.id, a.display_name);
+    if (!actors.firstOfRole.has(a.role)) actors.firstOfRole.set(a.role, { id: a.id, display_name: a.display_name });
+  }
+  return {
+    steps: group(steps),
+    facts: group(facts),
+    openTasks: group(openTasks),
+    tokens: new Map(tokens.map((t) => [t.case_id, t.token])),
+    actors,
+  };
+}
+
+// The call goes to the coordinator who owns the case; an unowned case or one owned by
+// another role goes to the first coordinator, so a call task never lands on nobody.
+function staffOwnerIn(actors: Actors, c: LadderCase): { id: string; display_name: string } {
+  if (c.owner_actor_id !== null && c.owner_role === "coordination_staff") {
+    return { id: c.owner_actor_id, display_name: actors.names.get(c.owner_actor_id) ?? c.owner_actor_id };
+  }
+  const fallback = actors.firstOfRole.get("coordination_staff");
+  if (!fallback) throw new HttpError(500, "validation_failed", "No coordination staff can take the call.");
+  return fallback;
+}
+
+type Decision = { statements: InStatement[]; firings: LadderFiring[] };
+const NOTHING: Decision = { statements: [], firings: [] };
+
+// One case, one instant: which step is due, as statements to write. At most one step fires
+// per evaluation, so a case that is days behind climbs one rung per tick, as escalation does.
+function decide(db: Db, ctx: LadderContext, c: LadderCase, now: string, options: { stopOnly?: boolean }): Decision {
   if (!isLadderActive(c)) {
     const reason = c.status === "closed" ? "case_closed" : "stage_moved";
-    const statements = await stopStatements(db, c, reason, now);
-    if (statements.length === 0) return [];
-    await db.batch(statements);
-    return [{ case_id: c.id, step: "stopped", reason }];
+    const statements = stopStatementsFor(db, c, ctx.openTasks.get(c.id) ?? [], reason, now);
+    return statements.length === 0 ? NOTHING : { statements, firings: [{ case_id: c.id, step: "stopped", reason }] };
   }
-  if (options.stopOnly) return [];
+  if (options.stopOnly) return NOTHING;
 
   const runId = runIdOf(c);
-  const steps = await stepsFor(db, c.id, runId);
+  const steps = (ctx.steps.get(c.id) ?? []).filter((row) => row.run_id === runId);
   const message = stepOf(steps, "message");
-  const facts = await runFacts(db, c.id, runId, message?.fired_at ?? null);
+  const facts = factsFrom(ctx.facts.get(c.id) ?? [], runId, message?.fired_at ?? null);
 
   if (facts.acknowledged) {
-    const statements = await stopStatements(db, c, "patient_acknowledged", now);
-    if (statements.length > 0) await db.batch(statements);
-    return statements.length > 0 ? [{ case_id: c.id, step: "stopped", reason: "patient_acknowledged" }] : [];
+    const statements = stopStatementsFor(db, c, ctx.openTasks.get(c.id) ?? [], "patient_acknowledged", now);
+    return statements.length === 0
+      ? NOTHING
+      : { statements, firings: [{ case_id: c.id, step: "stopped", reason: "patient_acknowledged" }] };
   }
 
   // Step 1: the automated message, once per run.
   if (!message) {
-    const token = (await tokenFor(db, c.id)) ?? randomToken();
+    const token = ctx.tokens.get(c.id) ?? randomToken();
     const composed = composeMessage(c, token, now);
     const { id: eventId, statement } = outreachEventStatement(
       db,
@@ -374,14 +475,16 @@ export async function evaluateCase(
       },
       now,
     );
-    await db.batch([
-      db
-        .prepare("INSERT OR IGNORE INTO outreach_links (token, case_id, created_at) VALUES (?, ?, ?)")
-        .bind(token, c.id, now),
-      stepStatement(db, { caseId: c.id, runId, step: "message", at: now, reason: "case_at_stage", eventId }),
-      statement,
-    ]);
-    return [{ case_id: c.id, step: "message", reason: "case_at_stage" }];
+    return {
+      statements: [
+        db
+          .prepare("INSERT OR IGNORE INTO outreach_links (token, case_id, created_at) VALUES (?, ?, ?)")
+          .bind(token, c.id, now),
+        stepStatement(db, { caseId: c.id, runId, step: "message", at: now, reason: "case_at_stage", eventId }),
+        statement,
+      ],
+      firings: [{ case_id: c.id, step: "message", reason: "case_at_stage" }],
+    };
   }
 
   const staffCall = stepOf(steps, "staff_call");
@@ -400,7 +503,7 @@ export async function evaluateCase(
       hoursBetween(firstCall.fired_at, now) >= parameterHours("navigator_after_hours");
 
     if (barrier || waited) {
-      const owner = await firstActorOfRole(db, "navigator");
+      const owner = ctx.actors.firstOfRole.get("navigator");
       if (!owner) throw new HttpError(500, "validation_failed", "No navigator can take the case.");
       const reason = barrier ? "barrier" : "no_movement";
       const taskId = newId("t");
@@ -427,12 +530,14 @@ export async function evaluateCase(
         },
         now,
       );
-      await db.batch([
-        stepStatement(db, { caseId: c.id, runId, step: "navigator", at: now, reason, taskId, eventId }),
-        taskStatement(db, { id: taskId, caseId: c.id, kind: TASK_KINDS.navigator, owner: owner.id, dueAt }),
-        statement,
-      ]);
-      return [{ case_id: c.id, step: "navigator", reason }];
+      return {
+        statements: [
+          stepStatement(db, { caseId: c.id, runId, step: "navigator", at: now, reason, taskId, eventId }),
+          taskStatement(db, { id: taskId, caseId: c.id, kind: TASK_KINDS.navigator, owner: owner.id, dueAt }),
+          statement,
+        ],
+        firings: [{ case_id: c.id, step: "navigator", reason }],
+      };
     }
   }
 
@@ -444,7 +549,7 @@ export async function evaluateCase(
     !navigator &&
     hoursBetween(message.fired_at, now) >= parameterHours("staff_call_after_hours")
   ) {
-    const owner = await staffOwnerFor(db, c);
+    const owner = staffOwnerIn(ctx.actors, c);
     const taskId = newId("t");
     const dueAt = addHours(now, parameterHours("staff_call_due_hours"));
     const { id: eventId, statement } = outreachEventStatement(
@@ -468,15 +573,45 @@ export async function evaluateCase(
       },
       now,
     );
-    await db.batch([
-      stepStatement(db, { caseId: c.id, runId, step: "staff_call", at: now, reason: "no_response", taskId, eventId }),
-      taskStatement(db, { id: taskId, caseId: c.id, kind: TASK_KINDS.staff_call, owner: owner.id, dueAt }),
-      statement,
-    ]);
-    return [{ case_id: c.id, step: "staff_call", reason: "no_response" }];
+    return {
+      statements: [
+        stepStatement(db, { caseId: c.id, runId, step: "staff_call", at: now, reason: "no_response", taskId, eventId }),
+        taskStatement(db, { id: taskId, caseId: c.id, kind: TASK_KINDS.staff_call, owner: owner.id, dueAt }),
+        statement,
+      ],
+      firings: [{ case_id: c.id, step: "staff_call", reason: "no_response" }],
+    };
   }
 
-  return [];
+  return NOTHING;
+}
+// ---- end TICKET-17 -------------------------------------------------------------------
+
+// One case: decide and write. `stopOnly` is for writes that move a case: they may stop the
+// ladder, never climb it.
+export async function evaluateCase(
+  db: Db,
+  caseId: string,
+  now: string,
+  options: { stopOnly?: boolean } = {},
+): Promise<LadderFiring[]> {
+  const c = await loadLadderCase(db, caseId);
+  let decision: Decision;
+  if (!isLadderActive(c) || options.stopOnly) {
+    // Stopping needs only the open tasks, so the write path stays at two reads.
+    const openTasks = isLadderActive(c) ? [] : await openLadderTasks(db, c.id);
+    decision = decide(
+      db,
+      { steps: new Map(), facts: new Map(), openTasks: new Map([[c.id, openTasks]]), tokens: new Map(), actors: { names: new Map(), firstOfRole: new Map() } },
+      c,
+      now,
+      options,
+    );
+  } else {
+    decision = decide(db, await loadContext(db, { sql: "SELECT ?", args: [c.id] }), c, now, options);
+  }
+  if (decision.statements.length > 0) await db.batch(decision.statements);
+  return decision.firings;
 }
 
 export type OutreachTickResult = {
@@ -488,17 +623,22 @@ export type OutreachTickResult = {
 };
 
 // Every case the ladder may act on: open cases at its stage, and any case that still has
-// an open ladder task (so the ladder can stop once the case has moved on).
-export async function tickOutreach(db: Db, now: string): Promise<OutreachTickResult> {
-  const rows = await db
+// an open ladder task (so the ladder can stop once the case has moved on). The synthetic
+// cohort is history and never climbs the ladder (server/cohort.ts).
+const candidates = (includeCohort: boolean) => `SELECT id FROM cases
+  WHERE ((status != 'closed' AND stage = ?)
+     OR id IN (SELECT s.case_id FROM outreach_steps s JOIN tasks t ON t.id = s.task_id
+                WHERE t.status = 'open'))
+    AND ${cohortFilterSql("id", includeCohort)}`;
+
+export async function tickOutreach(db: Db, now: string, options: TickOptions = {}): Promise<OutreachTickResult> {
+  const scope: Scope = { sql: candidates(options.includeCohort === true), args: [LADDER.applies_to_stage] };
+  const cases = await db
     .prepare(
-      `SELECT id FROM cases
-        WHERE (status != 'closed' AND stage = ?)
-           OR id IN (SELECT s.case_id FROM outreach_steps s JOIN tasks t ON t.id = s.task_id
-                      WHERE t.status = 'open')
-        ORDER BY id`,
+      `SELECT ${CASE_COLUMNS} FROM cases c LEFT JOIN actors a ON a.id = c.owner_actor_id
+        WHERE c.id IN (${scope.sql}) ORDER BY c.id`,
     )
-    .all<{ id: string }>(LADDER.applies_to_stage);
+    .all<LadderCase>(...scope.args);
 
   const result: OutreachTickResult = {
     messages_sent: 0,
@@ -507,22 +647,37 @@ export async function tickOutreach(db: Db, now: string): Promise<OutreachTickRes
     stopped: 0,
     per_case: [],
   };
-  for (const { id } of rows) {
-    let fired: LadderFiring[] = [];
-    try {
-      fired = await evaluateCase(db, id, now);
-    } catch (error) {
-      // The unique step key refusing a second insert means another tick got there first.
-      if (error instanceof Error && /UNIQUE/i.test(error.message)) continue;
-      throw error;
+  if (cases.length === 0) return result;
+
+  const ctx = await loadContext(db, scope);
+  const decisions = cases.map((c) => decide(db, ctx, c, now, {}));
+  const statements = decisions.flatMap((d) => d.statements);
+  let fired: LadderFiring[] = decisions.flatMap((d) => d.firings);
+
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    // The unique step key refusing an insert means another tick got there first. The batch
+    // rolled back as a whole, so fall back to one case at a time from what is stored now,
+    // skipping the cases the other tick already handled, as before.
+    if (!(error instanceof Error && /UNIQUE/i.test(error.message))) throw error;
+    fired = [];
+    for (const c of cases) {
+      try {
+        fired.push(...(await evaluateCase(db, c.id, now)));
+      } catch (inner) {
+        if (inner instanceof Error && /UNIQUE/i.test(inner.message)) continue;
+        throw inner;
+      }
     }
-    for (const firing of fired) {
-      result.per_case.push(firing);
-      if (firing.step === "message") result.messages_sent += 1;
-      if (firing.step === "staff_call") result.staff_calls += 1;
-      if (firing.step === "navigator") result.navigator_escalations += 1;
-      if (firing.step === "stopped") result.stopped += 1;
-    }
+  }
+
+  for (const firing of fired) {
+    result.per_case.push(firing);
+    if (firing.step === "message") result.messages_sent += 1;
+    if (firing.step === "staff_call") result.staff_calls += 1;
+    if (firing.step === "navigator") result.navigator_escalations += 1;
+    if (firing.step === "stopped") result.stopped += 1;
   }
   return result;
 }

@@ -54,7 +54,11 @@ export function hoursBetween(from: string, to: string): number {
 
 type ClockRow = { now: string; day: number };
 
+// Read first and insert only when the row is missing: every request reads the clock, and
+// against a remote database each statement is a round trip (TICKET-17).
 async function ensureClock(db: Db): Promise<ClockRow> {
+  const existing = await db.prepare("SELECT now, day FROM clocks WHERE id = 1").get<ClockRow>();
+  if (existing) return existing;
   await db.prepare("INSERT OR IGNORE INTO clocks (id, now, day) VALUES (1, ?, 0)").run(DEMO_START);
   const row = await db.prepare("SELECT now, day FROM clocks WHERE id = 1").get<ClockRow>();
   return row ?? { now: DEMO_START, day: 0 };
@@ -80,9 +84,20 @@ export async function embeddedClock(
 }
 
 export async function setClock(db: Db, now: string, day: number): Promise<Clock> {
-  await ensureClock(db);
-  await db.prepare("UPDATE clocks SET now = ?, day = ? WHERE id = 1").run(now, day);
-  return getClock(db);
+  // One statement whether or not the row exists yet.
+  await db
+    .prepare(
+      `INSERT INTO clocks (id, now, day) VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET now = excluded.now, day = excluded.day`,
+    )
+    .run(now, day);
+  return {
+    now,
+    is_demo: true,
+    day,
+    referral_limit_days: REFERRAL_LIMIT_DAYS,
+    label: formatClockLabel(now),
+  };
 }
 
 export async function advanceDays(db: Db, days: number): Promise<Clock> {

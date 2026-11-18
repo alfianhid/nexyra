@@ -21,7 +21,7 @@ npm install
 Run these in order. The last two keep running, so use two terminals.
 
 ```bash
-npm run demo:reset    # creates data/nexyra.sqlite and loads the three demo cases
+npm run demo:reset    # creates data/nexyra.sqlite: the three demo cases, the 1,000-case synthetic cohort, day 0 (about 6 s)
 npm run server        # API on http://localhost:3001
 npm run dev           # frontend on http://localhost:5173, proxies /api to the server
 ```

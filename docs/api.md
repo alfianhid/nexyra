@@ -101,6 +101,7 @@ Worklist rows for one role (`TICKET-09`). Query parameters:
 
 - `role` (required) — one of the four roles above.
 - `filter` (optional) — `late`, `unowned`, `awaiting_closure_confirmation`. Omitted means all tasks for that role.
+- `cohort` (optional, `TICKET-17`) — `hide` (the default) or `include`. The synthetic cohort (about 1,000 cases with ids starting `SY-`, loaded by `npm run demo:reset`) is left out of `cases` and `counts` unless the caller sends `cohort=include`; any other value is `400 validation_failed`. Any role may send it (the rows are still scoped to that role); the UI offers it to the program manager. See "The synthetic cohort" below.
 
 Ordered server-side by clinical urgency from the pathway template, then by time remaining to the stage deadline (`TICKET-09`). The client must not re-sort.
 
@@ -135,7 +136,9 @@ Ordered server-side by clinical urgency from the pathway template, then by time 
 
 `patient.age` is sent separately from `display_name` because screens print the two in different places and with different typography; folding age into the name string would make the presentation of a second value the server's problem. `display_name` is a name only.
 
-`counts` is the register's own summary, scoped to what the calling role may see. It is not the program view: a coordinator receives it on the worklist without holding `GET /api/program/summary`. `closed_this_week` appears in both because both screens print it; neither copies the other's number.
+`cohort` (`TICKET-17`) says whether the synthetic cohort is in this response and how many cohort cases exist in all (not scoped to the role), so the UI can offer to show them: `"cohort": { "included": false, "cases": 1000 }`.
+
+`counts` is the register's own summary, scoped to what the calling role may see (and to the cohort setting). It is not the program view: a coordinator receives it on the worklist without holding `GET /api/program/summary`. `closed_this_week` appears in both because both screens print it; neither copies the other's number.
 
 ### `GET /api/cases/{case_id}`
 
@@ -216,7 +219,7 @@ The two-pane closure screen (`TICKET-15`): report text plus extraction fields wi
 
 ### `GET /api/unowned`
 
-The dedicated unowned list (`TICKET-08`), one query, no client-side filtering. Every open case without an owner, longest unowned first. Each row carries `unowned_since` (the start of the open spell, so a later move does not reset it) and the trigger that caused it. No role is required; a present `X-Nexyra-Actor` header is still validated.
+The dedicated unowned list (`TICKET-08`), one query, no client-side filtering. Every open case without an owner, longest unowned first. Like `GET /api/cases`, it leaves out the synthetic cohort unless called with `?cohort=include` (`TICKET-17`); with the cohort loaded that adds about 36 rows. Each row carries `unowned_since` (the start of the open spell, so a later move does not reset it) and the trigger that caused it. No role is required; a present `X-Nexyra-Actor` header is still validated.
 
 ```json
 {
@@ -607,9 +610,52 @@ Each escalation writes three things in one transaction:
 
 A case that leaves a stage marks that stage's timers `cancelled`. A late case still prints a negative `hours_left_stage` and carries the `late` flag; the worklist prints "escalated" from that flag, never from a colour.
 
+**The synthetic cohort is not ticked (`TICKET-17`).** `tick` (and so `advance`, `tick` and `until: "next_deadline"`) acts on live cases only, never on cases whose id starts `SY-`. See "The synthetic cohort" below.
+
 ### `POST /api/clock/reset`
 
-Demo only. Sets the demo clock to day 0. `npm run demo:reset` (`TICKET-17`) calls this after reseeding. It is not exposed in the normal UI.
+Demo only. Sets the demo clock to day 0 and nothing else: the data stays. The full reset is `npm run demo:reset` or `POST /api/demo/reset`. It is not exposed in the normal UI.
+
+### `POST /api/demo/reset`
+
+`TICKET-21`. Runs the same reset as `npm run demo:reset` against the database the server uses (Turso when deployed): the three demo cases, the synthetic cohort, the demo clock on day 0. `GET` does the same, because Vercel Cron calls a route with `GET`; `vercel.json` schedules it once a day at 21:00 UTC (01:00 in Abu Dhabi).
+
+- With neither `DEMO_RESET_SECRET` nor `CRON_SECRET` set, the route does not exist: `404 not_found`, as for any unknown path.
+- Otherwise the request needs `Authorization: Bearer <secret>`, where the secret is either variable. Vercel Cron sends `Bearer $CRON_SECRET` on its own; `DEMO_RESET_SECRET` is for a reset by hand. A missing or wrong token is `401 unauthorized`.
+- Response: `{ "reset": true, "clock": { ... day 0 ... }, "cases": 1003, "cohort_cases": 1000, "events": 5257, "took_ms": 5200 }`.
+
+It takes about 5 s locally and about 7 s against a database 30 ms away, because the state is built in memory and copied in about 19 round trips. Any request that arrives during those seconds may see a partly loaded database; the cron runs at night for that reason.
+
+### The synthetic cohort
+
+`npm run demo:reset` loads, beside the three demo cases, the 1,000-case synthetic cohort from `scripts/generate/` (ids `SY-0001` to `SY-1000`, fictional, drop-off rates from `data/generator-assumptions.json`). Decided 18 Nov (`TICKET-17`):
+
+| Where | Cohort |
+|---|---|
+| `GET /api/program/summary` | included: it is what the programme view is for |
+| `GET /api/cases`, `GET /api/unowned` | hidden by default, shown with `?cohort=include` |
+| `GET /api/cases/{case_id}` and every write | as any other case |
+| `tick` / `POST /api/clock/advance` | never ticked |
+
+Why the clock leaves it alone: the cohort is generated as finished history, without the timers a running system would have written along the way. A tick over it does not show day-to-day behaviour; it replays the whole backlog at once. Measured on the first "+1 day" with the cohort ticked: 753 escalations, 120 referrals expired to unowned and 128 automated messages, against 0 to 2 escalations a day for the demo cases. The demo clock therefore drives the demo cases (and any case created through the API), and the cohort stays as it was generated, aging only in the sense that its deadlines are measured against the moving clock.
+
+### Round trips per request
+
+Deployed, every query is a round trip to Turso (about 20 to 50 ms), so the cost of a request is its number of round trips. With the cohort loaded (`npm run perf` prints these; `server/queryBudget.test.ts` keeps them):
+
+| Request | Round trips before | after | at 30 ms per trip, after |
+|---|---|---|---|
+| `GET /api/cases` | 7 | 6 | about 0.2 s |
+| `GET /api/cases/{case_id}` | 12 | 12 | about 0.4 s |
+| `GET /api/program/summary` | 9 | 7 | about 0.5 s |
+| `GET /api/unowned` | 5 | 3 | about 0.1 s |
+| `POST /api/clock/advance` (day 1) | 2,252 | 16 | about 0.6 s (before: about 68 s) |
+| `POST /api/clock/tick`, nothing due | 1,282 | 13 | about 0.5 s |
+| one tick over all 1,003 cases, cohort included (test only), day 1 / day 2 | 2,252 / 1,302 | 613 / 27 | about 21 s / 1.2 s |
+
+The "before" column is the code before 18 Nov, which ticked the cohort too; the last row runs today's code with the cohort included on purpose, to compare like with like. Its day 1 is 120 cases made unowned at once, about five round trips each; that cost is per case made unowned, not per case open.
+
+No read or tick runs a query per case any more: tick loads each table once for all cases (timers, actors, the outreach ladder's steps, events, tasks and links) and writes one batch. The one cost that still grows is a case that the tick makes unowned (one engine write with its own reads), which happens once per case.
 
 ## What the client may not do
 
