@@ -12,7 +12,8 @@
     "test": "vitest run",
     "typecheck:server": "tsc -p tsconfig.server.json",
     "demo:reset": "tsx server/reset.ts",
-    "demo:reset:remote": "tsx --env-file=.env server/reset.ts"
+    "demo:reset:remote": "tsx --env-file=.env server/reset.ts",
+    "verify:file": "tsx server/verify/cli.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

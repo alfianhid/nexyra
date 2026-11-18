@@ -255,6 +255,36 @@ Body: `{ "reason": "..." }`. Records the rejection and the divergence, which `TI
 
 Runs extraction and stores the result as an event with prompt version and model (`TICKET-13`). Returns the same shape as the `GET`. Idempotent per report: if the text hash is already cached, returns the cached result and does not call the model again. With no key and no cache, returns `proposal: "needs_human_reading"`.
 
+Requires the `X-Nexyra-Actor` header (any human role). Optional body `{ "document_id": "d_4" }`; without it the case's most recently attached `colonoscopy` or `pathology` document is read. One document is read per extraction, because `quote_offset` is an offset into that one document's text.
+
+What it writes: one `extractions` row (keyed by the sha256 of the report text) and one `extraction_completed` event with `actor_role: "system"` and a payload of `{ prompt_version, model, proposal, proposal_reason, document_id, text_hash, extraction_id, requested_by }`. Both are written only when the model actually read the report: a cache hit and an unavailable result write nothing. It never touches the case row, so no extraction result can move, propose or close a case; closure stays `POST /closure/confirm` under `TICKET-05`'s rules.
+
+The `POST` response adds two fields to the `GET` shape: `proposed_outcome` (the outcome key a `propose_closure` asks the physician to confirm, otherwise `null`) and `origin` (`model`, `cache`, `unavailable`, or `no_report`).
+
+**Fields.** Always these six, in this order. A field whose citation fails validation is `unknown` with `validated: false` and `quote: null`.
+
+| key | values |
+|---|---|
+| `complete_exam` | `yes`, `no`, `unknown` |
+| `adequate_prep` | `yes`, `no`, `unknown` |
+| `tissue_taken` | `yes`, `no`, `unknown` |
+| `pathology_available` | `yes`, `no`, `unknown` |
+| `outcome_category` | `normal`, `polyp`, `cancer`, `not_stated`, `unknown` |
+| `next_step` | `stated`, `not_stated`, `unknown` |
+
+**Citation validation** is done in code (`server/verify/quotes.ts`): a quote must appear in the report exactly, with only runs of whitespace treated as equal, and be at least 8 characters long. `quote_offset` is computed from the text; offsets sent by the model are ignored.
+
+**Proposal vocabulary.** Decided by rules in `server/verify/proposal.ts`, never by the model, and always shown as an AI proposal, never as a decision. The first rule that matches wins:
+
+| proposal | when |
+|---|---|
+| `reopen` | `complete_exam` or `adequate_prep` is `no` |
+| `wait_for_pathology` | `tissue_taken` is `yes` and `pathology_available` is `no` |
+| `needs_human_reading` | any of `complete_exam`, `adequate_prep`, `tissue_taken`, `outcome_category` (and `pathology_available` when tissue was taken) is `unknown` or `not_stated`; or the category is `cancer`; or a polyp is reported without tissue taken; or no reading exists |
+| `propose_closure` | otherwise: `normal` proposes `returned_to_routine_screening`, `polyp` proposes `surveillance_scheduled` |
+
+`cancer` never yields `propose_closure`: the outcome `oncology_accepted_therapy_started` needs evidence that oncology accepted the patient and therapy started, which a colonoscopy or pathology report does not contain.
+
 ### `POST /api/tasks/{task_id}/complete`
 
 Body: `{ "outcome": "connected", "delay_reason": "fear" }`. `delay_reason` is one of `fear`, `transport`, `cost`, `language`, `other` (`TICKET-10`). Free text is not stored as a reason; it goes in the event payload only.

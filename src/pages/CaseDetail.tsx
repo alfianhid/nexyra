@@ -104,9 +104,13 @@ export default function CaseDetail() {
                 <dt>{e.key}</dt>
                 <dd>
                   <span className="value">{e.value}</span>
-                  <blockquote>{e.quote}</blockquote>
+                  {e.validated ? (
+                    <blockquote>{e.quote}</blockquote>
+                  ) : (
+                    <p className="note">Not found in the report</p>
+                  )}
                   <div className="provenance">
-                    <span>offset {e.quote_offset[0]}</span>
+                    {e.validated && <span>offset {e.quote_offset[0]}</span>}
                     <span>{e.source}</span>
                     <span>read {e.read_at}</span>
                   </div>

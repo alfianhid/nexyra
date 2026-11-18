@@ -4,6 +4,16 @@ import { Page, useRole } from "../components/Shell";
 import { api, ApiError } from "../api";
 import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
+import type { Proposal } from "../api/types";
+
+// The AI's proposal in words. It is printed as a proposal, never as a decision: the
+// decision is the clinician's, below.
+const PROPOSAL_LABEL: Record<Proposal, string> = {
+  reopen: "Reopen the case",
+  wait_for_pathology: "Wait for pathology",
+  needs_human_reading: "Needs a human reading",
+  propose_closure: "Propose closure",
+};
 
 export default function Closure() {
   const { ref = "" } = useParams();
@@ -56,7 +66,12 @@ export default function Closure() {
   // The gate is the server's answer, not the picker's value: available_actions is computed
   // by the engine from the caller's role and the case state (docs/api.md).
   const isPhysician = c.available_actions.includes("confirm_closure");
-  const citations = fields.length;
+  // Only a citation the server validated against the report text counts as evidence.
+  const citations = fields.filter((f) => f.validated).length;
+  const extraction = verification.data?.extraction;
+  const proposalLabel = extraction
+    ? (PROPOSAL_LABEL[extraction.proposal] ?? extraction.proposal)
+    : "Not read yet";
 
   async function confirm() {
     if (!isPhysician) return;
@@ -108,6 +123,11 @@ export default function Closure() {
           The engine proposes one outcome. It never closes a case: the confirmation below is a
           clinician's act, recorded with their name in the audit trail.
         </p>
+        <p className="notice" data-proposal={extraction?.proposal ?? "none"}>
+          <strong>AI proposal, not a decision: {proposalLabel}</strong>
+          {extraction?.proposal_reason}
+          {extraction?.model ? ` · read by ${extraction.model}, prompt ${extraction.prompt_version}` : ""}
+        </p>
         <div className="field">
           <label htmlFor="outcome">Proposed outcome</label>
           <select
@@ -124,21 +144,26 @@ export default function Closure() {
           </select>
         </div>
 
-        {citations === 0 ? (
+        {citations === 0 && (
           <p className="notice alarm">
             <strong>No citation on this proposal</strong>
             Closing is blocked until a report has been read and its evidence attached.
           </p>
-        ) : (
+        )}
+        {fields.length > 0 && (
           <dl className="evidence">
             {fields.map((e) => (
               <div key={e.key}>
                 <dt>{e.key}</dt>
                 <dd>
                   <span className="value">{e.value}</span>
-                  <blockquote>{e.quote}</blockquote>
+                  {e.validated ? (
+                    <blockquote>{e.quote}</blockquote>
+                  ) : (
+                    <p className="note">Not found in the report</p>
+                  )}
                   <div className="provenance">
-                    <span>offset {e.quote_offset[0]}</span>
+                    {e.validated && <span>offset {e.quote_offset[0]}</span>}
                     <span>{e.source}</span>
                   </div>
                 </dd>

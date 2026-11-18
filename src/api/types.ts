@@ -69,9 +69,17 @@ export type TimelineEvent = {
   payload: Record<string, unknown>;
 };
 
+// TICKET-13 proposal vocabulary. Decided by rules in server/verify/proposal.ts, never by
+// the model, and always shown as an AI proposal, never as a decision.
+export type Proposal =
+  | "reopen"
+  | "wait_for_pathology"
+  | "needs_human_reading"
+  | "propose_closure";
+
 export type VerificationSummary = {
   status: string;
-  proposal: string;
+  proposal: Proposal;
 };
 
 export type OutcomeOption = {
@@ -130,8 +138,10 @@ export type Verification = {
     prompt_version: string;
     model: string;
     fields: VerificationField[];
-    proposal: string;
+    proposal: Proposal;
     proposal_reason: string;
+    // POST only (docs/api.md): the outcome a propose_closure asks the physician to confirm.
+    proposed_outcome?: string | null;
   };
 };
 
