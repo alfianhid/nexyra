@@ -6,6 +6,7 @@ import { databaseLabel, getDb } from "./db.js";
 import { advanceClock, tick } from "./escalation.js";
 import { applyEvent, completeTask, confirmCaseClosure, logOutreach, reopenCase } from "./events.js";
 import { HttpError, sendError } from "./errors.js";
+import { runCaseVerification } from "./verify/caseVerification.js";
 
 // Reads and writes both lean on server/engine.ts for the rules. The handlers here parse
 // input, call the engine, and return the case view: no permission check lives in a route.
@@ -187,6 +188,26 @@ app.post(
       ownerActorId: typeof body.owner_actor_id === "string" ? body.owner_actor_id : undefined,
     });
     await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
+
+// TICKET-13: read the case report (or return its cached reading). The handler only
+// records the reading; it never moves the case, so an AI result cannot close one.
+app.post(
+  "/api/cases/:case_id/verification",
+  actorMiddleware(),
+  handle(async (req, res) => {
+    const actor = actorOf(res);
+    const body = (req.body ?? {}) as { document_id?: unknown };
+    if (body.document_id !== undefined && typeof body.document_id !== "string") {
+      throw new HttpError(400, "validation_failed", "document_id must be a string.");
+    }
+    res.json(
+      await runCaseVerification(await getDb(), param(req, "case_id"), {
+        actor,
+        ...(typeof body.document_id === "string" ? { documentId: body.document_id } : {}),
+      }),
+    );
   }),
 );
 
