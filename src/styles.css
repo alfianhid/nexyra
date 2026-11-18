@@ -618,10 +618,10 @@ main {
   max-width: 68ch;
 }
 
-/* stage strip: fixed scale, seven stages */
+/* stage strip: fixed scale, one column per stage in the pathway template */
 .strip {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(var(--stages, 7), minmax(0, 1fr));
   border: 1px solid var(--rule);
   border-right: 0;
 }

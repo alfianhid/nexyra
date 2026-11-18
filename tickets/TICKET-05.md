@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 15 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-03, TICKET-04
-- **Status:** not started
+- **Status:** done-when met 18 Nov. Named tests in `server/caseEngine.test.ts` (prefixed `TICKET-05:`), plus `server/engine.test.ts` and the endpoint tests in `server/writes.test.ts`. A rejected referral leaves the case explicitly unowned (TICKET-08 trigger 1) rather than handing it back automatically; assigning the new owner is its own `owner_assigned` event. Creating the assign-owner task on that trigger belongs to TICKET-08.
 
 ## Goal
 
@@ -26,12 +26,12 @@ Timers and escalation (TICKET-06), report extraction (TICKET-13), UI.
 
 ## Done when
 
-- [ ] Test: a case runs from `result_received` to `closed` through a valid sequence of events
-- [ ] Test: transitions that skip stages are rejected
-- [ ] Test: closure is rejected if any one of the three conditions is unmet
-- [ ] Test: closure by the `system` role or coordination staff is rejected
-- [ ] Test: an incomplete colonoscopy reopens the case and assigns an owner
-- [ ] Test: there is no state where an open case has no owner, except the explicit `unowned` status (TICKET-08)
+- [x] Test: a case runs from `result_received` to `closed` through a valid sequence of events
+- [x] Test: transitions that skip stages are rejected
+- [x] Test: closure is rejected if any one of the three conditions is unmet
+- [x] Test: closure by the `system` role or coordination staff is rejected
+- [x] Test: an incomplete colonoscopy reopens the case and assigns an owner
+- [x] Test: there is no state where an open case has no owner, except the explicit `unowned` status (TICKET-08)
 
 ## Notes
 

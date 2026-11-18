@@ -4,16 +4,25 @@ import type { Actor } from "./actor.js";
 import { getClock } from "./clock.js";
 import type { Db } from "./db.js";
 import {
+  CLOSURE_CONFIRMATION_EVENT,
+  INITIAL_STAGE,
   OUTCOMES,
+  PATHWAY,
+  REOPEN_EVENT,
+  ReplayError,
   availableActions,
   confirmClosure,
+  eventDefinition,
+  foldEvents,
   isValidOutcome,
-  ownerAfter,
+  nextState,
   rolesForEvent,
+  stageDefinition,
   transitionFor,
+  type CaseState,
   type EngineCase,
+  type RecordedEvent,
   type Role,
-  type StageKey,
 } from "./engine.js";
 import { HttpError } from "./errors.js";
 
@@ -51,9 +60,9 @@ export async function loadEngineCase(db: Db, caseId: string): Promise<EngineCase
   const confirmed = await db
     .prepare(
       `SELECT count(*) AS n FROM events
-        WHERE case_id = ? AND type = 'closure_confirmed' AND actor_role = 'responsible_physician'`,
+        WHERE case_id = ? AND type = ? AND actor_role = 'responsible_physician'`,
     )
-    .get<{ n: number }>(caseId);
+    .get<{ n: number }>(caseId, CLOSURE_CONFIRMATION_EVENT);
 
   return {
     stage: row.stage,
@@ -115,9 +124,26 @@ async function assertOwnerExists(db: Db, ownerId: string): Promise<void> {
   if (!row) throw new HttpError(400, "validation_failed", `No actor carries the id "${ownerId}".`);
 }
 
-// `applyEvent` from TICKET-05: validate against the pathway, record the event, then move
-// the case. The case columns are a cache of the timeline, so the event is written first
-// and all three writes commit together in one batch.
+function caseStateOf(row: CaseStateRow): CaseState {
+  return {
+    stage: row.stage,
+    status: row.status === "closed" ? "closed" : "open",
+    owner_actor_id: row.owner_actor_id,
+    final_outcome: row.final_outcome,
+    stage_entered_at: row.stage_entered_at,
+  };
+}
+
+function replayHttpError(error: ReplayError): HttpError {
+  const status = error.code === "role_not_permitted" ? 403 : error.code === "invalid_transition" ? 409 : 400;
+  return new HttpError(status, error.code, error.message);
+}
+
+// `applyEvent` from TICKET-05: validate against the pathway template, record the event,
+// then move the case. The case columns are a cache of the timeline: the next row is
+// computed by the same `nextState` step that `rebuildCase` replays, from the event as
+// it will be stored, so a write and a rebuild cannot disagree. The event and the case
+// update commit together in one batch.
 export async function applyEvent(
   db: Db,
   input: {
@@ -125,23 +151,27 @@ export async function applyEvent(
     type: string;
     actor: WriteActor;
     payload?: Record<string, unknown>;
-    // Optional owner when the transition needs one (reopen). Defaults to the actor.
+    // Owner to assign when the event assigns one (reopen, an incomplete procedure on an
+    // unowned case, owner_assigned). Defaults to payload.owner_actor_id, then the actor.
     ownerActorId?: string;
     // The outcome a closure screen chose but which is not on the case row yet.
     judgedOutcome?: unknown;
     // Set only by the closure endpoint: the physician's confirmation is the act that
-    // finalises the case, so it enters `closed` rather than stopping at `closure_confirmed`.
-    finalStage?: StageKey;
+    // finalises the case, so it enters the terminal stage in one event.
+    finalise?: boolean;
   },
 ): Promise<{ recorded: string; caseId: string }> {
   const actor = input.actor;
-  const payload = input.payload ?? {};
+  // `finalises` is the engine's own marker; a client cannot set it through the events
+  // endpoint and skip the explicit closure step.
+  const { finalises: _ignored, ...clientPayload } = input.payload ?? {};
+  void _ignored;
   const caseRow = await loadCase(db, input.caseId);
   const engineCase = await loadEngineCase(db, input.caseId);
 
   // Closure is checked before the transition table: the three conditions are a stricter
   // test than "is this the next stage", and the 409 must carry the details.
-  if (input.type === "closure_confirmed") {
+  if (input.type === CLOSURE_CONFIRMATION_EVENT) {
     const judged: EngineCase =
       isValidOutcome(input.judgedOutcome)
         ? { ...engineCase, final_outcome: input.judgedOutcome }
@@ -161,7 +191,7 @@ export async function applyEvent(
   if (allowedRoles === null) {
     throw new HttpError(400, "validation_failed", `"${input.type}" is not a case event.`);
   }
-  if (!allowedRoles.includes(actor.role as Role)) {
+  if (!allowedRoles.includes(actor.role)) {
     throw new HttpError(
       403,
       "role_not_permitted",
@@ -178,32 +208,58 @@ export async function applyEvent(
     );
   }
 
-  if (transition.activates_owner && caseRow.owner_actor_id === null) {
-    const requested = input.ownerActorId ?? (actor.role === "system" ? null : actor.actor_id);
+  // Who owns the case after this event, written into the payload so the timeline alone
+  // can say it (rebuildCase reads it back).
+  const definition = eventDefinition(input.type);
+  const payload: Record<string, unknown> = { ...clientPayload };
+  const assigns =
+    definition?.owner === "assign" ||
+    (definition?.owner === "assign_if_unowned" && caseRow.owner_actor_id === null);
+  if (assigns) {
+    const fromPayload =
+      typeof clientPayload.owner_actor_id === "string" ? clientPayload.owner_actor_id : undefined;
+    const requested =
+      input.ownerActorId ?? fromPayload ?? (actor.role === "system" ? null : actor.actor_id);
     if (requested === null) {
       throw new HttpError(
         400,
         "validation_failed",
-        "Reopening a case requires an owner_actor_id when the engine acts.",
+        `"${input.type}" requires an owner_actor_id when the engine acts.`,
       );
     }
     await assertOwnerExists(db, requested);
+    payload.owner_actor_id = requested;
+    if (caseRow.owner_actor_id !== null && caseRow.owner_actor_id !== requested) {
+      payload.previous_owner_actor_id = caseRow.owner_actor_id;
+    }
+  } else {
+    delete payload.owner_actor_id;
   }
+  if (input.finalise === true) payload.finalises = true;
 
   const now = (await getClock(db)).now;
+  const recordedEvent: RecordedEvent = {
+    type: input.type,
+    actor_id: actor.actor_id,
+    actor_role: actor.role,
+    occurred_at: now,
+    payload,
+  };
+
+  let next: CaseState | null;
+  try {
+    next = nextState(caseStateOf(caseRow), recordedEvent);
+  } catch (error) {
+    if (error instanceof ReplayError) throw replayHttpError(error);
+    throw error;
+  }
+  if (next === null) throw new HttpError(409, "invalid_transition", "The case has no state.");
+
   const { id, statement } = eventStatement(
     db,
     { caseId: input.caseId, type: input.type, actor, payload },
     now,
   );
-
-  const nextOwner = ownerAfter(engineCase, input.type, input.ownerActorId ?? actor.actor_id);
-  const target = input.finalStage ?? transition.to;
-  const finalOutcome =
-    typeof payload.outcome === "string" && isValidOutcome(payload.outcome)
-      ? payload.outcome
-      : caseRow.final_outcome;
-  const closed = target === "closed";
 
   await db.batch([
     statement,
@@ -215,25 +271,179 @@ export async function applyEvent(
           WHERE id = ?`,
       )
       .bind(
-        target,
-        closed ? "closed" : "open",
-        nextOwner,
-        finalOutcome,
-        now,
+        next.stage,
+        next.status,
+        next.owner_actor_id,
+        next.final_outcome,
+        next.stage_entered_at,
         new Date().toISOString(),
         input.caseId,
       ),
     // TICKET-06: a timer belongs to the stage that created it. Leaving the stage stops it,
     // so a case that moves before its deadline is never escalated for the stage it left.
-    db
-      .prepare(
-        `UPDATE timers SET status = 'cancelled'
-          WHERE case_id = ? AND stage = ? AND status = 'fired'`,
-      )
-      .bind(input.caseId, caseRow.stage),
+    ...(next.stage !== caseRow.stage
+      ? [
+          db
+            .prepare(
+              `UPDATE timers SET status = 'cancelled'
+                WHERE case_id = ? AND stage = ? AND status = 'fired'`,
+            )
+            .bind(input.caseId, caseRow.stage),
+        ]
+      : []),
   ]);
 
   return { recorded: id, caseId: input.caseId };
+}
+
+// TICKET-05: a case is created from a positive FIT result with the initial owner the
+// template names (the first actor holding the initial stage's owner_role) unless the
+// caller names one. The row and its creation event commit together.
+export async function createCase(
+  db: Db,
+  input: {
+    caseId: string;
+    patient: { name: string; age: number; language: string };
+    actor: WriteActor;
+    ownerActorId?: string;
+    payload?: Record<string, unknown>;
+  },
+): Promise<{ recorded: string; caseId: string }> {
+  const existing = await db.prepare("SELECT id FROM cases WHERE id = ?").get(input.caseId);
+  if (existing) throw new HttpError(409, "invalid_transition", `Case ${input.caseId} already exists.`);
+
+  let owner = input.ownerActorId ?? null;
+  if (owner === null) {
+    const role = stageDefinition(INITIAL_STAGE)?.owner_role;
+    const row = await db
+      .prepare("SELECT id FROM actors WHERE role = ? ORDER BY id LIMIT 1")
+      .get<{ id: string }>(role ?? "");
+    owner = row?.id ?? null;
+  }
+  if (owner === null) {
+    throw new HttpError(400, "validation_failed", "No actor can own the new case.");
+  }
+  await assertOwnerExists(db, owner);
+
+  const now = (await getClock(db)).now;
+  const payload = { ...(input.payload ?? {}), owner_actor_id: owner };
+  let state: CaseState | null;
+  try {
+    state = nextState(null, {
+      type: PATHWAY.trigger.event,
+      actor_id: input.actor.actor_id,
+      actor_role: input.actor.role,
+      occurred_at: now,
+      payload,
+    });
+  } catch (error) {
+    if (error instanceof ReplayError) throw replayHttpError(error);
+    throw error;
+  }
+  if (state === null) throw new HttpError(500, "validation_failed", "Case creation produced no state.");
+
+  const { id, statement } = eventStatement(
+    db,
+    { caseId: input.caseId, type: PATHWAY.trigger.event, actor: input.actor, payload },
+    now,
+  );
+  const createdAt = new Date().toISOString();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO cases (
+           id, patient_name, patient_age, patient_language, pathway_id,
+           owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        input.caseId,
+        input.patient.name,
+        input.patient.age,
+        input.patient.language,
+        PATHWAY.id,
+        state.owner_actor_id,
+        state.stage,
+        state.status,
+        state.final_outcome,
+        state.stage_entered_at,
+        now,
+        createdAt,
+      ),
+    statement,
+  ]);
+  return { recorded: id, caseId: input.caseId };
+}
+
+type StoredEventRow = {
+  type: string;
+  actor_id: string;
+  actor_role: string;
+  occurred_at: string;
+  payload: string;
+};
+
+function parseStoredPayload(json: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+// TICKET-03: the case row's status columns are a cache. This recomputes them from the
+// events table alone, in the order the engine recorded them (rowid), with the same step
+// function every write uses, and stores the result.
+export async function computeCaseState(db: Db, caseId: string): Promise<CaseState> {
+  const rows = await db
+    .prepare(
+      `SELECT type, actor_id, actor_role, occurred_at, payload
+         FROM events WHERE case_id = ? ORDER BY rowid`,
+    )
+    .all<StoredEventRow>(caseId);
+
+  let state: CaseState | null;
+  try {
+    state = foldEvents(
+      rows.map((row) => ({
+        type: row.type,
+        actor_id: row.actor_id,
+        actor_role: row.actor_role,
+        occurred_at: row.occurred_at,
+        payload: parseStoredPayload(row.payload),
+      })),
+    );
+  } catch (error) {
+    if (error instanceof ReplayError) {
+      throw new Error(`Case ${caseId} cannot be rebuilt from its events: ${error.message}`);
+    }
+    throw error;
+  }
+  if (state === null) {
+    throw new Error(`Case ${caseId} cannot be rebuilt: it has no case creation event.`);
+  }
+  return state;
+}
+
+export async function rebuildCase(db: Db, caseId: string): Promise<CaseState> {
+  await loadCase(db, caseId);
+  const state = await computeCaseState(db, caseId);
+  await db
+    .prepare(
+      `UPDATE cases
+          SET stage = ?, status = ?, owner_actor_id = ?, final_outcome = ?, stage_entered_at = ?
+        WHERE id = ?`,
+    )
+    .run(
+      state.stage,
+      state.status,
+      state.owner_actor_id,
+      state.final_outcome,
+      state.stage_entered_at,
+      caseId,
+    );
+  return state;
 }
 
 // Closure confirmation is its own write: it records the physician's act, then moves the
@@ -242,6 +452,9 @@ export async function confirmCaseClosure(
   db: Db,
   input: { caseId: string; actor: WriteActor; finalOutcome?: unknown },
 ) {
+  if (CLOSURE_CONFIRMATION_EVENT === null) {
+    throw new HttpError(409, "invalid_transition", "This pathway has no closure confirmation.");
+  }
   const engineCase = await loadEngineCase(db, input.caseId);
 
   // An outcome chosen on the closure screen is recorded with the confirmation; without
@@ -272,11 +485,11 @@ export async function confirmCaseClosure(
 
   return applyEvent(db, {
     caseId: input.caseId,
-    type: "closure_confirmed",
+    type: CLOSURE_CONFIRMATION_EVENT,
     actor: input.actor,
     payload: outcome !== undefined ? { outcome } : {},
     judgedOutcome: outcome,
-    finalStage: "closed",
+    finalise: true,
   });
 }
 
@@ -284,9 +497,12 @@ export function reopenCase(
   db: Db,
   input: { caseId: string; actor: WriteActor; ownerActorId?: string },
 ) {
+  if (REOPEN_EVENT === null) {
+    throw new HttpError(409, "invalid_transition", "This pathway has no reopen event.");
+  }
   return applyEvent(db, {
     caseId: input.caseId,
-    type: "reopened",
+    type: REOPEN_EVENT,
     actor: input.actor,
     ownerActorId: input.ownerActorId,
     payload: { summary: "Case reopened after clinician review" },

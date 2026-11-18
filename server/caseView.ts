@@ -1,14 +1,19 @@
 import type { Actor } from "./actor.js";
-import { REFERRAL_LIMIT_DAYS, addHours, embeddedClock, formatDue, hoursBetween } from "./clock.js";
+import { addHours, embeddedClock, formatDue, hoursBetween } from "./clock.js";
 import type { Db } from "./db.js";
 import {
+  CLOSURE_CONFIRMATION_EVENT,
   OUTCOMES,
+  REPORTED_LIMIT,
   STAGES,
   availableActions,
+  isAwaitingClosure,
   isClosed,
+  nextState,
   stageDefinition,
   stageLabel,
   stageOrder,
+  type CaseState,
   type EngineCase,
   type Role,
 } from "./engine.js";
@@ -114,9 +119,9 @@ async function physicianConfirmed(db: Db, caseId: string): Promise<boolean> {
   const row = await db
     .prepare(
       `SELECT count(*) AS n FROM events
-        WHERE case_id = ? AND type = 'closure_confirmed' AND actor_role = 'responsible_physician'`,
+        WHERE case_id = ? AND type = ? AND actor_role = 'responsible_physician'`,
     )
-    .get<{ n: number }>(caseId);
+    .get<{ n: number }>(caseId, CLOSURE_CONFIRMATION_EVENT);
   return (row?.n ?? 0) > 0;
 }
 
@@ -201,7 +206,7 @@ function passesFilter(
   if (!filter) return true;
   if (filter === "late") return hoursLeft !== null && hoursLeft < 0;
   if (filter === "unowned") return row.owner_actor_id === null && !isClosed(toClosedShape(row));
-  return row.stage === "closure_proposed" && !isClosed(toClosedShape(row));
+  return isAwaitingClosure(row.stage) && !isClosed(toClosedShape(row));
 }
 
 function taskRows(db: Db): Promise<TaskRow[]> {
@@ -226,6 +231,62 @@ function taskRolesByCase(tasks: TaskRow[]): Map<string, Set<string>> {
   return map;
 }
 
+// The template's reported limit (referral to colonoscopy, 31 days, in the FIT pathway).
+// The limit starts when the case first entered its start stage and stops when it first
+// reached its end stage; both instants come from replaying the timeline with the
+// engine's own step, so they cannot disagree with the stage history. Before the start
+// stage the count runs from the result, which is never more lenient than the limit.
+type LimitSpan = { start: string | null; end: string | null };
+
+async function limitSpans(db: Db): Promise<Map<string, LimitSpan>> {
+  const spans = new Map<string, LimitSpan>();
+  const limit = REPORTED_LIMIT;
+  if (!limit) return spans;
+
+  const rows = await db
+    .prepare(
+      `SELECT case_id, id, type, actor_id, actor_role, occurred_at, recorded_at, payload,
+              NULL AS actor_name
+         FROM events ORDER BY rowid`,
+    )
+    .all<EventRow & { case_id: string }>();
+
+  const byCase = new Map<string, (EventRow & { case_id: string })[]>();
+  for (const row of rows) {
+    const list = byCase.get(row.case_id) ?? [];
+    list.push(row);
+    byCase.set(row.case_id, list);
+  }
+
+  for (const [caseId, events] of byCase) {
+    const span: LimitSpan = { start: null, end: null };
+    let state: CaseState | null = null;
+    try {
+      for (const event of events) {
+        state = nextState(state, { ...event, payload: parsePayload(event.payload) });
+        if (!state) continue;
+        if (span.start === null && state.stage === limit.from_stage) span.start = state.stage_entered_at;
+        if (span.start !== null && span.end === null && state.stage === limit.to_stage) {
+          span.end = state.stage_entered_at;
+        }
+      }
+    } catch {
+      // A history the engine cannot replay (a test fixture written straight into the
+      // table) falls back to counting from the result.
+    }
+    spans.set(caseId, span);
+  }
+  return spans;
+}
+
+function daysLeftOnLimit(row: CaseRow, span: LimitSpan | undefined, now: string): number {
+  const limit = REPORTED_LIMIT;
+  if (!limit) return 0;
+  const start = span?.start ?? row.created_at;
+  const end = span?.end ?? now;
+  return Math.round(limit.max_days - hoursBetween(start, end) / 24);
+}
+
 export async function listCases(
   db: Db,
   role: Role,
@@ -234,6 +295,7 @@ export async function listCases(
 ) {
   const rows = await caseRows(db);
   const rolesByCase = taskRolesByCase(await taskRows(db));
+  const spans = await limitSpans(db);
 
   const visible = rows
     .filter((row) => visibleToRole(row, rolesByCase.get(row.id) ?? new Set(), role))
@@ -263,9 +325,7 @@ export async function listCases(
     owner: ownerOf(row),
     hours_left_stage: hoursLeft,
     days_left_stage: hoursLeft === null ? 0 : Math.round(hoursLeft / 24),
-    days_left_referral_limit: Math.round(
-      REFERRAL_LIMIT_DAYS - hoursBetween(row.created_at, now) / 24,
-    ),
+    days_left_referral_limit: daysLeftOnLimit(row, spans.get(row.id), now),
     flags: flagsFor(row, hoursLeft),
     flags_renderable: renderableFor(row, hoursLeft),
   }));
@@ -277,7 +337,7 @@ export async function listCases(
       open: open.length,
       unowned: open.filter(({ row }) => row.owner_actor_id === null).length,
       past_deadline: open.filter(({ hoursLeft }) => hoursLeft !== null && hoursLeft < 0).length,
-      awaiting_clinician: open.filter(({ row }) => row.stage === "closure_proposed").length,
+      awaiting_clinician: open.filter(({ row }) => isAwaitingClosure(row.stage)).length,
       closed_this_week: visible.length - open.length,
     },
     cases,

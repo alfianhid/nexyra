@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 15 Nov · **Estimate:** 2 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-02
-- **Status:** not started
+- **Status:** done 18 Nov. Template at `server/pathways/fit-colonoscopy.json` (the server lives in `server/`, not `src/engine`), loader and validation in `server/pathways/index.ts`, printout `npm run pathway:deadlines`. Stage keys follow `docs/api.md` (`result_received`, `patient_notified`, `referral_sent`, `referral_accepted`, `colonoscopy_booked`, `procedure_completed`, `pathology_ordered`, `pathology_received`, `closure_proposed`, `closure_confirmed`, `closed`) rather than the list in Scope, because the frontend, seed and tests already use them. Deadline values await TICKET-19.
 
 ## Goal
 
@@ -25,9 +25,9 @@ A second pathway (TICKET-18). Clinical logic beyond what is written in the brief
 
 ## Done when
 
-- [ ] The template passes schema validation, and a broken template makes the application fail to start with a clear message
-- [ ] No FIT pathway stage names or deadline numbers are written directly in `src/engine`
-- [ ] The deadline list with its sources can be printed with a single command, to bring to clinical review (TICKET-19)
+- [x] The template passes schema validation, and a broken template makes the application fail to start with a clear message (`server/pathway.test.ts`)
+- [x] No FIT pathway stage names or deadline numbers are written directly in `src/engine` (`server/engine.ts`; a test reads its source)
+- [x] The deadline list with its sources can be printed with a single command, to bring to clinical review (TICKET-19): `npm run pathway:deadlines`
 
 ## Notes
 

@@ -2,27 +2,26 @@ import type { InStatement } from "@libsql/client";
 import { randomUUID } from "node:crypto";
 import { addHours, advanceDays, getClock, hoursBetween, setClock, type Clock } from "./clock.js";
 import { type Db } from "./db.js";
-import { stageDefinition, type Role } from "./engine.js";
+import { PATHWAY, stageDefinition, type Role } from "./engine.js";
 
 // TICKET-06: a case that passes its stage deadline escalates on its own, without anyone
 // pressing a button. The escalation lives in three tables that already exist: an event
 // (the audit line), a task (the work the next role now has) and a timer row (the proof
 // that this level fired, which is what makes tick idempotent).
 
-export type EscalationLevel = 1 | 2 | 3;
+// Level n alerts the n-th role in the stage's `escalation` ladder, read from the pathway
+// template (TICKET-04); the ladder's length is the top level. In the FIT template every
+// open stage escalates responsible physician -> program manager -> program manager.
+export type EscalationLevel = number;
 
-// coordination staff -> responsible physician -> program manager. Level 1 is the first
-// miss; 2 and 3 repeat the alert one rung up rather than inventing a new owner.
-export const ESCALATION_ROLES: Record<EscalationLevel, Role> = {
-  1: "responsible_physician",
-  2: "program_manager",
-  3: "program_manager",
-};
+export function escalationLadder(stage: string): readonly Role[] {
+  return stageDefinition(stage)?.escalation ?? [];
+}
 
 // A level may fire at most once per case per stage, and only after the previous level
-// has had a day to be seen. That spacing is what makes "advance 1 day" produce one new
-// escalation, not three at once, and it is deliberately demo-clock hours.
-export const ESCALATION_SPACING_HOURS = 24;
+// has had time to be seen (the template's escalation_spacing_hours, demo-clock hours).
+// That spacing is what makes "advance 1 day" produce one new escalation, not three.
+export const ESCALATION_SPACING_HOURS = PATHWAY.escalation_spacing_hours;
 
 type OpenCaseRow = {
   id: string;
@@ -72,7 +71,7 @@ async function openCases(db: Db): Promise<OpenCaseRow[]> {
     .prepare(
       `SELECT id, stage, status, stage_entered_at, created_at
          FROM cases
-        WHERE status != 'closed' AND stage != 'closed'`,
+        WHERE status != 'closed'`,
     )
     .all<OpenCaseRow>();
 }
@@ -95,12 +94,14 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
     if (deadline === null) continue;
     if (hoursBetween(deadline, at) < 0) continue; // not late yet
 
+    const ladder = escalationLadder(row.stage);
     const last = await lastFired(db, row.id, row.stage, deadline);
-    const level = Math.min((last?.level ?? 0) + 1, 3) as EscalationLevel;
-    if (last && last.level >= 3) continue; // the ladder is exhausted
+    if (last && last.level >= ladder.length) continue; // the ladder is exhausted
     if (last && hoursBetween(last.fired_at, at) < ESCALATION_SPACING_HOURS) continue;
+    const level: EscalationLevel = (last?.level ?? 0) + 1;
 
-    const role = ESCALATION_ROLES[level];
+    const role = ladder[level - 1];
+    if (!role) continue;
     if (!owners.has(role)) owners.set(role, await actorOfRole(db, role));
     const overHours = Math.round(hoursBetween(deadline, at));
 

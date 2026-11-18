@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Page, useRole, roleLabels } from "../components/Shell";
 import { api, ApiError } from "../api";
@@ -68,10 +69,10 @@ export default function CaseDetail() {
       <section className="section">
         <h2>Stage</h2>
         <p className="note">
-          One case read across all seven stages at the same scale, so two cases compare without
-          opening anything.
+          One case read across every stage of its pathway at the same scale, so two cases compare
+          without opening anything.
         </p>
-        <div className="strip">
+        <div className="strip" style={{ "--stages": c.stages.length } as CSSProperties}>
           {c.stages.map((s, i) => (
             <div
               key={s.key}

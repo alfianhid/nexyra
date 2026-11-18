@@ -136,8 +136,10 @@ describe("POST /api/clock/advance", () => {
     await resetDemo();
     const { body } = await call("POST", "/api/clock/advance", { until: "next_deadline" });
     expect(body.clock.day).toBeGreaterThan(0);
-    // The next deadline ahead of day 0 is CX-1001's 22 Nov 09:12 stage deadline.
-    expect(body.clock.now).toBe("2026-11-22T09:12:00+07:00");
+    // The next deadline ahead of day 0 is CX-1002's: back at patient_notified since the
+    // referral was rejected on 16 Nov 15:40, with the template's 72-hour deadline. (Before
+    // the referral stages existed it was CX-1001's 22 Nov 09:12.)
+    expect(body.clock.now).toBe("2026-11-19T15:40:00+07:00");
     expect(body.escalations).toBeGreaterThanOrEqual(1);
   });
 
