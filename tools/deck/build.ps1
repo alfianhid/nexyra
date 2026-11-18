@@ -46,17 +46,17 @@ $BOT = 395
 # ---------------- Slide 1 ----------------
 $sh = (S 1).Shapes.Item('Google Shape;56;p13')
 Set-Paras $sh @(
-  'P|Team Name: Itmam / Nexyra [TEAM TO CONFIRM]',
-  'P|Team Size: [TEAM TO FILL]',
+  'P|Team Name: Nexyra',
+  'P|Team Size: 2',
   'P|Problem Statement:',
-  'P|After a positive screening result, nobody is clearly responsible for the next step. In Abu Dhabi, only 30.5% of patients with a positive FIT had a colonoscopy follow-up (2015 to 2016 data). Malaffi e-Referral tracks referral documents, not who owns the screening result or what happens when nobody acts. Challenge 05: closing the screening-to-care loop.'
+  'P|After a positive screening result, nobody is clearly responsible for the next step. In Abu Dhabi clinics, only 30.5% of people with a positive FIT had the follow-up colonoscopy, and 12% were never told their result (2015 to 2016; Almansoori et al., BMC Cancer 2021). Malaffi e-Referral tracks referral documents, not who owns the screening result or what happens when nobody acts. Challenge 05: closing the screening-to-care loop.'
 ) 18
 $sh.TextFrame2.MarginTop = 4
 $tr = $sh.TextFrame2.TextRange
 $body = $tr.Paragraphs(4, 1)
 $best = 11
 foreach ($sz in 16, 15, 14, 13.5, 13, 12.5, 12, 11.5, 11) {
-  $body.Font.Size = $sz
+  $body.Font.Size = [single]$sz  # COM accepts Single, not Double (13.5 fails)
   if ((Test-Fit $sh).ok) { $best = $sz; break }
 }
 $body.ParagraphFormat.SpaceBefore = 2
@@ -66,18 +66,31 @@ $f = Test-Fit $sh
 # ---------------- Slide 2 ----------------
 $sh = (S 2).Shapes.Item('Google Shape;63;p14')
 $p2 = $sh.TextFrame2.TextRange.Paragraphs(2, 1)
-$p2.Text = '[TEAM TO FILL: every row. Each member supplies their own details and age confirmation.]'
-$p2.Font.Fill.ForeColor.RGB = $RED; $p2.Font.Bold = -1
+$p2.Text = ''
 $tb = (S 2).Shapes.Item('Google Shape;64;p14')
-[void](Add-Text (S 2) 'Answer note' $L ($tb.Top + $tb.Height + 6) $W 40 @(
-  'P|Note: the clinical reviewer is a hospital colleague outside Abu Dhabi and is not a team member. [CLINICAL REVIEW PENDING — TICKET-19]'
+# Rows 2-3 of the template's table (row 1 is its header: S.No, Name, Country, Role,
+# Organization, Age confirmation). Role = role in the team, with the job title.
+$members = @(
+  @('1', 'Alfian Hidayatullah', 'Indonesia', 'Team leader (Data & Tech Executive)', 'WPP Media', 'Confirmed, over 18 (26)'),
+  @('2', 'Fajar Aji Pamungkas', 'Indonesia', 'Team member (Business Intelligence & Data Engineer)', 'Combiphar', 'Confirmed, over 18 (27)')
+)
+for ($r = 0; $r -lt $members.Count; $r++) {
+  for ($c = 0; $c -lt 6; $c++) { $tb.Table.Cell($r + 2, $c + 1).Shape.TextFrame.TextRange.Text = $members[$r][$c] }
+}
+# Two members: the template's empty rows 3-5 go (bottom up, so indexes stay valid).
+for ($r = $tb.Table.Rows.Count; $r -gt $members.Count + 1; $r--) { $tb.Table.Rows.Item($r).Delete() }
+# PowerPoint reports the table's height before wrapped rows re-flow, so the note sits at a
+# fixed line near the bottom of the slide instead of under a stale height.
+[void](Add-Text (S 2) 'Answer note' $L ($BOT - 26) $W 24 @(
+  'P|No clinician is on the team, and the clinical logic has not yet been reviewed by a clinician (see slide 9).'
 ) 12 11)
 
 # ---------------- Slide 3 ----------------
 [void](Add-Text (S 3) 'Answer' $L $TOP2 $W ($BOT - $TOP2) @(
-  'P|[TEAM TO FILL: for each member, one line with relevant skills and experience, for example software engineering, data, public health, health IT, interoperability.]',
-  'P|The team built the whole prototype during the challenge: case engine, HL7 v2 and FHIR ingest, report extraction, programme view, tests and deployment.',
-  'P|No clinician is on the team. Clinical review is pending with one hospital colleague outside Abu Dhabi, who is not a team member and whose scope will be stated exactly. We say plainly what we did not check: pathway, deadlines, closure rules, labels and Arabic wording.'
+  'P|**Alfian Hidayatullah (team leader)**, Data & Tech Executive at WPP Media: data platforms, analytics engineering and product delivery. Built the first prototype: the interface, the API contract and the first case engine.',
+  'P|**Fajar Aji Pamungkas**, Business Intelligence & Data Engineer at Combiphar, a pharmaceutical company: data pipelines, data modelling and reporting in a healthcare setting. Extended the engine, ownership and outreach, report verification, deployment and documentation.',
+  'P|Together we built the whole prototype during the challenge: case engine, HL7 v2 and FHIR ingest, report extraction with checked quotes, programme view, 317 automated tests, hosting on Vercel and Turso.',
+  'P|No clinician is on the team. The clinical logic follows published standards and studies (slide 7) and has not yet been reviewed by a clinician; we say so wherever it matters.'
 ) 12 11)
 
 # ---------------- Slide 4 (diagram) ----------------
@@ -143,11 +156,11 @@ $s6 = S 6
 [void](Add-Text $s6 'Answer' $L $TOP1 $tw ($BOT - $TOP1) @(
   'H|Two kinds of measure: the mechanism now, programme outcomes in a pilot.',
   'S|Measured now, on synthetic data',
-  'B|**Closure verification:** for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. [EVAL RESULTS PENDING — TICKET-14] The harness is ready (npm run eval); no model key has been available yet.',
+  'B|**Closure verification:** for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. The harness is built (npm run eval) but has not yet been run against a live model, so no accuracy figure is claimed.',
   'B|**Behaviour of the engine:** 317 automated tests in 26 files, including the whole demo replayed through the API. The live extraction path is tested with a fake model only.',
-  'S|Proposed for a pilot, to be agreed with the programme and clinicians [TEAM TO CONFIRM]',
+  'S|Proposed for a pilot, to be agreed with the programme and clinicians',
   'B|Share of positive results with a named owner within a set time.',
-  'B|Share of cases with a colonoscopy within 31 days of referral (the HAAD standard, cited in BMC Cancer 2021).',
+  'B|Share of cases with a colonoscopy within 31 days of referral (HAAD standard: within 31 days for over 90% of people).',
   'B|Time unowned cases wait for a new owner.',
   'B|Colonoscopy follow-up after a positive FIT, against the 30.5% baseline (2015 to 2016).',
   'B|Alerts per role per day, so alert fatigue is seen early.',
@@ -162,10 +175,10 @@ $s6 = S 6
   'B|**Atlas et al., JAMA 2023:** follow-up completed in 22.9% with usual care, 22.7% with an EHR reminder, 31.0% with reminder plus letter and phone outreach, 31.4% with outreach plus a navigator. Outreach drove the effect, not navigation. One trial, one health system.',
   'B|**Kaiser Permanente Northwest, 2021:** navigation 76% against 65% usual care. The prediction model had a C-statistic of 0.65. No evidence that effects differed by risk group.',
   'B|**PRECISE, 2025** (from summaries, not full text): 55.1% with navigation against 42.1% without. Risk prediction did not change the navigation effect.',
-  'B|**Abu Dhabi:** colonoscopy follow-up after a positive FIT was 30.5% (2015 to 2016). Referral to colonoscopy within 31 days is the HAAD standard, cited in BMC Cancer 2021. [FULL CITATION FOR 30.5% — TEAM TO ADD]',
+  'B|**Abu Dhabi, Almansoori, Alzaabi, Alketbi, BMC Cancer 2021;21:897 (doi:10.1186/s12885-021-08623-9):** in ambulatory clinics in 2015 to 2016, 30.5% (436) of people with a positive FIT/gFOBT had the follow-up colonoscopy; 12% were never told their result. The HAAD standard the paper cites: colonoscopy within 31 days of referral for over 90% of people.',
   'B|**DoH Circular 144/2026:** all referral transactions go to Malaffi as HL7 REF messages by 31 August 2026; e-Referral is for referral management, status tracking and referrer-receiver communication.',
   'B|**What follows for the design:** an outreach ladder that starts early, escalation to people, no risk model. We do not claim that risk-targeted navigation works.',
-  'B|**Prior testing:** 317 automated tests; evaluation of report reading [EVAL RESULTS PENDING — TICKET-14].'
+  'B|**Prior testing:** 317 automated tests. The evaluation of report reading on 24 labelled synthetic reports is built but not yet run against a live model.'
 ) 12 11)
 
 # ---------------- Slide 8 (table) ----------------
@@ -221,7 +234,7 @@ $script:GAP = 1.5
   'B|**Misuse:** a user can confirm closure wrongly; the audit trail records who did. Consultation answers are enforced to the addressed physician (server 403 otherwise). Roles are self-declared: no login.',
   'B|**Demo readings:** both readings stored for case 3 are stored demo readings, not model output: the first has a model label that was not a verified live call; the second is hand-written ("no model call"). The live path is tested with a fake model only.',
   'B|**Patient wording:** Arabic not reviewed by a native speaker; Urdu, Hindi and Tagalog are empty drafts; no clinician has reviewed English or Arabic.',
-  'B|**Evaluation:** [EVAL RESULTS PENDING — TICKET-14]. **Clinical review:** [CLINICAL REVIEW PENDING — TICKET-19]. No clinician is on the team.'
+  'B|**Not yet done, stated plainly:** the report-reading evaluation has not been run against a live model, and no clinician has reviewed the pathway, deadlines, closure rules or test labels. Both come before any pilot. No clinician is on the team.'
 ) 11 11)
 $script:GAP = 2
 # slide 9 screenshots (case3-2-closure-reopen, case3-3-reopened) left out: the full text needs the whole width at 11 pt
@@ -249,37 +262,36 @@ $iw11 = 250; $ix11 = 700 - $iw11
 $s12 = S 12
 [void](Add-Text $s12 'Answer' $L $TOP2 ($ix - $L - 6) ($BOT - $TOP2) @(
   'H|From a synthetic demonstration to a supervised pilot on one screening pathway.',
-  'B|**Stakeholders:** Department of Health Abu Dhabi, Malaffi, a screening programme or hospital with a named clinical owner, receiving endoscopy and pathology units. None is engaged yet.',
-  'B|**Integration (scalability, technical depth):** Nexyra reads the referral and result messages DoH Circular 144/2026 already requires. HL7 v2 REF and ORU ingest and FHIR stitching exist; the field map must be checked against the Malaffi specification, which we have not seen. Consultation monitoring reads e-Referral status and owns only the deadline and escalation.',
-  'B|**Scale across pathways:** a pathway is a JSON file. Mammography runs on the same engine with no engine change; it is a demonstration and has not been clinically reviewed. The engine runs the programme view over 1,000 cases in about 0.2 s locally and loads from a fixed number of database round trips.',
-  'B|**Regulatory and governance needs:** DoH approval for a pilot, data protection and security review, an AI policy for clinical data, real authentication and per-user audit, native-speaker and clinical review of patient text, an SMS or WhatsApp gateway.',
-  'B|**Timeline assumption [TEAM TO CONFIRM]:** clinical review of the pathway first, then a read-only pilot on one FIT screening site, then owner and escalation with staff.',
-  'B|**Sustainability and commercial path [TEAM TO FILL]:** who pays and who runs it. Not decided; no pricing is claimed.'
+  'B|**Stakeholders:** DoH Abu Dhabi, Malaffi, a screening programme with a named clinical owner, endoscopy and pathology units. None engaged yet.',
+  'B|**Integration:** Nexyra reads the referral and result messages DoH Circular 144/2026 already requires (HL7 v2 REF and ORU, FHIR stitching built); the field map must be checked against the Malaffi specification, not yet seen.',
+  'B|**Scale:** a pathway is a JSON file; mammography runs on the same engine unchanged (demonstration, not clinically reviewed). Programme view over 1,000 cases in about 0.2 s.',
+  'B|**Needs:** DoH pilot approval, security and data-protection review, an AI policy for clinical data, real login, native-speaker and clinical review of patient text, an SMS gateway.',
+  'B|**Timeline (proposal):** month 1, clinical and DoH review, Malaffi data access; months 2 to 4, read-only pilot at one FIT site; months 5 to 7, owners, escalation and outreach live with staff, against the pre-pilot baseline; then more pathways and sites.',
+  'B|**Sustainability (proposal):** a per-site subscription paid by the screening programme owner, on UAE-hosted infrastructure. Pricing follows the pilot evidence (cases closed within 31 days, staff time); none claimed yet.'
 ) 12 11)
 [void](Add-Shot $s12 "$IMG\programme-1-top.jpg" $ix ($TOP2 + 2) $iw 'Screenshot: programme view over the synthetic cohort: closed this week, open, unowned and due-today counts, and the exceptions list (unowned cases, cases past the 31-day referral limit), labelled as synthetic data.' 'Shot programme top')
 
 # ---------------- Slide 13 ----------------
 [void](Add-Text (S 13) 'Answer' $L $TOP2 $W ($BOT - $TOP2) @(
   'H|All code written during the challenge. Open-source packages under their own licences.',
-  'B|**Ownership of the code and documents:** [TEAM TO FILL: who owns it, and under which licence it is shared].',
-  'B|**Open-source components:** React 18, Vite 5, React Router 6, Express 4, @libsql/client, hl7v2 (BSD-3-Clause), Vitest 2, TypeScript, tsx. Full licence list from package-lock.json: [TEAM TO ATTACH].',
+  'B|**Ownership of the code and documents:** owned by the two team members, Alfian Hidayatullah and Fajar Aji Pamungkas. The source is visible on GitHub (github.com/alfianhid/nexyra) for evaluation; no open-source licence is granted for it yet.',
+  'B|**Open-source components:** React 18, Vite 5, React Router 6, Express 4, @libsql/client, hl7v2 (BSD-3-Clause), Vitest 2, TypeScript, tsx. The full list with licences is docs/third-party-licences.md in the repository.',
   'B|**Services:** Vercel (hosting), Turso (database), an OpenAI-compatible model provider (DeepSeek default; Meta Muse Spark via the Meta Model API possible). Provider terms apply; only synthetic data is sent.',
   'B|Literature and the DoH circular are cited, not reproduced.',
   'B|**Restrictions:** no real patient data may be loaded; the demo wording is not clinically reviewed and is not for patient care.',
-  'B|No pre-existing proprietary IP is used [TEAM TO CONFIRM].'
+  'B|No pre-existing proprietary IP is used: everything was written during the challenge.'
 ) 12 11)
 
 # ---------------- Slide 14 ----------------
 [void](Add-Text (S 14) 'Answer' $L $TOP2 $W ($BOT - $TOP2) @(
-  'H|Declaration for every team member.',
-  'P|[TEAM TO FILL: each member answers each of the five questions directly, then this slide and the form say the same.]',
+  'H|None. No member has any of these relationships.',
+  'P|Both team members, Alfian Hidayatullah and Fajar Aji Pamungkas, answered no to each question below.',
   'S|The five questions',
   'B|Employed or contracted by the Department of Health Abu Dhabi?',
   'B|Employed or contracted by Future Health or a challenge collaborator (Microsoft, Inception42, MBZUAI, Hack2skill)?',
   'B|A family member or close personal relationship with a judge, organizer or collaborator staff?',
   'B|A financial interest in the organization running or judging the challenge?',
-  'B|Access to non-public information about the challenge or its judging?',
-  'P|Write either "No member has any of these relationships" or the named exceptions.'
+  'B|Access to non-public information about the challenge or its judging?'
 ) 12 11)
 
 # ---------------- Slide 15 ----------------
@@ -295,7 +307,7 @@ $sw15 = 160; $script:GAP = 1; $script:HGAP = 3; $sh15 = $sw15 * 0.625; $sy15 = $
   'B|Hosted at https://nexyra-health.vercel.app, resets itself every day.',
   'P|**Demonstration only:** mammography pathway, not clinically reviewed.',
   'P|**Assumptions:** deadlines other than the 31-day limit are team assumptions; drop-off rates are inputs, not findings; the scenario panel applies one trial''s effect size and is labelled an assumption.',
-  'P|**Not done:** evaluation run [EVAL RESULTS PENDING — TICKET-14] (no model key; no live model call verified), clinical review [CLINICAL REVIEW PENDING — TICKET-19], Malaffi connection, real messaging, login, security review.',
+  'P|**Not done:** the report-reading evaluation against a live model, clinical review, Malaffi connection, real messaging, login, security review.',
   'P|Nexyra is not a referral tracker and not a messaging channel, and it builds no risk model.'
 ) 12 11)
 $script:GAP = 2; $script:HGAP = 5

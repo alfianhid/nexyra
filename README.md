@@ -12,7 +12,7 @@ Nexyra builds on Malaffi e-Referral data (DoH Circular 144/2026). It is not a re
 - **Consultation monitoring.** One question from referring to receiving provider, with an owner, a deadline and escalation. It sits on top of e-Referral and is not a messaging channel.
 - **HL7 v2 ingest.** REF and ORU messages are turned into the same case events. The structure is generic HL7 v2.5; the Malaffi specification has not been seen.
 - **Report extraction with citations.** A model reads a colonoscopy or pathology report and returns six fields, each with a quote. Code checks that every quote is in the report; a field whose quote fails becomes unknown. Plain rules in code, not the model, turn the fields into a proposal. A physician confirms, or rejects the proposal with a reason. Closure review reads the case's latest report (the latest colonoscopy report together with any later pathology report) and also offers **Reopen case**. The programme view counts physician-AI divergence.
-- **Evaluation harness.** `npm run eval` compares extraction with 24 labelled synthetic reports. It has not been run: no model key. `[EVAL RESULTS PENDING — TICKET-14]`
+- **Evaluation harness.** `npm run eval` compares extraction with 24 labelled synthetic reports. It has not been run against a live model, so no accuracy figure is claimed.
 - **Programme view.** Exceptions, funnel, referral to colonoscopy against the 31-day limit, delay reasons, escalations per role per day, and a scenario panel labelled as an assumption. It reads a synthetic cohort of 1,000 cases whose drop-off rates are inputs, not findings.
 - **Demo reset.** `npm run demo:reset` gives the same state every time (about 6 s). The hosted demo resets itself every day.
 

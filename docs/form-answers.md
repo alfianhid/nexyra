@@ -7,13 +7,13 @@ Character counts below were measured with `node` (`[...text].length`, newlines c
 ## Solution summary (limit 2,000 characters)
 
 ```text
-After a positive screening result, a patient crosses laboratories, clinics and hospitals, and ownership is lost at the handoffs. In Abu Dhabi, colonoscopy follow-up after a positive FIT was 30.5% (2015 to 2016 data). Malaffi e-Referral tracks referral documents (DoH Circular 144/2026), not who owns the screening result or what happens if nobody acts.
+After a positive screening result, a patient crosses laboratories, clinics and hospitals, and ownership is lost at the handoffs. In Abu Dhabi, only 30.5% with a positive FIT had the follow-up colonoscopy (2015 to 2016). Malaffi e-Referral tracks referral documents (DoH Circular 144/2026), not who owns the screening result or what happens if nobody acts.
 
-Nexyra is a case engine that sits above that data. A positive result creates a case. Every stage has one owner and a deadline; a missed deadline escalates the case by role. Cases that lose their owner (referral rejected, unanswered, patient moved) go to an unowned queue; incoming FHIR and HL7 v2 messages are stitched to a case or queued. An outreach ladder (message, staff call, navigator) works on the patient. Consultation monitoring sits on top of e-Referral; it is not a messaging channel. A case closes only with a valid outcome, evidence and a responsible physician's confirmation. AI reads the colonoscopy or pathology report, quotes the sentence behind every answer, and code checks each quote is in the report. Rules, not the model, make the proposal. AI never closes a case. A physician can reopen a case or reject a proposal. A programme view shows exceptions, the funnel, the 31-day limit and physician-AI divergence. FIT is built; mammography is a configuration demo only.
+Nexyra is a case engine that sits above that data. A positive result creates a case. Every stage has one owner and a deadline; a missed deadline escalates the case by role. Cases that lose their owner (referral rejected, unanswered, patient moved) go to an unowned queue; incoming FHIR and HL7 v2 messages are stitched to a case or queued. An outreach ladder (message, staff call, navigator) works on the patient. Consultation monitoring sits on top of e-Referral; it is not a messaging channel. A case closes only with a valid outcome, evidence and a responsible physician's confirmation. AI reads the colonoscopy or pathology report, quotes the sentence behind every answer, and code checks each quote is in the report. Rules, not the model, make the proposal. AI never closes a case. A physician can reopen a case or reject a proposal. A programme view shows exceptions, the funnel, the 31-day limit and physician-AI divergence. FIT is built; mammography is a demo only.
 
 Why: in Atlas et al. (JAMA 2023) follow-up was 22.9% with usual care, 22.7% with an EHR reminder, 31.0% with outreach and 31.4% with a navigator added, so outreach drove the effect. Kaiser Northwest (2021) found no evidence navigation differed by risk group; PRECISE (2025), that risk prediction did not change it. Nexyra builds no risk model.
 
-Not proven: a prototype on synthetic data only, no claimed effect on outcomes. The model evaluation has not been run, demo readings are stored, no clinician is on the team, clinical review is pending.
+Not proven: a prototype on synthetic data only, no claimed effect on outcomes. The model evaluation has not been run, demo readings are stored, and no clinician is on the team, so nothing is clinically reviewed.
 
 Stack: React, Express, Turso, any OpenAI-compatible model. Live: https://nexyra-health.vercel.app
 ```
@@ -42,8 +42,8 @@ Character count: **1048** of 1,500.
 **Re-check both texts after the final build.** They describe the code as of 18 Nov 2026. Before submitting:
 
 - Run `npm test` and update "317 tests" if it changed.
-- If the evaluation has run, move it out of "Not done" and add the numbers only as fractions with denominators: `[EVAL RESULTS PENDING — TICKET-14]`.
-- Clinical review only as done if it is done: `[CLINICAL REVIEW PENDING — TICKET-19]`.
+- If the evaluation has run, move it out of "Not done" and add the numbers only as fractions with denominators (results go in `docs/evaluation-results.md`). Until then no accuracy figure is claimed.
+- Show clinical review as done only if it is done. No clinician is on the team and no reviewer is confirmed.
 - Check the deployed app is up (https://nexyra-health.vercel.app) and the video link opens: `[PENDING — TICKET-21]` (video only).
 
 ## Dropdowns and checkboxes
@@ -58,9 +58,9 @@ Character count: **1048** of 1,500.
 | Link to a short demo video | From TICKET-21: `[PENDING — TICKET-21]` | Under 3 minutes, viewable by anyone with the link |
 | Upload your solution deck | PDF from TICKET-26, text in [`deck-content.md`](deck-content.md) | Under 5 MB |
 
-## Conflict of interest (not filled)
+## Conflict of interest
 
-Do not tick anything until every member has answered each question directly. Record the answers here, then tick the form to match. The deck's conflict of interest slide must say the same.
+Both members answered no to all five questions. Tick "None of the above" on the form. The deck's conflict of interest slide says the same.
 
 The form options:
 
@@ -71,14 +71,11 @@ The form options:
 5. Has had access to non-public information about the challenge or its judging
 6. None of the above
 
-Team members to ask. The member list is not in the repository, so fill in the names: every person listed on slide 2 of the deck (team size is on slide 1), with no exceptions. The clinical reviewer, Fulan, is not a team member and is not asked, but if he has any of these relationships with the organizers, tell the team.
+Members asked: the two team members, as listed on slide 2 of the deck (team size 2). No clinician is on the team.
 
 | Member | 1 | 2 | 3 | 4 | 5 | None | Asked on (date) |
 |---|---|---|---|---|---|---|---|
-| `[NAME]` | | | | | | | |
-| `[NAME]` | | | | | | | |
-| `[NAME]` | | | | | | | |
-| `[NAME]` | | | | | | | |
-| `[NAME]` | | | | | | | |
+| Alfian Hidayatullah | No | No | No | No | No | Yes | 18 Nov 2026 |
+| Fajar Aji Pamungkas | No | No | No | No | No | Yes | 18 Nov 2026 |
 
-Answers to tick on the form: `[NOT DECIDED]`
+Answer to tick on the form: 6, None of the above.

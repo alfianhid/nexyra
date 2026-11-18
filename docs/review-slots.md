@@ -1,3 +1,5 @@
+> **Superseded (18 Nov 2026).** No clinical reviewer is confirmed and the review described below has not happened. The submission states plainly that no clinician has reviewed the pathway, deadlines, closure rules, test labels or patient wording, and that this review comes before any pilot (see `docs/limitations.md`). Kept as a planning record only.
+
 # Human review slots — flagged
 
 Written 17 Nov 2026. **This is the one dependency the team cannot shorten by writing more code.** Fulan is a hospital colleague, not a team member, and his time is not ours to schedule. Everything downstream of these two slots is at risk if they slip.

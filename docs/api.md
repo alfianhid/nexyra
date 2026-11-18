@@ -136,7 +136,7 @@ Ordered server-side by clinical urgency from the pathway template, then by time 
 }
 ```
 
-`days_left_referral_limit` counts down the pathway's 31-day referral-to-colonoscopy limit (the template's one sourced deadline: HAAD standard, cited in BMC Cancer 2021). The count starts when the case first entered `referral_sent` and stops when it first reached `procedure_completed`; before the referral is sent it runs from the result, which is never more lenient than the limit. It can be negative.
+`days_left_referral_limit` counts down the pathway's 31-day referral-to-colonoscopy limit (the template's one sourced deadline: HAAD standard (within 31 days for over 90% of people), cited in Almansoori et al., BMC Cancer 2021). The count starts when the case first entered `referral_sent` and stops when it first reached `procedure_completed`; before the referral is sent it runs from the result, which is never more lenient than the limit. It can be negative.
 
 `flags_renderable` exists because `TICKET-09` requires status to be readable without colour: the UI prints these strings next to a shape marker, and never relies on a red dot.
 
@@ -300,7 +300,7 @@ Everything is computed at request time, at the demo clock's `now`, from `cases`,
     { "key": "patient_notified", "stage": "Patient notified", "reached": 2, "open": 1, "unowned": 1, "median_days_from_previous": 1.1, "terminal": false }
   ],
   "referral_to_colonoscopy": {
-    "limit_days": 31, "label": "Referral to colonoscopy", "source": "HAAD standard, cited in BMC Cancer 2021",
+    "limit_days": 31, "label": "Referral to colonoscopy", "source": "HAAD standard (within 31 days for over 90% of people), cited in Almansoori et al., BMC Cancer 2021",
     "completed": 1, "completed_within_limit": 1, "completed_over_limit": 0,
     "waiting": 1, "waiting_over_limit": 0, "median_days_completed": 20,
     "buckets": [ { "label": "0–7 days", "min_days": 0, "max_days": 7, "over_limit": false, "completed": 0, "waiting": 1 } ]

@@ -2,7 +2,7 @@
 
 ## Statement on personal data
 
-No personal data was used. No real patient record, name, identifier, image or report was collected, copied or processed. Every person, report, message and event in the prototype is invented by the team. Nothing from any team member's or reviewer's workplace was used.
+No personal data was used. No real patient record, name, identifier, image or report was collected, copied or processed. Every person, report, message and event in the prototype is invented by the team. Nothing from any team member's workplace was used.
 
 Because the data is synthetic, it is the only kind that is sent to an external model. This matters while a model provider's free credits are used: the terms say content may be used for product improvement.
 
@@ -25,8 +25,8 @@ Because the data is synthetic, it is the only kind that is sent to an external m
 | Atlas et al., JAMA 2023 | Follow-up completion by arm; the scenario panel |
 | Kaiser Permanente Northwest, 2021 | Navigation effect, prediction model discrimination |
 | PRECISE trial, 2025 | Navigation effect, risk prediction. From summaries, not full text. |
-| Abu Dhabi colonoscopy follow-up after positive FIT, 2015 to 2016 data | Baseline of 30.5%; calibration anchor for the cohort. `[FULL CITATION TO BE ADDED]` |
-| HAAD standard, cited in BMC Cancer 2021 | Referral to colonoscopy within 31 days |
+| Abu Dhabi colonoscopy follow-up after positive FIT, 2015 to 2016 data | Baseline of 30.5% (436 of the people with a positive FIT/gFOBT had the follow-up colonoscopy; 933 did not); calibration anchor for the cohort. Almansoori A, Alzaabi M, Alketbi L. Colorectal Cancer screening in ambulatory healthcare service clinics in Abu Dhabi, United Arab Emirates in 2015–2016. BMC Cancer. 2021;21:897. doi:10.1186/s12885-021-08623-9. |
+| HAAD Standard for Colorectal Cancer Screening (2014), cited in Almansoori et al., BMC Cancer 2021 | Colonoscopy within 31 days of referral after a positive FIT, for over 90% of people |
 | DoH Circular 144/2026 | All referral transactions to Malaffi as HL7 REF messages by 31 August 2026; e-Referral for referral management, status tracking and referrer-receiver communication. Cited by number and gist only. The document is not reproduced, attached or stored in the repository. |
 
 Exact numbers and caveats are in [`evidence.md`](evidence.md).

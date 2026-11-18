@@ -63,7 +63,7 @@ function Set-Size($shape, [double]$size) {
   $tr = $shape.TextFrame2.TextRange
   for ($i = 1; $i -le $tr.Paragraphs().Count; $i++) {
     $pr = $tr.Paragraphs($i, 1)
-    $pr.Font.Size = $size
+    $pr.Font.Size = [single]$size
   }
 }
 

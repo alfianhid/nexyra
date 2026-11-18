@@ -59,6 +59,6 @@ Closing card (on screen, not read): "Nexyra · synthetic data only · not clinic
 | 72-hour referral acceptance deadline | `fit-colonoscopy.json`, `referral_sent.sla_hours`; unsourced, needs clinical review |
 | 1 escalation, 1 case unowned, 1 navigator step at the jump | `server/demo.test.ts`, "the video's path" |
 | 1,000 synthetic cases | `data/generator-assumptions.json` (`cohort_size`) |
-| 31-day referral-to-colonoscopy limit | HAAD standard, cited in BMC Cancer 2021 (`docs/evidence.md`) |
+| 31-day referral-to-colonoscopy limit | HAAD standard (within 31 days for over 90% of people), cited in Almansoori et al., BMC Cancer 2021 (`docs/evidence.md`) |
 
 The pilot measures named at 2:30 (time to owner, share of stages closed within deadline) are proposals in `docs/template-map.md` and still need a team decision; change the sentence if the team picks others.

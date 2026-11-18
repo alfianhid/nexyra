@@ -34,10 +34,10 @@ The template holds:
 - **`stages`**, in pathway order. Each has `owner_role`, `sla_hours` (hours from entering the stage), `urgency` (worklist order, lower first), an `escalation` ladder (level *n* alerts the *n*-th role), `exits` (which event moves the case to which stage, backward paths included) and a `source`.
 - **`events`**: for each event type, the roles that may record it and what it does to the owner (`keep`, `clear` for the explicit unowned state, `assign`, `assign_if_unowned`). Closing events are flagged `closure`.
 - **`outcomes`**: the three closure outcomes, each with the document kinds it requires as evidence.
-- **`limits`** across stages. The only one is referral → colonoscopy ≤ 31 days.
+- **`limits`** across stages. The only one is referral → colonoscopy within 31 days.
 - **`actions`**: which roles see which case action, and which event an action records.
 
-**Sources.** Only the 31-day referral-to-colonoscopy limit has one ("HAAD standard, cited in BMC Cancer 2021"). Every stage deadline and every outcome's evidence rule says `"unsourced, needs clinical review"`. These are starting values for the clinical review (TICKET-19), which works from the printout of `npm run pathway:deadlines`.
+**Sources.** Only the 31-day referral-to-colonoscopy limit has one ("HAAD standard (within 31 days for over 90% of people), cited in Almansoori et al., BMC Cancer 2021"). Every stage deadline and every outcome's evidence rule says `"unsourced, needs clinical review"`. These are starting values for a clinical review that has not happened yet (no clinician is on the team). It would work from the printout of `npm run pathway:deadlines`.
 
 **Validation.** The loader collects every problem before it fails, then throws `PathwayTemplateError` naming the file and each bad field. Every template in `server/pathways/` is loaded when the engine is imported, so a broken file stops `npm run server`, the Vercel function and every test at startup. Besides types, it checks that exits point at real stages and events, that every open stage can move forward, that only closure events reach the terminal stage, that no closure event lists `system` or `coordination_staff`, that the creation event assigns an owner, and that the stage deadlines inside a limit add up to no more than the limit.
 

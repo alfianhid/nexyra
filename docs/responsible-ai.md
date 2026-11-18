@@ -67,12 +67,8 @@ The two readings stored for demo case 3 are demo data. The first carries a `deep
 
 ## Evaluation results
 
-`[EVAL RESULTS PENDING — TICKET-14]`
-
-The harness is ready: `npm run eval` reads 24 labelled synthetic reports with no cache, compares every field and the closure decision with `data/test-reports/labels.json`, and writes `docs/evaluation-results.md`. It reports fractions with denominators, wrong closures first, every error listed, with date, model and prompt version (`extract-v1`). It has not been run because no model key was available. The labels were frozen on 18 Nov before any extraction and have not been checked by a clinician.
+The harness is ready: `npm run eval` reads 24 labelled synthetic reports with no cache, compares every field and the closure decision with `data/test-reports/labels.json`, and writes `docs/evaluation-results.md`. It reports fractions with denominators, wrong closures first, every error listed, with date, model and prompt version (`extract-v1`). It has not been run because no model key was available, so no accuracy figure is claimed. If a model key is added later, results go in `docs/evaluation-results.md`. The labels were frozen on 18 Nov before any extraction and have not been checked by a clinician.
 
 ## Clinical review
 
-`[CLINICAL REVIEW PENDING — TICKET-19]`
-
-No clinician is on the team, and no clinician has reviewed the pathway, the closure rules, the proposal rules or the patient messages at the time of writing.
+No clinician is on the team, and no clinician has reviewed the pathway, the deadlines, the closure rules, the proposal rules, the test labels or the patient messages. No reviewer is confirmed. This review comes before any pilot.

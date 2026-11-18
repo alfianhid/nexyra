@@ -6,7 +6,7 @@ What this prototype does not do, does not prove, or has not had checked. Written
 
 - **Patient impact is not proven.** Nexyra has not been used with real patients. No claim is made that it improves follow-up, diagnosis, or any outcome. That is for a pilot to establish.
 - **Navigation targeted by risk prediction is not claimed to work.** The cited studies do not show it (see [`evidence.md`](evidence.md)). Nexyra builds no risk model.
-- **Closure verification accuracy is not clinical accuracy.** The evaluation harness exists (`npm run eval`, 24 labelled synthetic reports) but has not been run, because no model key was available. `[EVAL RESULTS PENDING — TICKET-14]` When results exist, they measure the mechanism on synthetic reports only.
+- **Closure verification accuracy is not clinical accuracy.** The evaluation harness exists (`npm run eval`, 24 labelled synthetic reports) but has not been run, because no model key was available, so no accuracy figure is claimed. If a model key is added later, results go in `docs/evaluation-results.md`. When results exist, they measure the mechanism on synthetic reports only.
 
 ## Data
 
@@ -18,7 +18,7 @@ What this prototype does not do, does not prove, or has not had checked. Written
 ## Clinical review
 
 - No clinician is on the team.
-- `[CLINICAL REVIEW PENDING — TICKET-19]` The pathway, deadlines, closure rules and message wording have not been reviewed by a clinician at the time of writing. Review will be one hospital colleague outside Abu Dhabi, who is not a team member. State which parts he did and did not review.
+- The pathway, deadlines, closure rules, test labels and patient wording have not been reviewed by a clinician. No reviewer is confirmed. This review comes before any pilot.
 - Only the 31-day referral to colonoscopy limit has a published source. Every other deadline, in both pathways and in the outreach ladder, is a team assumption (see [`assumptions.md`](assumptions.md)).
 - **The mammography pathway is a configuration demonstration only.** It shows that a second pathway is a JSON file, not a code change. It has not been clinically reviewed, none of its deadlines has a source, we have not read the DoH breast cancer screening and diagnosis standard (version 2, effective August 2025), and it has no report verification, no report test set and no patient message templates.
 
@@ -42,7 +42,7 @@ Not in the code, or not proven:
 
 - **The Arabic template text is not reviewed by a native speaker.** It was written by the team in `server/outreach/templates/fit-positive-result.ar.json` and is marked `written_not_reviewed` there. It must not be called reviewed until a native speaker has checked it.
 - Urdu, Hindi and Tagalog exist only as slots marked "draft, not reviewed by a native speaker". They carry no text: a patient whose language is one of them receives the English message, and the patient page says why.
-- The English and Arabic wording about the result and the colonoscopy has not been reviewed by a clinician. `[CLINICAL REVIEW PENDING — TICKET-19]`
+- The English and Arabic wording about the result and the colonoscopy has not been reviewed by a clinician.
 - The ladder's step deadlines are unsourced (see [`assumptions.md`](assumptions.md)).
 
 ## Product boundaries

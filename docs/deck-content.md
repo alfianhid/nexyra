@@ -4,20 +4,19 @@ For the mandatory template `docs/[PUB] Future Health Digital Innovation Challeng
 
 Rules for whoever builds the deck:
 
-- `[TEAM TO FILL]` marks something only a team member can supply. Do not invent it.
 - Keep every figure exactly as written. Do not add claims about patient outcomes.
 - Screenshots are in `docs/shots/` and all named below exist (captured 18 Nov against the latest build). Do not use `closure.png`, `detail.png`, `worklist.png`, `outreach.png`, `programme.png` or `notfound.png`: they are stale.
-- The prototype link is https://nexyra-health.vercel.app. Only the demo video link is still `[PENDING — TICKET-21]`. Placeholders `[PENDING — TICKET-21]` (video), `[EVAL RESULTS PENDING — TICKET-14]` and `[CLINICAL REVIEW PENDING — TICKET-19]` stay until the real value exists. Replace them in the deck, never leave a bracket in the final PDF.
+- The prototype link is https://nexyra-health.vercel.app. Only the demo video link is still `[PENDING — TICKET-21]`. It stays until the real link exists. Replace it in the deck; never leave a bracket in the final PDF.
 
 ---
 
 ## Slide 1. Team name, team size, problem statement
 
-**Team Name:** Itmam / Nexyra `[TEAM TO CONFIRM]`
-**Team Size:** `[TEAM TO FILL]`
+**Team Name:** Nexyra
+**Team Size:** 2
 **Problem Statement:**
 
-After a positive screening result, nobody is clearly responsible for the next step. In Abu Dhabi, only 30.5% of patients with a positive FIT had a colonoscopy follow-up (2015 to 2016 data). Malaffi e-Referral tracks referral documents, not who owns the screening result or what happens when nobody acts. Challenge 05: closing the screening-to-care loop.
+After a positive screening result, nobody is clearly responsible for the next step. In Abu Dhabi, only 30.5% of people with a positive FIT or gFOBT had the follow-up colonoscopy (2015 to 2016 data; 12% were never told their positive result). Malaffi e-Referral tracks referral documents, not who owns the screening result or what happens when nobody acts. Challenge 05: closing the screening-to-care loop.
 
 Screenshot: none.
 
@@ -27,9 +26,14 @@ Screenshot: none.
 
 Table, one row per member: S.No, Name, Country, Role, Organization, Age confirmation.
 
-`[TEAM TO FILL: every row. Each member supplies their own details and age confirmation.]`
+| S.No | Name | Country | Role | Organization |
+|---|---|---|---|---|
+| 1 | Alfian Hidayatullah | Indonesia | Team leader. Data & Tech Executive | WPP Media |
+| 2 | Fajar Aji Pamungkas | Indonesia | Team member. Business Intelligence & Data Engineer | Combiphar (a pharmaceutical company) |
 
-Note under the table: the clinical reviewer is a hospital colleague outside Abu Dhabi and is not a team member. `[CLINICAL REVIEW PENDING — TICKET-19]`
+Age confirmation: Alfian is 26 and Fajar is 27. Both are over 18.
+
+Note under the table: no clinician is on the team.
 
 Screenshot: none.
 
@@ -37,9 +41,9 @@ Screenshot: none.
 
 ## Slide 3. Team Capability Summary* (maximum 1,000 characters)
 
-Draft, to be completed by the members. Fill the brackets, keep the last two sentences, and re-count (limit 1,000).
+Re-count before pasting (limit 1,000).
 
-> `[TEAM TO FILL: for each member, one line with relevant skills and experience, for example software engineering, data, public health, health IT, interoperability.]` The team built the whole prototype during the challenge: case engine, HL7 v2 and FHIR ingest, report extraction, programme view, tests and deployment. No clinician is on the team. Clinical review is pending with one hospital colleague outside Abu Dhabi, who is not a team member and whose scope will be stated exactly. We say plainly what we did not check: pathway, deadlines, closure rules, labels and Arabic wording.
+> Alfian Hidayatullah (team leader) is a Data & Tech Executive at WPP Media. Fajar Aji Pamungkas is a Business Intelligence & Data Engineer at Combiphar, a pharmaceutical company. Both work with data and software. The two of us built the whole prototype during the challenge: case engine, HL7 v2 and FHIR ingest, report extraction, programme view, tests and deployment. No clinician is on the team. The pathway, deadlines, closure rules, test labels and patient wording have not been reviewed by a clinician; that review comes before any pilot. We also did not check the Arabic wording with a native speaker.
 
 Screenshot: none.
 
@@ -90,12 +94,12 @@ Screenshots: `docs/shots/case1-1-ladder.png` (outreach ladder for a silent patie
 Heading: **Two kinds of measure: the mechanism now, programme outcomes in a pilot.**
 
 Measured now, on synthetic data:
-- Closure verification: for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. `[EVAL RESULTS PENDING — TICKET-14]` The harness is ready (`npm run eval`); no model key has been available yet.
+- Closure verification: for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. The harness exists (`npm run eval`) but has not been run against a live model, so no accuracy figure is claimed.
 - Behaviour of the engine: 317 automated tests in 26 files, including the whole demo replayed through the API. The live extraction path is tested with a fake model only.
 
-Proposed for a pilot, to be agreed with the programme and clinicians `[TEAM TO CONFIRM]`:
+Proposed for a pilot, to be agreed with the programme and clinicians:
 - Share of positive results with a named owner within a set time.
-- Share of cases with a colonoscopy within 31 days of referral (the HAAD standard, cited in BMC Cancer 2021).
+- Share of cases with a colonoscopy within 31 days of referral, the HAAD standard for over 90% of people (cited in Almansoori et al., BMC Cancer 2021).
 - Time unowned cases wait for a new owner.
 - Colonoscopy follow-up after a positive FIT, against the 30.5% baseline (2015 to 2016).
 - Alerts per role per day, so alert fatigue is seen early.
@@ -114,10 +118,10 @@ Heading: **Outreach drove follow-up in the trials; risk prediction did not chang
 - Atlas et al., JAMA 2023: follow-up completed in 22.9% with usual care, 22.7% with an EHR reminder, 31.0% with reminder plus letter and phone outreach, 31.4% with outreach plus a navigator. Outreach drove the effect, not navigation. One trial, one health system.
 - Kaiser Permanente Northwest, 2021: navigation 76% against 65% usual care. The prediction model had a C-statistic of 0.65. No evidence that effects differed by risk group.
 - PRECISE, 2025 (from summaries, not full text): 55.1% with navigation against 42.1% without. Risk prediction did not change the navigation effect.
-- Abu Dhabi: colonoscopy follow-up after a positive FIT was 30.5% (2015 to 2016). Referral to colonoscopy within 31 days is the HAAD standard, cited in BMC Cancer 2021. `[FULL CITATION FOR 30.5% — TEAM TO ADD]`
+- Abu Dhabi: Almansoori A, Alzaabi M, Alketbi L. Colorectal Cancer screening in ambulatory healthcare service clinics in Abu Dhabi, United Arab Emirates in 2015–2016. BMC Cancer. 2021;21:897. doi:10.1186/s12885-021-08623-9. Of people screened with FIT or gFOBT, 13.5% were positive; 30.5% (436) of those had the follow-up colonoscopy and 933 did not; 12% were never told their positive result. The paper cites the HAAD Standard for Colorectal Cancer Screening (2014): colonoscopy within 31 days of referral after a positive FIT, for over 90% of people.
 - DoH Circular 144/2026: all referral transactions go to Malaffi as HL7 REF messages by 31 August 2026; e-Referral is for referral management, status tracking and referrer-receiver communication.
 - What follows for the design: an outreach ladder that starts early, escalation to people, no risk model. We do not claim that risk-targeted navigation works.
-- Prior testing: 317 automated tests; evaluation of report reading `[EVAL RESULTS PENDING — TICKET-14]`.
+- Prior testing: 317 automated tests. The evaluation of report reading has not been run against a live model, so no accuracy figure is claimed.
 
 Screenshot: none (text slide).
 
@@ -137,7 +141,7 @@ Heading: **Synthetic data only. No personal data.**
 | Literature (Atlas, Kaiser NW, PRECISE, BMC Cancer) | Published | Authors | Public | Cited, not copied | No |
 | DoH Circular 144/2026 | Official circular | DoH | Public | Cited by number and gist, not reproduced | No |
 
-Only synthetic data is ever sent to a model, because a provider's free-credit terms may allow content to be used for product improvement. Nothing from any team member's or reviewer's workplace was used.
+Only synthetic data is ever sent to a model, because a provider's free-credit terms may allow content to be used for product improvement. Nothing from any team member's workplace was used.
 
 Screenshot: none.
 
@@ -155,7 +159,7 @@ Heading: **Responsible AI: AI reads and proposes, a physician decides, and every
 - Misuse: a user can confirm closure wrongly; the audit trail records who did. Consultation answers are enforced to the addressed physician (server 403 otherwise). The role is still self-declared: no login.
 - Demo readings: the two readings stored for case 3 are stored demo readings, not model output. The first has a model label that was not a verified live call; the second is hand-written (`hand-written demo reading (no model call)`). The live path is tested with a fake model only.
 - Patient wording: Arabic not reviewed by a native speaker; Urdu, Hindi and Tagalog are empty drafts; English and Arabic not reviewed by a clinician.
-- Evaluation: `[EVAL RESULTS PENDING — TICKET-14]`. Clinical review: `[CLINICAL REVIEW PENDING — TICKET-19]`. No clinician is on the team.
+- Evaluation: the harness has not been run against a live model; no accuracy figure is claimed. Clinical review: no clinician is on the team, and the pathway, deadlines, closure rules, test labels and patient wording have not been reviewed by one. That comes before any pilot.
 
 Screenshots: `docs/shots/case3-2-closure-reopen.png` (AI proposal, not a decision: reopen, with quotes), `docs/shots/case3-3-reopened.png` (case reopened by the physician, reasons recorded).
 
@@ -193,8 +197,8 @@ Heading: **From a synthetic demonstration to a supervised pilot on one screening
 - Integration (scalability, technical depth): Nexyra reads the referral and result messages DoH Circular 144/2026 already requires. HL7 v2 REF and ORU ingest and FHIR stitching exist; the field map must be checked against the Malaffi specification, which we have not seen. Consultation monitoring reads e-Referral status and owns only the deadline and escalation.
 - Scale across pathways: a pathway is a JSON file. Mammography runs on the same engine with no engine change; it is a demonstration and has not been clinically reviewed. The engine runs the programme view over 1,000 cases in about 0.2 s locally and loads from a fixed number of database round trips.
 - Regulatory and governance needs: DoH approval for a pilot, data protection and security review, an AI policy for clinical data, real authentication and per-user audit, native-speaker and clinical review of patient text, an SMS or WhatsApp gateway.
-- Timeline assumption `[TEAM TO CONFIRM]`: clinical review of the pathway first, then a read-only pilot on one FIT screening site, then owner and escalation with staff.
-- Sustainability and commercial path `[TEAM TO FILL]`: who pays and who runs it. Not decided; no pricing is claimed.
+- Timeline (proposal): month 1 clinical and DoH review, and Malaffi data access; months 2 to 4 read-only pilot at one FIT screening site; months 5 to 7 owners, escalation and outreach live with coordination staff, against the pre-pilot baseline; then more pathways and sites.
+- Sustainability (proposal): a per-site subscription paid by the screening programme owner, on UAE-hosted infrastructure. Pricing follows the pilot evidence (cases closed within 31 days, staff time). No price is claimed yet.
 
 Screenshot: `docs/shots/programme-1-top.png`.
 
@@ -204,12 +208,12 @@ Screenshot: `docs/shots/programme-1-top.png`.
 
 Heading: **All code written during the challenge. Open-source packages under their own licences.**
 
-- Ownership of the code and documents: `[TEAM TO FILL: who owns it, and under which licence it is shared]`.
-- Open-source components: React 18, Vite 5, React Router 6, Express 4, `@libsql/client`, `hl7v2` (BSD-3-Clause), Vitest 2, TypeScript, tsx. Full licence list from `package-lock.json`: `[TEAM TO ATTACH]`.
+- Ownership: the code and documents are owned by the two team members. The source is visible on GitHub (github.com/alfianhid/nexyra) for evaluation. No open-source licence is granted yet.
+- Open-source components: React 18, Vite 5, React Router 6, Express 4, `@libsql/client`, `hl7v2` (BSD-3-Clause), Vitest 2, TypeScript, tsx. Full licence list: `docs/third-party-licences.md`. It covers 100 shipped packages: MIT 90, ISC 4, BSD-3-Clause 4, Apache-2.0 1, 0BSD 1.
 - Services: Vercel (hosting), Turso (database), an OpenAI-compatible model provider (DeepSeek default; Meta Muse Spark via the Meta Model API possible). Provider terms apply; only synthetic data is sent.
 - Literature and the DoH circular are cited, not reproduced.
 - Restrictions: no real patient data may be loaded; the demo wording is not clinically reviewed and is not for patient care.
-- No pre-existing proprietary IP is used `[TEAM TO CONFIRM]`.
+- No pre-existing proprietary IP is used.
 
 Screenshot: none.
 
@@ -219,11 +223,11 @@ Screenshot: none.
 
 Heading: **Declaration for every team member.**
 
-`[TEAM TO FILL: each member answers each of the five questions directly, then this slide and the form say the same.]`
+Both members answered no to all five questions. This slide and the form say the same.
 
 The five questions: employed or contracted by the Department of Health Abu Dhabi; employed or contracted by Future Health or a challenge collaborator (Microsoft, Inception42, MBZUAI, Hack2skill); a family member or close personal relationship with a judge, organizer or collaborator staff; a financial interest in the organization running or judging the challenge; access to non-public information about the challenge or its judging.
 
-Write either "No member has any of these relationships" or the named exceptions.
+Declaration: None. No member has any of these relationships.
 
 Screenshot: none.
 
@@ -244,7 +248,7 @@ Demonstration only: mammography pathway, not clinically reviewed.
 
 Assumptions: deadlines other than the 31-day limit are team assumptions; drop-off rates are inputs, not findings; the scenario panel applies one trial's effect size and is labelled an assumption.
 
-Not done: evaluation run `[EVAL RESULTS PENDING — TICKET-14]` (no model key; no live model call verified), clinical review `[CLINICAL REVIEW PENDING — TICKET-19]`, Malaffi connection, real messaging, login, security review.
+Not done: evaluation run against a live model (no model key; no live model call verified; no accuracy figure is claimed), clinical review (no clinician on the team; comes before any pilot), Malaffi connection, real messaging, login, security review.
 
 Nexyra is not a referral tracker and not a messaging channel, and it builds no risk model.
 

@@ -11,7 +11,7 @@ Two lists: what a pilot needs and does not have yet, and what the prototype itse
 | Malaffi e-Referral as the channel for consultation questions and answers | Not connected. Two endpoints stand in for it. |
 | Department of Health approval for a pilot | Not sought |
 | Hosting and identity set-up that satisfies clinical data policy | Not done. The prototype is on public hosting with no login. |
-| Local clinical review of pathway stages, deadlines, closure evidence rules and message wording | `[CLINICAL REVIEW PENDING — TICKET-19]` |
+| Local clinical review of pathway stages, deadlines, closure evidence rules and message wording | Not done. No clinician is on the team and no reviewer is confirmed. This comes before any pilot. |
 | A clinician to check the labels of the report test set | Not done. `checked_by` is empty. |
 | Native-speaker review of Arabic patient-facing text, and written Urdu, Hindi and Tagalog templates | Arabic written, not reviewed. The other three are empty slots. |
 | An SMS or WhatsApp gateway and sender registration | Not built. The message is recorded as sent, not delivered. |
@@ -38,10 +38,20 @@ Two lists: what a pilot needs and does not have yet, and what the prototype itse
 
 - The demo does not need a model. The two readings for demo case 3 are stored demo readings (one with a `deepseek/...` model label that was not a verified live call, one written by hand and labelled `hand-written demo reading (no model call)`), and an extraction already seen is served from a cache keyed by a hash of the report text.
 - The live path exists: with `LLM_BASE_URL` and `LLM_API_KEY` set, `POST /api/cases/{id}/verification` and `npm run verify:file` call the model, check every quote against the report in code, and apply the proposal rules. Without a key and without a cached reading, the answer is "needs human reading".
-- The live path has been tested with a fake model and has not yet been run against a real provider. `[EVAL RESULTS PENDING — TICKET-14]`
+- The live path has been tested with a fake model and has not yet been run against a real provider. The evaluation harness (`npm run eval`) has not been run against a live model, so no accuracy figure is claimed. If a model key is added later, results go in `docs/evaluation-results.md`.
 - A provider's terms can allow use of content for product improvement while free credits are used. For that reason only synthetic data is ever sent to any model.
 - API keys live in `.env` and in Vercel settings. They are never committed.
 
 ## Third-party licences
 
-The open-source packages above are used under their own licences. A full licence list is not yet produced. `[LICENCE LIST TO BE GENERATED FROM package-lock.json BEFORE THE DECK SLIDE "Pre-existing IP and third-party materials"]`
+The open-source packages above are used under their own licences. The full list is in [`third-party-licences.md`](third-party-licences.md): 100 shipped packages (MIT 90, ISC 4, BSD-3-Clause 4, Apache-2.0 1, 0BSD 1).
+
+## Pilot timeline and sustainability (proposal)
+
+Both are proposals. Nothing here is agreed with anyone.
+
+- Month 1: clinical review and DoH review; request Malaffi data access.
+- Months 2 to 4: read-only pilot at one FIT screening site.
+- Months 5 to 7: owners, escalation and outreach live with coordination staff, measured against the pre-pilot baseline.
+- After that: more pathways and more sites.
+- Sustainability: a per-site subscription paid by the screening programme owner, on UAE-hosted infrastructure. Pricing follows the pilot evidence (cases closed within 31 days, staff time). No price is claimed yet.

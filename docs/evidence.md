@@ -41,8 +41,10 @@ What these three sources do not show: that targeting navigation by predicted ris
 
 ## Abu Dhabi
 
-- Colonoscopy follow-up after a positive FIT was 30.5% in the 2015 to 2016 data. This is old data from one analysis. The current rate is not known to the team. `[FULL CITATION FOR THE 30.5% FIGURE TO BE ADDED BY A TEAM MEMBER BEFORE SUBMISSION. The figure is verified; the paper reference is not in the repository.]`
-- Referral to colonoscopy within 31 days is the HAAD standard, cited in BMC Cancer 2021. It is the only pathway deadline in Nexyra that has a published basis.
+- Source: Almansoori A, Alzaabi M, Alketbi L. Colorectal Cancer screening in ambulatory healthcare service clinics in Abu Dhabi, United Arab Emirates in 2015–2016. BMC Cancer. 2021;21:897. doi:10.1186/s12885-021-08623-9. Verified from the article text on 18 Nov 2026.
+- Colonoscopy follow-up after a positive FIT was 30.5% in the 2015 to 2016 data. Of the people screened with FIT or gFOBT, 13.5% were positive. Of those, 30.5% (436) had the follow-up colonoscopy and 933 did not. 12% were never told their positive result. This is old data from one analysis. The current rate is not known to the team.
+- The same paper reports a different 30.5%: the share of polyps among those who had a colonoscopy. We do not use that one. We use the follow-up figure.
+- The paper cites the HAAD Standard for Colorectal Cancer Screening (2014): colonoscopy within 31 days of referral after a positive FIT, for over 90% of people. That is the only pathway deadline in Nexyra that has a published basis.
 
 ## Policy context
 
@@ -50,17 +52,13 @@ DoH Circular 144/2026 (number and gist only): all referral transactions go to Ma
 
 ## Nexyra's own evaluation
 
-`[EVAL RESULTS PENDING — TICKET-14]`
-
-The harness is ready (`npm run eval`, 24 labelled synthetic reports) and has not been run, because no model key was available. When it runs, it reports closure verification as fractions with denominators, with every error listed, wrong closures first. It measures the mechanism on synthetic reports. It does not measure clinical accuracy or patient outcomes.
+The harness is ready (`npm run eval`, 24 labelled synthetic reports) and has not been run, because no model key was available, so no accuracy figure is claimed. If a model key is added later, results go in `docs/evaluation-results.md`. When it runs, it reports closure verification as fractions with denominators, with every error listed, wrong closures first. It measures the mechanism on synthetic reports. It does not measure clinical accuracy or patient outcomes.
 
 What does exist is prior testing of the mechanism: 317 automated tests in 26 files, including one that replays all three demo cases through the API after a reset, and tests that every proposal rule and every quote check behaves as documented. These show the code does what it says, not that it is clinically right.
 
 ## Clinical review
 
-`[CLINICAL REVIEW PENDING — TICKET-19]`
-
-No clinician is on the team. Nothing in this folder has been clinically reviewed yet.
+No clinician is on the team. The pathway, deadlines, closure rules, test labels and patient wording have not been reviewed by a clinician. No reviewer is confirmed. This review comes before any pilot.
 
 ## Not claimed
 

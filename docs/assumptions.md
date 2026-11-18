@@ -25,8 +25,8 @@ Nothing here is a finding of the product. The authoritative values are in `serve
 | Closure proposed | Responsible physician | 48 h | Assumption |
 | Closure confirmed | Responsible physician | 24 h | Assumption |
 
-- Referral to colonoscopy within 31 days: **Sourced**. HAAD standard, cited in BMC Cancer 2021. The programme view shows it as the 31-day limit, measured from first entering Referral sent.
-- Whether the other deadlines are clinically sensible: `[CLINICAL REVIEW PENDING — TICKET-19]`.
+- Referral to colonoscopy within 31 days: **Sourced**. HAAD standard (within 31 days for over 90% of people), cited in Almansoori et al., BMC Cancer 2021. The programme view shows it as the 31-day limit, measured from first entering Referral sent.
+- Whether the other deadlines are clinically sensible: No clinician is on the team, so this has not been reviewed. A clinical review comes before any pilot.
 - The three closure outcomes (`returned_to_routine_screening`, `surveillance_scheduled`, `oncology_accepted_therapy_started`) and the evidence each needs: **Assumption**.
 
 ## Mammography pathway
@@ -55,7 +55,7 @@ Parameters in `server/outreach/templates/fit-positive.ladder.json`, each marked 
 | Navigator task deadline | 48 h | Assumption |
 | A delay reason recorded by coordination staff sends the case to the navigator at once | rule | Assumption |
 
-- Atlas et al. (JAMA 2023) sent letters in week 2 and phone calls in week 4. That is too slow for the 31-day referral-to-colonoscopy limit, so these values are deliberately shorter (message on day 0, staff call on day 2, navigator on day 4). They are not taken from Atlas and are not findings. `[CLINICAL REVIEW PENDING — TICKET-19]`
+- Atlas et al. (JAMA 2023) sent letters in week 2 and phone calls in week 4. That is too slow for the 31-day referral-to-colonoscopy limit, so these values are deliberately shorter (message on day 0, staff call on day 2, navigator on day 4). They are not taken from Atlas and are not findings. No clinician has reviewed them.
 - Delay reasons are a closed list: fear, transport, cost, language, other. **Assumption**.
 - The clinic name and phone number in the message are fictional. **Demo setting**.
 - English wording written by the team. Arabic wording written by the team and not reviewed by a native speaker. Urdu, Hindi and Tagalog have no text. `[NATIVE-SPEAKER REVIEW PENDING]`
@@ -69,7 +69,7 @@ Parameters in `server/outreach/templates/fit-positive.ladder.json`, each marked 
 
 ## Synthetic cohort
 
-`data/generator-assumptions.json`, seed 20261117. 1,000 cases over the 365 days before demo day 0, ages 45 to 75, with a drop-off probability and a time distribution per stage. Nearly every value is labelled "team guess". The only literature anchor is the 30.5% Abu Dhabi colonoscopy follow-up (2015 to 2016), used to calibrate the product of the stage drop-offs. Language mix and pathology mix have no source. **Drop-off rates are inputs, not findings.** `[CLINICAL REVIEW PENDING — TICKET-19]` for age band and pathology mix.
+`data/generator-assumptions.json`, seed 20261117. 1,000 cases over the 365 days before demo day 0, ages 45 to 75, with a drop-off probability and a time distribution per stage. Nearly every value is labelled "team guess". The only literature anchor is the 30.5% Abu Dhabi colonoscopy follow-up (2015 to 2016), used to calibrate the product of the stage drop-offs. Language mix and pathology mix have no source. **Drop-off rates are inputs, not findings.** Age band and pathology mix have not been reviewed by a clinician.
 
 ## Demo data
 
