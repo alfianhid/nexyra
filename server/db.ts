@@ -310,6 +310,35 @@ function toArgs(params: Params): InArgs {
   return (params as Value[]).map((value) => (value === undefined ? null : value)) as InArgs;
 }
 
+// A warm serverless instance keeps an HTTP keep-alive connection to Turso; when the
+// function sits idle (or busy with CPU work, like building the demo state), Turso closes
+// that connection and the next request fails with "fetch failed / other side closed"
+// before the server has read it. Those failures are retried once on a fresh connection.
+// A real SQL error (constraint, syntax) is never retried.
+const TRANSIENT_CODES = new Set(["UND_ERR_SOCKET", "UND_ERR_CLOSED", "ECONNRESET", "EPIPE"]);
+
+export function isTransientNetworkError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current; depth += 1) {
+    const e = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof e.code === "string" && TRANSIENT_CODES.has(e.code)) return true;
+    if (typeof e.message === "string" && /fetch failed|other side closed|socket hang up/i.test(e.message)) {
+      return true;
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
+export async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (!isTransientNetworkError(error)) throw error;
+    return run();
+  }
+}
+
 // A prepared statement in the better-sqlite3 shape the rest of the server was written
 // against (`get`, `all`, `run`), except every call returns a promise.
 export class Statement {
@@ -324,7 +353,8 @@ export class Statement {
   }
 
   async all<T = Record<string, unknown>>(...params: Params): Promise<T[]> {
-    const result = await this.client.execute(this.bind(...params));
+    const statement = this.bind(...params);
+    const result = await withRetry(() => this.client.execute(statement));
     return result.rows.map((row) => {
       const plain: Record<string, unknown> = {};
       result.columns.forEach((column, index) => {
@@ -340,7 +370,8 @@ export class Statement {
   }
 
   async run(...params: Params): Promise<{ changes: number }> {
-    const result = await this.client.execute(this.bind(...params));
+    const statement = this.bind(...params);
+    const result = await withRetry(() => this.client.execute(statement));
     return { changes: result.rowsAffected };
   }
 }
@@ -353,14 +384,14 @@ export class Db {
   }
 
   async exec(sql: string): Promise<void> {
-    await this.client.executeMultiple(sql);
+    await withRetry(() => this.client.executeMultiple(sql));
   }
 
   // The replacement for better-sqlite3's db.transaction(): every statement commits
   // together, or none does. One round trip, which matters when the database is remote.
   async batch(statements: InStatement[]): Promise<void> {
     if (statements.length === 0) return;
-    await this.client.batch(statements, "write");
+    await withRetry(() => this.client.batch(statements, "write"));
   }
 
   close(): void {
