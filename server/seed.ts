@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { databaseFile, getDb } from "./db";
+import type { InStatement } from "@libsql/client";
+import { databaseLabel, getDb, type Db } from "./db.js";
 
 // TICKET-17: three cases, all fictional. Running this file twice must not duplicate
 // anything, so every row has a fixed id and every write is an upsert.
@@ -173,8 +174,11 @@ function textHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-export function seed(): { actors: number; cases: number; events: number } {
-  const db = getDb();
+export async function seed(
+  target?: Db,
+): Promise<{ actors: number; cases: number; events: number }> {
+  const db = target ?? (await getDb());
+  const statements: InStatement[] = [];
 
   const upsertActor = db.prepare(
     `INSERT INTO actors (id, role, display_name) VALUES (@id, @role, @display_name)
@@ -237,11 +241,12 @@ export function seed(): { actors: number; cases: number; events: number } {
        status = excluded.status`,
   );
 
-  const run = db.transaction(() => {
-    for (const a of ACTORS) upsertActor.run(a);
+  // One atomic batch: a seed that fails halfway leaves the database as it was.
+  {
+    for (const a of ACTORS) statements.push(upsertActor.bind(a));
 
     for (const c of CASES) {
-      upsertCase.run({
+      statements.push(upsertCase.bind({
         id: c.id,
         patient_name: c.patient_name,
         patient_age: c.patient_age,
@@ -253,11 +258,11 @@ export function seed(): { actors: number; cases: number; events: number } {
         final_outcome: c.final_outcome ?? null,
         created_at: c.events[0]?.at ?? NOW,
         updated_at: NOW,
-      });
+      }));
 
       const roles = new Map(ACTORS.map((a) => [a.id, a.role]));
       for (const e of c.events) {
-        insertEvent.run({
+        statements.push(insertEvent.bind({
           id: e.id,
           case_id: c.id,
           type: e.type,
@@ -266,20 +271,20 @@ export function seed(): { actors: number; cases: number; events: number } {
           occurred_at: e.at,
           recorded_at: e.at,
           payload: JSON.stringify({ summary: e.summary }),
-        });
+        }));
       }
     }
 
-    upsertDocument.run({
+    statements.push(upsertDocument.bind({
       id: "d_1003",
       case_id: "CX-1003",
       kind: "colonoscopy",
       title: "Colonoscopy report",
       text: REPORT_TEXT,
-    });
+    }));
 
     // Cached so the demo never needs the network (TICKET-17).
-    upsertExtraction.run({
+    statements.push(upsertExtraction.bind({
       id: "x_1003",
       case_id: "CX-1003",
       document_id: "d_1003",
@@ -290,46 +295,50 @@ export function seed(): { actors: number; cases: number; events: number } {
       fields: JSON.stringify(CACHED_FIELDS),
       text_hash: textHash(REPORT_TEXT),
       created_at: "2026-11-17T09:14:00+07:00",
-    });
+    }));
 
-    upsertTask.run({
+    statements.push(upsertTask.bind({
       id: "t_1001_outreach",
       case_id: "CX-1001",
       kind: "patient_outreach",
       owner_actor_id: "act_005",
       due_at: "2026-11-18T09:00:00+07:00",
       status: "open",
-    });
-    upsertTask.run({
+    }));
+    statements.push(upsertTask.bind({
       id: "t_1002_owner",
       case_id: "CX-1002",
       kind: "assign_owner",
       owner_actor_id: null,
       due_at: "2026-11-18T12:00:00+07:00",
       status: "open",
-    });
-    upsertTask.run({
+    }));
+    statements.push(upsertTask.bind({
       id: "t_1003_closure",
       case_id: "CX-1003",
       kind: "confirm_closure",
       owner_actor_id: "act_003",
       due_at: "2026-11-17T14:00:00+07:00",
       status: "open",
-    });
-  });
+    }));
+  }
 
-  run();
+  await db.batch(statements);
 
-  const count = (table: string) =>
-    (db.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n;
+  const count = async (table: string) =>
+    (await db.prepare(`SELECT count(*) AS n FROM ${table}`).get<{ n: number }>())?.n ?? 0;
 
-  return { actors: count("actors"), cases: count("cases"), events: count("events") };
+  return {
+    actors: await count("actors"),
+    cases: await count("cases"),
+    events: await count("events"),
+  };
 }
 
 // `tsx server/seed.ts` prints what it did; importing it (tests) just gets the function.
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("server/seed.ts")) {
-  const result = seed();
-  console.log(`seeded ${databaseFile()}`);
+  const result = await seed();
+  console.log(`seeded ${databaseLabel()}`);
   console.log(
     `actors=${result.actors} cases=${result.cases} events=${result.events} demo_day=${DEMO_DAY_ZERO}`,
   );

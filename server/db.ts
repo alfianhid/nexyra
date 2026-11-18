@@ -1,9 +1,14 @@
-import Database from "better-sqlite3";
+import { createClient, type Client, type InArgs, type InStatement } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // Schema for TICKET-03. Event rows are the source of truth; the status columns on
 // `cases` are a cache that a later ticket rebuilds from `events`.
+//
+// Storage is libSQL: a local SQLite file in development and tests, Turso when deployed
+// (Vercel functions have no persistent disk). Both speak the same SQLite dialect, so
+// the SQL below runs unchanged in either place.
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS actors (
@@ -116,45 +121,204 @@ BEGIN
 END;
 `;
 
-export type Db = Database.Database;
+// Children before parents, so foreign keys never block the drop.
+const TABLES = [
+  "extractions",
+  "timers",
+  "tasks",
+  "documents",
+  "events",
+  "cases",
+  "actors",
+  "clocks",
+] as const;
 
-export function openDatabase(file: string): Db {
-  if (file !== ":memory:") {
-    mkdirSync(dirname(file), { recursive: true });
+type Value = string | number | bigint | null | ArrayBuffer | Uint8Array | boolean;
+type Params = Value[] | [Record<string, Value | undefined>];
+
+// libSQL rejects `undefined`; better-sqlite3 callers relied on it meaning NULL.
+function toArgs(params: Params): InArgs {
+  if (params.length === 1 && params[0] !== null && typeof params[0] === "object" && !ArrayBuffer.isView(params[0]) && !(params[0] instanceof ArrayBuffer)) {
+    const named: Record<string, Value> = {};
+    for (const [key, value] of Object.entries(params[0] as Record<string, Value | undefined>)) {
+      named[key] = value === undefined ? null : value;
+    }
+    return named as InArgs;
   }
-  const db = new Database(file);
-  // WAL lets the demo read while a write is in flight; TICKET-02 chose one file on disk.
-  if (file !== ":memory:") db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("synchronous = NORMAL");
-  db.exec(SCHEMA);
-
-  // CREATE TABLE IF NOT EXISTS does not add columns to a file created by an earlier
-  // build, and data/nexyra.sqlite is not recreated between phases.
-  const caseColumns = db.prepare("PRAGMA table_info(cases)").all() as { name: string }[];
-  if (!caseColumns.some((column) => column.name === "final_outcome")) {
-    db.exec("ALTER TABLE cases ADD COLUMN final_outcome TEXT");
-  }
-
-  return db;
+  return (params as Value[]).map((value) => (value === undefined ? null : value)) as InArgs;
 }
 
-// The process-wide connection, created on first use. DATABASE_FILE is read here and
-// nowhere else, so tests can point it at a temp file.
-let shared: Db | null = null;
+// A prepared statement in the better-sqlite3 shape the rest of the server was written
+// against (`get`, `all`, `run`), except every call returns a promise.
+export class Statement {
+  constructor(
+    private readonly client: Client,
+    readonly sql: string,
+  ) {}
+
+  // For Db.batch: the statement with its arguments, run later in one atomic write.
+  bind(...params: Params): InStatement {
+    return { sql: this.sql, args: toArgs(params) };
+  }
+
+  async all<T = Record<string, unknown>>(...params: Params): Promise<T[]> {
+    const result = await this.client.execute(this.bind(...params));
+    return result.rows.map((row) => {
+      const plain: Record<string, unknown> = {};
+      result.columns.forEach((column, index) => {
+        plain[column] = row[index];
+      });
+      return plain as T;
+    });
+  }
+
+  async get<T = Record<string, unknown>>(...params: Params): Promise<T | undefined> {
+    const rows = await this.all<T>(...params);
+    return rows[0];
+  }
+
+  async run(...params: Params): Promise<{ changes: number }> {
+    const result = await this.client.execute(this.bind(...params));
+    return { changes: result.rowsAffected };
+  }
+}
+
+export class Db {
+  constructor(readonly client: Client) {}
+
+  prepare(sql: string): Statement {
+    return new Statement(this.client, sql);
+  }
+
+  async exec(sql: string): Promise<void> {
+    await this.client.executeMultiple(sql);
+  }
+
+  // The replacement for better-sqlite3's db.transaction(): every statement commits
+  // together, or none does. One round trip, which matters when the database is remote.
+  async batch(statements: InStatement[]): Promise<void> {
+    if (statements.length === 0) return;
+    await this.client.batch(statements, "write");
+  }
+
+  close(): void {
+    this.client.close();
+  }
+}
+
+export type DatabaseTarget = { url: string; authToken?: string; local: boolean };
+
+// TURSO_DATABASE_URL wins when it is set (the deployed app); otherwise DATABASE_FILE, a
+// local SQLite file. Read here and nowhere else, so tests can point it at a temp file.
+export function databaseTarget(): DatabaseTarget {
+  const remote = process.env.TURSO_DATABASE_URL;
+  if (remote) {
+    return { url: remote, authToken: process.env.TURSO_AUTH_TOKEN, local: false };
+  }
+  // On Vercel a local file would be written to a read-only or throwaway disk and the demo
+  // would silently lose its state, so a missing URL is a configuration error.
+  if (process.env.VERCEL) {
+    throw new Error(
+      "TURSO_DATABASE_URL is not set. Add it and TURSO_AUTH_TOKEN to the Vercel project.",
+    );
+  }
+  return { url: pathToFileURL(databaseFile()).href, local: true };
+}
 
 export function databaseFile(): string {
   return resolve(process.env.DATABASE_FILE ?? "data/nexyra.sqlite");
 }
 
-export function getDb(): Db {
-  if (!shared) shared = openDatabase(databaseFile());
+// Where the data lives, for log lines. Never prints the auth token.
+export function databaseLabel(): string {
+  const target = databaseTarget();
+  return target.local ? databaseFile() : target.url;
+}
+
+async function prepareSchema(db: Db): Promise<void> {
+  await db.exec(SCHEMA);
+
+  // CREATE TABLE IF NOT EXISTS does not add columns to a file created by an earlier
+  // build, and data/nexyra.sqlite is not recreated between phases.
+  const caseColumns = await db.prepare("PRAGMA table_info(cases)").all<{ name: string }>();
+  if (!caseColumns.some((column) => column.name === "final_outcome")) {
+    await db.exec("ALTER TABLE cases ADD COLUMN final_outcome TEXT");
+  }
+}
+
+// A local file path (tests, scripts) or a full target. The schema is created on open.
+export async function openDatabase(target: string | DatabaseTarget): Promise<Db> {
+  const resolved: DatabaseTarget =
+    typeof target === "string"
+      ? { url: pathToFileURL(resolve(target)).href, local: true }
+      : target;
+
+  if (resolved.local) {
+    const path = typeof target === "string" ? resolve(target) : databaseFile();
+    mkdirSync(dirname(path), { recursive: true });
+  }
+
+  const db = new Db(createClient({ url: resolved.url, authToken: resolved.authToken }));
+  if (resolved.local) {
+    // WAL lets the demo read while a write is in flight. Turso manages its own journal.
+    await db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+  }
+  await db.exec("PRAGMA foreign_keys = ON;");
+  await prepareSchema(db);
+  return db;
+}
+
+// `npm run demo:reset` on either backend: a remote database has no file to delete, and
+// the append-only triggers refuse a DELETE on events, so the tables are dropped and the
+// schema is created again.
+export async function resetDatabase(db: Db): Promise<void> {
+  await db.exec(
+    [
+      "DROP TRIGGER IF EXISTS events_no_update;",
+      "DROP TRIGGER IF EXISTS events_no_delete;",
+      ...TABLES.map((table) => `DROP TABLE IF EXISTS ${table};`),
+    ].join("\n"),
+  );
+  await prepareSchema(db);
+}
+
+// The process-wide connection, opened on first use. A serverless function keeps it for
+// as long as its instance stays warm.
+let shared: Promise<Db> | null = null;
+
+export function getDb(): Promise<Db> {
+  if (!shared) {
+    shared = openDatabase(databaseTarget()).catch((error: unknown) => {
+      shared = null;
+      throw error;
+    });
+  }
   return shared;
 }
 
-export function closeDb(): void {
+export async function closeDb(): Promise<void> {
   if (shared) {
-    shared.close();
+    const pending = shared;
     shared = null;
+    try {
+      (await pending).close();
+    } catch {
+      // Opening failed; there is nothing to close.
+    }
+  }
+  await releaseFileHandles();
+}
+
+// libSQL keeps a closed connection's file open until its prepared statements are
+// garbage-collected, so on Windows the file cannot be deleted right after close().
+// Tests (which delete temp files) run with --expose-gc; elsewhere this does nothing.
+export async function releaseFileHandles(): Promise<void> {
+  const gc = (globalThis as { gc?: () => void }).gc;
+  if (!gc) return;
+  // A statement that failed (a trigger refusing a write) is only freed on a later
+  // cycle, after the rejected promise holding its error has itself become garbage.
+  for (let pass = 0; pass < 3; pass += 1) {
+    gc();
+    await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }

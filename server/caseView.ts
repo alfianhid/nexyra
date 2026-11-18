@@ -1,6 +1,6 @@
-import type { Actor } from "./actor";
-import { REFERRAL_LIMIT_DAYS, addHours, embeddedClock, formatDue, hoursBetween } from "./clock";
-import type { Db } from "./db";
+import type { Actor } from "./actor.js";
+import { REFERRAL_LIMIT_DAYS, addHours, embeddedClock, formatDue, hoursBetween } from "./clock.js";
+import type { Db } from "./db.js";
 import {
   OUTCOMES,
   STAGES,
@@ -11,8 +11,8 @@ import {
   stageOrder,
   type EngineCase,
   type Role,
-} from "./engine";
-import { HttpError } from "./errors";
+} from "./engine.js";
+import { HttpError } from "./errors.js";
 
 // Reads only. Every rule (which stage, which owner, which actions) comes from
 // server/engine.ts; this file joins the database and formats, it does not decide.
@@ -85,7 +85,7 @@ function parsePayload(json: string): Record<string, unknown> {
   }
 }
 
-function caseRows(db: Db): CaseRow[] {
+function caseRows(db: Db): Promise<CaseRow[]> {
   return db
     .prepare(
       `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.status,
@@ -94,40 +94,40 @@ function caseRows(db: Db): CaseRow[] {
          FROM cases c
          LEFT JOIN actors a ON a.id = c.owner_actor_id`,
     )
-    .all() as CaseRow[];
+    .all<CaseRow>();
 }
 
-function caseRow(db: Db, caseId: string): CaseRow | undefined {
-  return caseRows(db).find((row) => row.id === caseId);
+async function caseRow(db: Db, caseId: string): Promise<CaseRow | undefined> {
+  return (await caseRows(db)).find((row) => row.id === caseId);
 }
 
 function documentsFor(
   db: Db,
   caseId: string,
-): { id: string; kind: string; title: string }[] {
+): Promise<{ id: string; kind: string; title: string }[]> {
   return db
     .prepare("SELECT id, kind, title FROM documents WHERE case_id = ?")
-    .all(caseId) as { id: string; kind: string; title: string }[];
+    .all<{ id: string; kind: string; title: string }>(caseId);
 }
 
-function physicianConfirmed(db: Db, caseId: string): boolean {
-  const row = db
+async function physicianConfirmed(db: Db, caseId: string): Promise<boolean> {
+  const row = await db
     .prepare(
       `SELECT count(*) AS n FROM events
         WHERE case_id = ? AND type = 'closure_confirmed' AND actor_role = 'responsible_physician'`,
     )
-    .get(caseId) as { n: number };
-  return row.n > 0;
+    .get<{ n: number }>(caseId);
+  return (row?.n ?? 0) > 0;
 }
 
-function toEngineCase(db: Db, row: CaseRow): EngineCase {
+async function toEngineCase(db: Db, row: CaseRow): Promise<EngineCase> {
   return {
     stage: row.stage,
     status: row.status,
     owner_actor_id: row.owner_actor_id,
     final_outcome: row.final_outcome,
-    documents: documentsFor(db, row.id).map((doc) => ({ kind: doc.kind })),
-    physician_confirmed: physicianConfirmed(db, row.id),
+    documents: (await documentsFor(db, row.id)).map((doc) => ({ kind: doc.kind })),
+    physician_confirmed: await physicianConfirmed(db, row.id),
   };
 }
 
@@ -204,7 +204,7 @@ function passesFilter(
   return row.stage === "closure_proposed" && !isClosed(toClosedShape(row));
 }
 
-function taskRows(db: Db): TaskRow[] {
+function taskRows(db: Db): Promise<TaskRow[]> {
   return db
     .prepare(
       `SELECT t.id, t.case_id, t.kind, t.owner_actor_id, t.due_at, t.status,
@@ -212,7 +212,7 @@ function taskRows(db: Db): TaskRow[] {
          FROM tasks t
          LEFT JOIN actors a ON a.id = t.owner_actor_id`,
     )
-    .all() as TaskRow[];
+    .all<TaskRow>();
 }
 
 function taskRolesByCase(tasks: TaskRow[]): Map<string, Set<string>> {
@@ -226,9 +226,14 @@ function taskRolesByCase(tasks: TaskRow[]): Map<string, Set<string>> {
   return map;
 }
 
-export function listCases(db: Db, role: Role, filter: CaseFilter | undefined, now: string) {
-  const rows = caseRows(db);
-  const rolesByCase = taskRolesByCase(taskRows(db));
+export async function listCases(
+  db: Db,
+  role: Role,
+  filter: CaseFilter | undefined,
+  now: string,
+) {
+  const rows = await caseRows(db);
+  const rolesByCase = taskRolesByCase(await taskRows(db));
 
   const visible = rows
     .filter((row) => visibleToRole(row, rolesByCase.get(row.id) ?? new Set(), role))
@@ -267,7 +272,7 @@ export function listCases(db: Db, role: Role, filter: CaseFilter | undefined, no
 
   const open = visible.filter(({ row }) => !isClosed(toClosedShape(row)));
   return {
-    clock: embeddedClock(),
+    clock: await embeddedClock(db),
     counts: {
       open: open.length,
       unowned: open.filter(({ row }) => row.owner_actor_id === null).length,
@@ -279,8 +284,8 @@ export function listCases(db: Db, role: Role, filter: CaseFilter | undefined, no
   };
 }
 
-function timelineFor(db: Db, caseId: string) {
-  const events = db
+async function timelineFor(db: Db, caseId: string) {
+  const events = await db
     .prepare(
       `SELECT e.id, e.type, e.actor_id, e.actor_role, e.occurred_at, e.recorded_at, e.payload,
               a.display_name AS actor_name
@@ -289,7 +294,7 @@ function timelineFor(db: Db, caseId: string) {
         WHERE e.case_id = ?
         ORDER BY e.occurred_at, e.rowid`,
     )
-    .all(caseId) as EventRow[];
+    .all<EventRow>(caseId);
 
   return events.map((event) => ({
     event_id: event.id,
@@ -313,14 +318,14 @@ function timelineFor(db: Db, caseId: string) {
   }));
 }
 
-function outreachAttemptsFor(db: Db, caseId: string) {
-  const events = db
+async function outreachAttemptsFor(db: Db, caseId: string) {
+  const events = await db
     .prepare(
       `SELECT id, type, occurred_at, payload FROM events
         WHERE case_id = ? AND type = 'outreach_attempted'
         ORDER BY occurred_at, rowid`,
     )
-    .all(caseId) as { id: string; type: string; occurred_at: string; payload: string }[];
+    .all<{ id: string; type: string; occurred_at: string; payload: string }>(caseId);
 
   return events.map((event, index) => {
     const payload = parsePayload(event.payload);
@@ -337,12 +342,12 @@ function outreachAttemptsFor(db: Db, caseId: string) {
   });
 }
 
-function verificationSummary(db: Db, caseId: string) {
-  const row = db
+async function verificationSummary(db: Db, caseId: string) {
+  const row = await db
     .prepare(
       "SELECT proposal FROM extractions WHERE case_id = ? ORDER BY created_at DESC LIMIT 1",
     )
-    .get(caseId) as { proposal: string } | undefined;
+    .get<{ proposal: string }>(caseId);
 
   return row
     ? { status: "ready", proposal: row.proposal }
@@ -351,13 +356,13 @@ function verificationSummary(db: Db, caseId: string) {
 
 // GET /api/cases/{case_id}/verification. No cached extraction means no report text to
 // cite, so the honest answer is "a human has to read this" rather than an empty claim.
-export function getVerification(db: Db, caseId: string) {
-  const row = caseRow(db, caseId);
+export async function getVerification(db: Db, caseId: string) {
+  const row = await caseRow(db, caseId);
   if (!row) {
     throw new HttpError(404, "not_found", `No case carries the reference ${caseId}.`);
   }
 
-  const extraction = db
+  const extraction = await db
     .prepare(
       `SELECT x.id, x.document_id, x.prompt_version, x.model, x.fields, x.proposal,
               x.proposal_reason, d.text
@@ -367,21 +372,19 @@ export function getVerification(db: Db, caseId: string) {
         ORDER BY x.created_at DESC
         LIMIT 1`,
     )
-    .get(caseId) as
-    | {
-        id: string;
-        document_id: string;
-        prompt_version: string;
-        model: string;
-        fields: string;
-        proposal: string;
-        proposal_reason: string;
-        text: string;
-      }
-    | undefined;
+    .get<{
+      id: string;
+      document_id: string;
+      prompt_version: string;
+      model: string;
+      fields: string;
+      proposal: string;
+      proposal_reason: string;
+      text: string;
+    }>(caseId);
 
   if (!extraction) {
-    const document = documentsFor(db, caseId)[0];
+    const document = (await documentsFor(db, caseId))[0];
     return {
       report: { document_id: document?.id ?? null, text: "" },
       extraction: {
@@ -413,13 +416,13 @@ export function getVerification(db: Db, caseId: string) {
   };
 }
 
-export function getCaseDetail(db: Db, caseId: string, role: Role) {
-  const row = caseRow(db, caseId);
+export async function getCaseDetail(db: Db, caseId: string, role: Role) {
+  const row = await caseRow(db, caseId);
   if (!row) {
     throw new HttpError(404, "not_found", `No case carries the reference ${caseId}.`);
   }
 
-  const engineCase = toEngineCase(db, row);
+  const engineCase = await toEngineCase(db, row);
   const currentOrder = stageOrder(row.stage);
   const entered = row.stage_entered_at ?? row.created_at;
   const definition = stageDefinition(row.stage);
@@ -428,7 +431,8 @@ export function getCaseDetail(db: Db, caseId: string, role: Role) {
   const deadline =
     definition?.sla_hours != null ? addHours(entered, definition.sla_hours) : entered;
 
-  const tasks = taskRows(db).filter((task) => task.case_id === caseId);
+  const tasks = (await taskRows(db)).filter((task) => task.case_id === caseId);
+  const documents = await documentsFor(db, caseId);
 
   return {
     case: {
@@ -457,8 +461,8 @@ export function getCaseDetail(db: Db, caseId: string, role: Role) {
             ? "current"
             : "ahead",
     })),
-    timeline: timelineFor(db, caseId),
-    documents: documentsFor(db, caseId).map((document) => ({
+    timeline: await timelineFor(db, caseId),
+    documents: documents.map((document) => ({
       document_id: document.id,
       kind: document.kind,
       title: document.title,
@@ -477,8 +481,8 @@ export function getCaseDetail(db: Db, caseId: string, role: Role) {
       due_at: task.due_at,
       status: task.status,
     })),
-    outreach_attempts: outreachAttemptsFor(db, caseId),
+    outreach_attempts: await outreachAttemptsFor(db, caseId),
     available_actions: availableActions(engineCase, role),
-    verification: verificationSummary(db, caseId),
+    verification: await verificationSummary(db, caseId),
   };
 }

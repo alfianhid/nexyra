@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import type { Db } from "./db";
-import { isRole, type Role } from "./engine";
-import { HttpError } from "./errors";
+import { getDb, type Db } from "./db.js";
+import { isRole, type Role } from "./engine.js";
+import { HttpError } from "./errors.js";
 
 // docs/api.md "Actor and trust model": identity travels in one JSON header, is
 // validated against the actors table, and never falls back to a default actor.
@@ -24,7 +24,10 @@ function reject(message: string): never {
   throw new HttpError(403, "role_not_permitted", message);
 }
 
-export function authenticateActor(headerValue: string | undefined, db: Db): Actor {
+export async function authenticateActor(
+  headerValue: string | undefined,
+  db: Db,
+): Promise<Actor> {
   if (!headerValue) reject("An X-Nexyra-Actor header is required.");
 
   let parsed: unknown = undefined;
@@ -48,9 +51,9 @@ export function authenticateActor(headerValue: string | undefined, db: Db): Acto
     reject(`The role "${String(role)}" may not act over HTTP.`);
   }
 
-  const row = db
+  const row = await db
     .prepare("SELECT id, role, display_name FROM actors WHERE id = ?")
-    .get(actorId) as ActorRow | undefined;
+    .get<ActorRow>(actorId);
 
   if (!row) reject(`No actor carries the id "${actorId}".`);
 
@@ -64,11 +67,12 @@ export function authenticateActor(headerValue: string | undefined, db: Db): Acto
 }
 
 // For mutating routes (phase 5 onwards): a request without a valid actor never reaches
-// the handler.
-export function actorMiddleware(db: Db): RequestHandler {
-  return (req: Request, res: Response, next: NextFunction) => {
+// the handler. The connection is resolved per request, because on a serverless host
+// it is opened lazily by the first request rather than at import time.
+export function actorMiddleware(): RequestHandler {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      res.locals.actor = authenticateActor(req.header(HEADER), db);
+      res.locals.actor = await authenticateActor(req.header(HEADER), await getDb());
       next();
     } catch (error) {
       next(error);
@@ -79,9 +83,9 @@ export function actorMiddleware(db: Db): RequestHandler {
 // Reads are not guarded yet (the frontend only switches to the header in phase 6), so a
 // read resolves its role from the header when present, otherwise from `?role=`.
 // A present-but-invalid header is always refused, never downgraded to the query.
-export function roleForRead(req: Request, db: Db): Role {
+export async function roleForRead(req: Request, db: Db): Promise<Role> {
   const headerValue = req.header(HEADER);
-  if (headerValue !== undefined) return authenticateActor(headerValue, db).role;
+  if (headerValue !== undefined) return (await authenticateActor(headerValue, db)).role;
 
   const role = req.query.role;
   if (!isRole(role)) {

@@ -1,4 +1,4 @@
-import { getDb, type Db } from "./db";
+import { getDb, type Db } from "./db.js";
 
 // TICKET-06: the demo clock is a row in the database, not a constant, so it survives a
 // restart and every read measures deadlines against the same instant. Day 0 is the
@@ -51,14 +51,14 @@ export function hoursBetween(from: string, to: string): number {
 
 type ClockRow = { now: string; day: number };
 
-function ensureClock(db: Db): ClockRow {
-  db.prepare("INSERT OR IGNORE INTO clocks (id, now, day) VALUES (1, ?, 0)").run(DEMO_START);
-  const row = db.prepare("SELECT now, day FROM clocks WHERE id = 1").get() as ClockRow | undefined;
+async function ensureClock(db: Db): Promise<ClockRow> {
+  await db.prepare("INSERT OR IGNORE INTO clocks (id, now, day) VALUES (1, ?, 0)").run(DEMO_START);
+  const row = await db.prepare("SELECT now, day FROM clocks WHERE id = 1").get<ClockRow>();
   return row ?? { now: DEMO_START, day: 0 };
 }
 
-export function getClock(db: Db = getDb()): Clock {
-  const row = ensureClock(db);
+export async function getClock(db?: Db): Promise<Clock> {
+  const row = await ensureClock(db ?? (await getDb()));
   return {
     now: row.now,
     is_demo: true,
@@ -69,19 +69,21 @@ export function getClock(db: Db = getDb()): Clock {
 }
 
 // The `clock` object embedded in a read response carries only these three fields.
-export function embeddedClock(db: Db = getDb()): { now: string; is_demo: boolean; day: number } {
-  const { now, is_demo, day } = getClock(db);
+export async function embeddedClock(
+  db?: Db,
+): Promise<{ now: string; is_demo: boolean; day: number }> {
+  const { now, is_demo, day } = await getClock(db);
   return { now, is_demo, day };
 }
 
-export function setClock(db: Db, now: string, day: number): Clock {
-  ensureClock(db);
-  db.prepare("UPDATE clocks SET now = ?, day = ? WHERE id = 1").run(now, day);
+export async function setClock(db: Db, now: string, day: number): Promise<Clock> {
+  await ensureClock(db);
+  await db.prepare("UPDATE clocks SET now = ?, day = ? WHERE id = 1").run(now, day);
   return getClock(db);
 }
 
-export function advanceDays(db: Db, days: number): Clock {
-  const row = ensureClock(db);
+export async function advanceDays(db: Db, days: number): Promise<Clock> {
+  const row = await ensureClock(db);
   return setClock(db, addHours(row.now, days * 24), row.day + days);
 }
 

@@ -13,7 +13,7 @@ The submission form requires two links: a prototype or deployment, and a demo vi
 ### Prototype link
 
 - The application is hosted and judges can open it via a single link, without login.
-- Choose a hosting service that runs a Node.js process and can mount a persistent disk for the SQLite file (no database server to provision). Decide no later than 17 Nov and do the first deploy on 18 Nov, because the first deploy almost always surfaces problems.
+- Hosting is decided (18 Nov): Vercel for the frontend and the API function, Turso for the database. Steps are in [`docs/deploy.md`](../docs/deploy.md). Do the first deploy on 18 Nov, because the first deploy almost always surfaces problems.
 - The demo database is reset automatically on a schedule, so judges always find the three demo cases in their starting state.
 - The landing page explains in a few sentences what is being looked at and which step to try first.
 - API keys live only on the server. Closure verification on the hosted version uses pre-stored results for the demo reports, so there is no cost or abuse from visitors.

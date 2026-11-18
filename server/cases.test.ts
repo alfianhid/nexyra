@@ -16,12 +16,12 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "nexyra-api-"));
   process.env.DATABASE_FILE = join(dir, "api.sqlite");
 
-  const { getDb } = await import("./db");
-  const { seed } = await import("./seed");
-  const { app } = await import("./index");
+  const { getDb } = await import("./db.js");
+  const { seed } = await import("./seed.js");
+  const { app } = await import("./index.js");
 
-  getDb();
-  seed();
+  await getDb();
+  await seed();
 
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
@@ -34,8 +34,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
-  const { closeDb } = await import("./db");
-  closeDb();
+  const { closeDb } = await import("./db.js");
+  await closeDb();
   rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 

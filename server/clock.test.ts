@@ -18,12 +18,12 @@ beforeAll(async () => {
   file = join(dir, "clock.sqlite");
   process.env.DATABASE_FILE = file;
 
-  const { getDb } = await import("./db");
-  const { seed } = await import("./seed");
-  const { app } = await import("./index");
+  const { getDb } = await import("./db.js");
+  const { seed } = await import("./seed.js");
+  const { app } = await import("./index.js");
 
-  getDb();
-  seed();
+  await getDb();
+  await seed();
 
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
@@ -36,8 +36,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
-  const { closeDb } = await import("./db");
-  closeDb();
+  const { closeDb } = await import("./db.js");
+  await closeDb();
   rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
@@ -55,15 +55,15 @@ async function call(method: "GET" | "POST", path: string, body?: unknown) {
 // A real reset, the way `npm run demo:reset` does it: the events table is append-only,
 // so nothing can delete an escalation. Rebuilding the file is the only honest reset.
 async function resetDemo() {
-  const { closeDb, getDb } = await import("./db");
-  const { seed } = await import("./seed");
+  const { closeDb, getDb } = await import("./db.js");
+  const { seed } = await import("./seed.js");
 
-  closeDb();
+  await closeDb();
   for (const suffix of ["", "-wal", "-shm"]) {
     rmSync(`${file}${suffix}`, { force: true, maxRetries: 5, retryDelay: 50 });
   }
-  getDb();
-  seed();
+  await getDb();
+  await seed();
 }
 
 describe("GET /api/clock", () => {
@@ -125,10 +125,10 @@ describe("POST /api/clock/advance", () => {
     await resetDemo();
     for (let i = 0; i < 6; i += 1) await call("POST", "/api/clock/advance", { days: 1 });
 
-    const { getDb } = await import("./db");
-    const levels = getDb()
+    const { getDb } = await import("./db.js");
+    const levels = await (await getDb())
       .prepare("SELECT level FROM timers WHERE case_id = 'CX-1003' ORDER BY level")
-      .all() as { level: number }[];
+      .all<{ level: number }>();
     expect(levels.map((l) => l.level)).toEqual([1, 2, 3]);
   });
 
@@ -162,28 +162,28 @@ describe("the escalated case", () => {
   });
 
   it("records the escalation as an event and a task for the next role", async () => {
-    const { getDb } = await import("./db");
-    const db = getDb();
+    const { getDb } = await import("./db.js");
+    const db = await getDb();
 
-    const event = db
+    const event = await db
       .prepare(
         `SELECT actor_role, payload FROM events
           WHERE case_id = 'CX-1003' AND type = 'deadline_missed'
           ORDER BY occurred_at DESC, rowid DESC LIMIT 1`,
       )
-      .get() as { actor_role: string; payload: string } | undefined;
+      .get<{ actor_role: string; payload: string }>();
 
     expect(event?.actor_role).toBe("system");
     const payload = JSON.parse(event?.payload ?? "{}") as { escalated_to?: string };
     expect(payload.escalated_to).toBe("responsible_physician");
 
-    const task = db
+    const task = await db
       .prepare(
         `SELECT t.kind, a.role FROM tasks t LEFT JOIN actors a ON a.id = t.owner_actor_id
           WHERE t.case_id = 'CX-1003' AND t.kind = 'escalation'
           ORDER BY t.rowid DESC LIMIT 1`,
       )
-      .get() as { kind: string; role: string } | undefined;
+      .get<{ kind: string; role: string }>();
     expect(task?.role).toBe("responsible_physician");
   });
 });
@@ -191,22 +191,22 @@ describe("the escalated case", () => {
 describe("a case that leaves its stage before the deadline", () => {
   it("is never escalated for the stage it left", async () => {
     await resetDemo();
-    const { getDb } = await import("./db");
-    const db = getDb();
+    const { getDb } = await import("./db.js");
+    const db = await getDb();
 
     // CX-1001 is at result_received until 22 Nov. Move it on before its deadline.
-    db.prepare(
+    await db.prepare(
       `UPDATE cases SET stage = 'colonoscopy_booked', stage_entered_at = ? WHERE id = 'CX-1001'`,
     ).run("2026-11-17T11:42:00+07:00");
 
     await call("POST", "/api/clock/advance", { days: 6 });
 
-    const escalated = db
+    const escalated = await db
       .prepare(
         `SELECT count(*) AS n FROM timers WHERE case_id = 'CX-1001' AND stage = 'result_received'`,
       )
-      .get() as { n: number };
-    expect(escalated.n).toBe(0);
+      .get<{ n: number }>();
+    expect(escalated?.n).toBe(0);
   });
 });
 
@@ -215,23 +215,25 @@ describe("restart", () => {
     await resetDemo();
     await call("POST", "/api/clock/advance", { days: 2 });
 
-    const { closeDb, openDatabase } = await import("./db");
+    const { closeDb, openDatabase } = await import("./db.js");
     const before = (
-      (await import("./db")).getDb().prepare("SELECT count(*) AS n FROM timers").get() as { n: number }
-    ).n;
+      await (await (await import("./db.js")).getDb())
+        .prepare("SELECT count(*) AS n FROM timers")
+        .get<{ n: number }>()
+    )?.n;
 
-    closeDb();
-    const reopened = openDatabase(file);
-    const row = reopened.prepare("SELECT now, day FROM clocks WHERE id = 1").get() as {
+    await closeDb();
+    const reopened = await openDatabase(file);
+    const row = await reopened.prepare("SELECT now, day FROM clocks WHERE id = 1").get<{
       now: string;
       day: number;
-    };
-    const timers = reopened.prepare("SELECT count(*) AS n FROM timers").get() as { n: number };
+    }>();
+    const timers = await reopened.prepare("SELECT count(*) AS n FROM timers").get<{ n: number }>();
     reopened.close();
 
-    expect(row.day).toBe(2);
-    expect(row.now).toBe("2026-11-19T11:42:00+07:00");
-    expect(timers.n).toBe(before);
-    expect(timers.n).toBeGreaterThan(0);
+    expect(row?.day).toBe(2);
+    expect(row?.now).toBe("2026-11-19T11:42:00+07:00");
+    expect(timers?.n).toBe(before);
+    expect(timers?.n).toBeGreaterThan(0);
   });
 });

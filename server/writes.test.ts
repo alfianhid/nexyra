@@ -15,12 +15,12 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "nexyra-writes-"));
   process.env.DATABASE_FILE = join(dir, "writes.sqlite");
 
-  const { getDb } = await import("./db");
-  const { seed } = await import("./seed");
-  const { app } = await import("./index");
+  const { getDb } = await import("./db.js");
+  const { seed } = await import("./seed.js");
+  const { app } = await import("./index.js");
 
-  getDb();
-  seed();
+  await getDb();
+  await seed();
 
   await new Promise<void>((resolve) => {
     server = app.listen(0, "127.0.0.1", () => resolve());
@@ -33,8 +33,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
-  const { closeDb } = await import("./db");
-  closeDb();
+  const { closeDb } = await import("./db.js");
+  await closeDb();
   rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
 });
 
@@ -70,12 +70,12 @@ async function request(
 // A closure-ready case with no recorded outcome, so the tests can exercise the two
 // conditions the seeded cases already satisfy. Tests own the temporary database.
 async function insertClosureFixture(): Promise<string> {
-  const { getDb } = await import("./db");
-  const db = getDb();
+  const { getDb } = await import("./db.js");
+  const db = await getDb();
   const caseId = "CX-FIXTURE";
   const at = "2026-11-17T09:00:00+07:00";
 
-  db.prepare(
+  await db.prepare(
     `INSERT OR REPLACE INTO cases (
        id, patient_name, patient_age, patient_language, pathway_id,
        owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at
@@ -84,7 +84,7 @@ async function insertClosureFixture(): Promise<string> {
     caseId, "T. Fixture", 60, "en", "fit-colonoscopy", "act_003",
     "closure_proposed", "open", null, at, at, at,
   );
-  db.prepare(
+  await db.prepare(
     "INSERT OR REPLACE INTO documents (id, case_id, kind, title, text) VALUES (?, ?, ?, ?, ?)",
   ).run("d_fixture", caseId, "colonoscopy", "Colonoscopy report", "Complete examination.");
 
@@ -429,14 +429,14 @@ describe("GET /api/cases/:id/verification", () => {
 
 describe("the audit trail", () => {
   it("keeps every write as an event and refuses to rewrite one", async () => {
-    const { getDb } = await import("./db");
-    const db = getDb();
+    const { getDb } = await import("./db.js");
+    const db = await getDb();
 
-    const count = (db.prepare("SELECT count(*) AS n FROM events").get() as { n: number }).n;
+    const count = (await db.prepare("SELECT count(*) AS n FROM events").get<{ n: number }>())?.n;
     expect(count).toBeGreaterThan(7);
 
-    expect(() =>
+    await expect(
       db.prepare("UPDATE events SET type = 'tampered' WHERE id = (SELECT id FROM events LIMIT 1)").run(),
-    ).toThrow(/append-only/);
+    ).rejects.toThrow(/append-only/);
   });
 });

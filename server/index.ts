@@ -1,17 +1,27 @@
-import express, { type Response } from "express";
-import { actorMiddleware, roleForRead, type Actor } from "./actor";
-import { getCaseDetail, getVerification, isCaseFilter, listCases } from "./caseView";
-import { DEMO_START, getClock, setClock } from "./clock";
-import { databaseFile, getDb } from "./db";
-import { advanceClock, tick } from "./escalation";
-import { applyEvent, completeTask, confirmCaseClosure, logOutreach, reopenCase } from "./events";
-import { HttpError, sendError } from "./errors";
+import express, { type NextFunction, type Request, type Response } from "express";
+import { actorMiddleware, roleForRead, type Actor } from "./actor.js";
+import { getCaseDetail, getVerification, isCaseFilter, listCases } from "./caseView.js";
+import { DEMO_START, getClock, setClock } from "./clock.js";
+import { databaseLabel, getDb } from "./db.js";
+import { advanceClock, tick } from "./escalation.js";
+import { applyEvent, completeTask, confirmCaseClosure, logOutreach, reopenCase } from "./events.js";
+import { HttpError, sendError } from "./errors.js";
 
 // Reads and writes both lean on server/engine.ts for the rules. The handlers here parse
 // input, call the engine, and return the case view: no permission check lives in a route.
+//
+// The same `app` runs locally (`npm run server`) and as one Vercel function (api/index.ts).
 
 export const app = express();
 app.use(express.json());
+
+// Express 4 does not catch a rejected promise, so every async handler goes through this.
+type AsyncHandler = (req: Request, res: Response) => Promise<void>;
+function handle(fn: AsyncHandler) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    fn(req, res).catch(next);
+  };
+}
 
 function actorOf(res: Response): Actor {
   const actor = res.locals.actor as Actor | undefined;
@@ -26,23 +36,27 @@ function param(req: express.Request, name: string): string {
 }
 
 // The write envelope: the updated case view plus the id of the event that produced it.
-function writeResponse(
+async function writeResponse(
   res: Response,
   caseId: string,
   role: Actor["role"],
   recorded: string,
-): void {
-  res.json({ ...getCaseDetail(getDb(), caseId, role), recorded });
+): Promise<void> {
+  res.json({ ...(await getCaseDetail(await getDb(), caseId, role)), recorded });
 }
 
-app.get("/api/clock", (_req, res) => {
-  res.json(getClock(getDb()));
-});
+app.get(
+  "/api/clock",
+  handle(async (_req, res) => {
+    res.json(await getClock(await getDb()));
+  }),
+);
 
 // TICKET-06 demo controls. Advance moves the demo clock and then ticks, so every case
 // that has gone past its deadline escalates without anyone pressing a case button.
-app.post("/api/clock/advance", (req, res, next) => {
-  try {
+app.post(
+  "/api/clock/advance",
+  handle(async (req, res) => {
     const body = (req.body ?? {}) as { days?: unknown; until?: unknown };
 
     const until = body.until === "next_deadline" ? "next_deadline" : undefined;
@@ -59,43 +73,44 @@ app.post("/api/clock/advance", (req, res, next) => {
       throw new HttpError(400, "validation_failed", "days must be between 1 and 365.");
     }
 
-    res.json(advanceClock(getDb(), until ? { until } : { days }));
-  } catch (error) {
-    next(error);
-  }
-});
+    res.json(await advanceClock(await getDb(), until ? { until } : { days }));
+  }),
+);
 
 // Demo only, and not exposed in the normal UI: it moves the clock, not the data. The
 // full reset is `npm run demo:reset`, which reseeds and therefore also clears timers.
-app.post("/api/clock/reset", (_req, res, next) => {
-  try {
-    res.json({ clock: setClock(getDb(), DEMO_START, 0), escalations: 0, cases_advanced: 0 });
-  } catch (error) {
-    next(error);
-  }
-});
+app.post(
+  "/api/clock/reset",
+  handle(async (_req, res) => {
+    res.json({
+      clock: await setClock(await getDb(), DEMO_START, 0),
+      escalations: 0,
+      cases_advanced: 0,
+    });
+  }),
+);
 
 // Runs the timers without moving the clock: idempotent by construction, and the test
 // calls it twice to prove it.
-app.post("/api/clock/tick", (_req, res, next) => {
-  try {
-    const db = getDb();
-    const result = tick(db, getClock(db).now);
+app.post(
+  "/api/clock/tick",
+  handle(async (_req, res) => {
+    const db = await getDb();
+    const result = await tick(db, (await getClock(db)).now);
     res.json({
-      clock: getClock(db),
+      clock: await getClock(db),
       escalations: result.escalations,
       cases_advanced: 0,
       escalations_per_role: result.per_role,
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  }),
+);
 
-app.get("/api/cases", (req, res, next) => {
-  try {
-    const db = getDb();
-    const role = roleForRead(req, db);
+app.get(
+  "/api/cases",
+  handle(async (req, res) => {
+    const db = await getDb();
+    const role = await roleForRead(req, db);
 
     const rawFilter = req.query.filter;
     if (rawFilter !== undefined && !isCaseFilter(rawFilter)) {
@@ -108,71 +123,77 @@ app.get("/api/cases", (req, res, next) => {
       return;
     }
 
-    res.json(listCases(db, role, isCaseFilter(rawFilter) ? rawFilter : undefined, getClock().now));
-  } catch (error) {
-    next(error);
-  }
-});
+    res.json(
+      await listCases(
+        db,
+        role,
+        isCaseFilter(rawFilter) ? rawFilter : undefined,
+        (await getClock(db)).now,
+      ),
+    );
+  }),
+);
 
-app.get("/api/cases/:case_id/verification", (req, res, next) => {
-  try {
+app.get(
+  "/api/cases/:case_id/verification",
+  handle(async (req, res) => {
+    const db = await getDb();
     // A present header is still validated; the contract does not require one here.
     const header = req.header("x-nexyra-actor");
-    if (header !== undefined) roleForRead(req, getDb());
-    res.json(getVerification(getDb(), param(req, "case_id")));
-  } catch (error) {
-    next(error);
-  }
-});
+    if (header !== undefined) await roleForRead(req, db);
+    res.json(await getVerification(db, param(req, "case_id")));
+  }),
+);
 
-app.get("/api/cases/:case_id", (req, res, next) => {
-  try {
-    const db = getDb();
-    const role = roleForRead(req, db);
-    res.json(getCaseDetail(db, req.params.case_id, role));
-  } catch (error) {
-    next(error);
-  }
-});
+app.get(
+  "/api/cases/:case_id",
+  handle(async (req, res) => {
+    const db = await getDb();
+    const role = await roleForRead(req, db);
+    res.json(await getCaseDetail(db, param(req, "case_id"), role));
+  }),
+);
 
 // --- writes (phase 5) -------------------------------------------------------
 // All four guarded surfaces are tested directly in server/writes.test.ts, so the UI is
 // never the only defence.
 
-app.post("/api/cases/:case_id/closure/confirm", actorMiddleware(getDb()), (req, res, next) => {
-  try {
+app.post(
+  "/api/cases/:case_id/closure/confirm",
+  actorMiddleware(),
+  handle(async (req, res) => {
     const actor = actorOf(res);
     const body = (req.body ?? {}) as { final_outcome?: unknown };
     const caseId = param(req, "case_id");
-    const { recorded } = confirmCaseClosure(getDb(), {
+    const { recorded } = await confirmCaseClosure(await getDb(), {
       caseId,
       actor,
       finalOutcome: body.final_outcome,
     });
-    writeResponse(res, caseId, actor.role, recorded);
-  } catch (error) {
-    next(error);
-  }
-});
+    await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
 
-app.post("/api/cases/:case_id/reopen", actorMiddleware(getDb()), (req, res, next) => {
-  try {
+app.post(
+  "/api/cases/:case_id/reopen",
+  actorMiddleware(),
+  handle(async (req, res) => {
     const actor = actorOf(res);
     const body = (req.body ?? {}) as { owner_actor_id?: unknown };
     const caseId = param(req, "case_id");
-    const { recorded } = reopenCase(getDb(), {
+    const { recorded } = await reopenCase(await getDb(), {
       caseId,
       actor,
       ownerActorId: typeof body.owner_actor_id === "string" ? body.owner_actor_id : undefined,
     });
-    writeResponse(res, caseId, actor.role, recorded);
-  } catch (error) {
-    next(error);
-  }
-});
+    await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
 
-app.post("/api/cases/:case_id/events", actorMiddleware(getDb()), (req, res, next) => {
-  try {
+app.post(
+  "/api/cases/:case_id/events",
+  actorMiddleware(),
+  handle(async (req, res) => {
     const actor = actorOf(res);
     const body = (req.body ?? {}) as { type?: unknown; payload?: unknown };
 
@@ -183,20 +204,20 @@ app.post("/api/cases/:case_id/events", actorMiddleware(getDb()), (req, res, next
       throw new HttpError(400, "validation_failed", "payload must be an object.");
     }
 
-    const { recorded } = applyEvent(getDb(), {
+    const { recorded } = await applyEvent(await getDb(), {
       caseId: param(req, "case_id"),
       type: body.type,
       actor,
       payload: (body.payload ?? {}) as Record<string, unknown>,
     });
-    writeResponse(res, param(req, "case_id"), actor.role, recorded);
-  } catch (error) {
-    next(error);
-  }
-});
+    await writeResponse(res, param(req, "case_id"), actor.role, recorded);
+  }),
+);
 
-app.post("/api/cases/:case_id/outreach", actorMiddleware(getDb()), (req, res, next) => {
-  try {
+app.post(
+  "/api/cases/:case_id/outreach",
+  actorMiddleware(),
+  handle(async (req, res) => {
     const actor = actorOf(res);
     const body = (req.body ?? {}) as {
       outcome?: unknown;
@@ -207,7 +228,7 @@ app.post("/api/cases/:case_id/outreach", actorMiddleware(getDb()), (req, res, ne
     };
     const caseId = param(req, "case_id");
 
-    const { recorded } = logOutreach(getDb(), {
+    const { recorded } = await logOutreach(await getDb(), {
       caseId,
       actor,
       outcome: body.outcome,
@@ -216,14 +237,14 @@ app.post("/api/cases/:case_id/outreach", actorMiddleware(getDb()), (req, res, ne
       minutes: body.minutes,
       note: body.note,
     });
-    writeResponse(res, caseId, actor.role, recorded);
-  } catch (error) {
-    next(error);
-  }
-});
+    await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
 
-app.post("/api/tasks/:task_id/complete", actorMiddleware(getDb()), (req, res, next) => {
-  try {
+app.post(
+  "/api/tasks/:task_id/complete",
+  actorMiddleware(),
+  handle(async (req, res) => {
     const actor = actorOf(res);
     const body = (req.body ?? {}) as {
       outcome?: unknown;
@@ -231,18 +252,16 @@ app.post("/api/tasks/:task_id/complete", actorMiddleware(getDb()), (req, res, ne
       note?: unknown;
     };
 
-    const { recorded, caseId } = completeTask(getDb(), {
+    const { recorded, caseId } = await completeTask(await getDb(), {
       taskId: param(req, "task_id"),
       actor,
       outcome: body.outcome,
       delayReason: body.delay_reason,
       note: body.note,
     });
-    writeResponse(res, caseId, actor.role, recorded);
-  } catch (error) {
-    next(error);
-  }
-});
+    await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
 
 // Anything under /api that matched no route still uses the error envelope.
 app.use("/api", (_req, res) => {
@@ -265,6 +284,6 @@ const PORT = Number(process.env.PORT ?? 3001);
 if (process.argv[1]?.replace(/\\/g, "/").endsWith("server/index.ts")) {
   app.listen(PORT, () => {
     console.log(`nexyra api on http://localhost:${PORT}`);
-    console.log(`database: ${databaseFile()}`);
+    console.log(`database: ${databaseLabel()}`);
   });
 }
