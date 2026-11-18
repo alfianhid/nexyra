@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Page, useRole } from "../components/Shell";
 import { api } from "../api";
+import { canReadProgramme } from "../api/permissions";
 import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
 
@@ -14,8 +15,34 @@ function percent(rate: number): string {
 }
 
 export default function Programme() {
-  const { role, clockVersion } = useRole();
-  const summary = useAsync(() => api.getProgramme(roleFor[role]), [role, clockVersion]);
+  const { role, setRole, clockVersion } = useRole();
+  const allowed = canReadProgramme(roleFor[role]);
+  // A role that may not read the view never asks for it: a typed URL, or a role switch
+  // while this page is open, lands on the notice below instead of a refused request.
+  const summary = useAsync(
+    () => (allowed ? api.getProgramme(roleFor[role]) : Promise.resolve(null)),
+    [role, allowed, clockVersion],
+  );
+
+  if (!allowed) {
+    return (
+      <Page>
+        <p className="notice" role="note">
+          <strong>The programme view is for the physician and the program manager</strong>
+          Coordination staff work from the case register: every case this role owns or holds a
+          task on, plus every open case with no owner.
+        </p>
+        <div className="actions" style={{ marginTop: 16 }}>
+          <button className="btn primary" type="button" onClick={() => setRole("program_manager")}>
+            Switch to Program manager
+          </button>
+          <Link className="btn" to="/cases">
+            Back to Cases
+          </Link>
+        </div>
+      </Page>
+    );
+  }
 
   if (summary.error) {
     return (

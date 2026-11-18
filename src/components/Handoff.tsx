@@ -19,6 +19,7 @@ import {
   answerBody,
   answerProblem,
   canRecordMove,
+  consultableProviders,
   defaultOwnerId,
   openConsultation,
   outcomeWords,
@@ -347,7 +348,13 @@ function MoveForm({ detail, actor, onDone, providers }: FormProps & { providers:
 function ConsultForm({ detail, actor, onDone, providers }: FormProps & { providers: ProviderOption[] }) {
   const roster = useRoster();
   const latest = detail.referrals[detail.referrals.length - 1];
-  const [provider, setProvider] = useState(latest?.to_provider?.provider_id ?? providers[0]?.provider_id ?? "");
+  const [picked, setProvider] = useState(latest?.to_provider?.provider_id ?? providers[0]?.provider_id ?? "");
+  const choices = consultableProviders(providers, roster);
+  // Starts on the latest referral's provider when someone there can answer, else the first that can.
+  const provider = choices.some((p) => p.provider_id === picked) ? picked : (choices[0]?.provider_id ?? "");
+  const skipped = latest?.to_provider && !choices.some((p) => p.provider_id === latest.to_provider?.provider_id)
+    ? latest.to_provider.name
+    : null;
   const physicians = physiciansAt(provider, roster);
   const [physician, setPhysician] = useState("");
   const chosenPhysician = physicians.some((p) => p.actor_id === physician)
@@ -384,12 +391,17 @@ function ConsultForm({ detail, actor, onDone, providers }: FormProps & { provide
       <div className="field">
         <label htmlFor={`${id}-provider`}>Receiving provider</label>
         <select id={`${id}-provider`} value={provider} disabled={busy} onChange={(e) => setProvider(e.target.value)}>
-          {providers.map((p) => (
+          {choices.map((p) => (
             <option key={p.provider_id} value={p.provider_id}>
               {p.name}
             </option>
           ))}
         </select>
+        {skipped && (
+          <p className="note" style={{ marginTop: 6 }}>
+            {skipped} is not listed: no physician there can answer a consultation.
+          </p>
+        )}
       </div>
       <div className="field">
         <label htmlFor={`${id}-physician`}>Receiving physician</label>
@@ -422,9 +434,10 @@ function ConsultForm({ detail, actor, onDone, providers }: FormProps & { provide
       </div>
       <FormError id={`${id}-error`} title="Consultation not sent" error={error} />
       <div className="actions">
-        <button className="btn primary" type="button" disabled={busy} onClick={send}>
+        <button className="btn primary" type="button" disabled={busy || !provider} onClick={send}>
           Send consultation request
         </button>
+        {!provider && <p>No provider has a physician who can answer.</p>}
       </div>
     </div>
   );

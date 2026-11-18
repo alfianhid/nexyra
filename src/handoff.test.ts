@@ -5,6 +5,7 @@ import {
   answerBody,
   answerProblem,
   canRecordMove,
+  consultableProviders,
   defaultOwnerId,
   formatStamp,
   openConsultation,
@@ -125,5 +126,26 @@ describe("canRecordMove", () => {
     expect(canRecordMove(detail("open", ["record_provider_move", "assign_owner"]))).toBe(true);
     expect(canRecordMove(detail("open", ["log_outreach", "assign_owner", "request_consultation"]))).toBe(false);
     expect(canRecordMove(detail("closed", ["record_provider_move"]))).toBe(false);
+  });
+});
+
+describe("consultableProviders", () => {
+  const providers = [
+    { provider_id: "prov_clinic_a", name: "Clinic A" },
+    { provider_id: "prov_clinic_b", name: "Clinic B" },
+    { provider_id: "prov_endo_e", name: "Endoscopy Unit E" },
+    { provider_id: "prov_hospital_b", name: "Hospital B" },
+  ];
+
+  it("offers only providers with a physician who can answer", () => {
+    // The server refuses the others: Provider "prov_endo_e" has nobody who can answer a consultation.
+    expect(consultableProviders(providers, ROSTER).map((p) => p.provider_id)).toEqual([
+      "prov_clinic_b",
+      "prov_hospital_b",
+    ]);
+  });
+
+  it("keeps every provider until the roster has loaded", () => {
+    expect(consultableProviders(providers, [])).toHaveLength(providers.length);
   });
 });

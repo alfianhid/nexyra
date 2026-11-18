@@ -151,7 +151,7 @@ export async function tick(db: Db, now?: string, options: TickOptions = {}): Pro
           `INSERT INTO timers (id, case_id, stage, due_at, level, role, status, fired_at)
            VALUES (?, ?, ?, ?, ?, ?, 'fired', ?)`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.id, row.stage, deadline, level, role, at),
+        .bind(`t_${randomUUID().replace(/-/g, "").slice(0, 12)}`, row.id, row.stage, deadline, level, role, at),
       db
         .prepare(
           `INSERT INTO events
@@ -159,7 +159,7 @@ export async function tick(db: Db, now?: string, options: TickOptions = {}): Pro
            VALUES (?, ?, 'deadline_missed', 'act_system', 'system', ?, ?, ?)`,
         )
         .bind(
-          `e_${randomUUID().slice(0, 8)}`,
+          `e_${randomUUID().replace(/-/g, "").slice(0, 12)}`,
           row.id,
           at,
           new Date().toISOString(),
@@ -179,7 +179,7 @@ export async function tick(db: Db, now?: string, options: TickOptions = {}): Pro
           `INSERT INTO tasks (id, case_id, kind, owner_actor_id, due_at, status)
            VALUES (?, ?, 'escalation', ?, ?, 'open')`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.id, owners.get(role) ?? null, addHours(at, 24)),
+        .bind(`t_${randomUUID().replace(/-/g, "").slice(0, 12)}`, row.id, owners.get(role) ?? null, addHours(at, 24)),
     );
 
     result.escalations += 1;
@@ -330,7 +330,7 @@ async function unansweredReferrals(
           `INSERT INTO timers (id, case_id, stage, due_at, level, role, status, fired_at)
            VALUES (?, ?, ?, ?, 1, ?, 'fired', ?)`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.id, key, deadline, unowned.assign_owner_role, at),
+        .bind(`t_${randomUUID().replace(/-/g, "").slice(0, 12)}`, row.id, key, deadline, unowned.assign_owner_role, at),
     );
     cases.push(row.id);
   }
@@ -399,7 +399,7 @@ async function overdueConsultations(
           `INSERT INTO timers (id, case_id, stage, due_at, level, role, status, fired_at)
            VALUES (?, ?, ?, ?, ?, ?, 'fired', ?)`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.case_id, key, row.due_at, level, role, at),
+        .bind(`t_${randomUUID().replace(/-/g, "").slice(0, 12)}`, row.case_id, key, row.due_at, level, role, at),
       db
         .prepare(
           `INSERT INTO events
@@ -407,7 +407,7 @@ async function overdueConsultations(
            VALUES (?, ?, 'consultation_overdue', 'act_system', 'system', ?, ?, ?)`,
         )
         .bind(
-          `e_${randomUUID().slice(0, 8)}`,
+          `e_${randomUUID().replace(/-/g, "").slice(0, 12)}`,
           row.case_id,
           at,
           new Date().toISOString(),
@@ -425,7 +425,7 @@ async function overdueConsultations(
           `INSERT INTO tasks (id, case_id, kind, owner_actor_id, due_at, status)
            VALUES (?, ?, 'escalation', ?, ?, 'open')`,
         )
-        .bind(`t_${randomUUID().slice(0, 8)}`, row.case_id, owner, addHours(at, pathway.escalation_spacing_hours)),
+        .bind(`t_${randomUUID().replace(/-/g, "").slice(0, 12)}`, row.case_id, owner, addHours(at, pathway.escalation_spacing_hours)),
     );
     fired.push({ case_id: row.case_id, level, role, consultation_id: row.id });
   }

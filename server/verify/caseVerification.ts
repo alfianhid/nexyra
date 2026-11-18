@@ -120,8 +120,8 @@ function extractionStatements(
   occurredAt: string,
   origin: "model" | "cache",
 ): InStatement[] {
-  const extractionId = `x_${randomUUID().slice(0, 8)}`;
-  const eventId = `e_${randomUUID().slice(0, 8)}`;
+  const extractionId = `x_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const eventId = `e_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const recordedAt = new Date().toISOString();
   const validated = extraction.fields.filter((field) => field.validated).length;
   const payload = {

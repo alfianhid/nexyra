@@ -170,9 +170,13 @@ export default function Outreach() {
   const { ref = "" } = useParams();
   const { role, actor, clockVersion } = useRole();
   const detail = useAsync(() => api.getCase(ref, roleFor[role]), [ref, role, clockVersion]);
+  // The ladder is asked for only once the case says its pathway has one; a pathway without
+  // a ladder gets the notice below, not a refused request.
+  const wantsLadder =
+    detail.data?.case.case_id.toUpperCase() === ref.toUpperCase() && detail.data.case.has_outreach !== false;
   const ladderState = useAsync(
-    () => getOutreachLadder(ref, roleFor[role]),
-    [ref, role, clockVersion],
+    () => (wantsLadder ? getOutreachLadder(ref, roleFor[role]) : Promise.resolve(null)),
+    [ref, role, clockVersion, wantsLadder],
   );
 
   if (detail.error) {

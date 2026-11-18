@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Page, useRole } from "../components/Shell";
 import { api } from "../api";
+import { canReadProgramme } from "../api/permissions";
 import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
 
@@ -40,19 +41,21 @@ export default function NotFound() {
       <section className="section">
         <h2>Where to go next</h2>
         <p className="note">
-          Case references look like <code className="ref">CX-0417</code>. Anything else is not a
+          Case references look like <code className="ref">CX-1001</code>. Anything else is not a
           case in this programme.
         </p>
         <div className="actions">
           <Link className="btn primary" to="/cases">
             Open the register
           </Link>
-          <Link className="btn" to="/cases/CX-0417">
+          <Link className="btn" to="/cases/CX-1001">
             Example case
           </Link>
-          <Link className="btn" to="/programme">
-            Programme view
-          </Link>
+          {canReadProgramme(roleFor[role]) && (
+            <Link className="btn" to="/programme">
+              Programme view
+            </Link>
+          )}
         </div>
       </section>
     </Page>

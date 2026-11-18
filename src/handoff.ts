@@ -46,6 +46,17 @@ export function physiciansAt(providerId: string | undefined, list: RosterActorLi
   return list.filter((a) => a.role === "responsible_physician" && a.provider_id === providerId);
 }
 
+// Where a consultation can go: the server addresses it to a responsible physician at the
+// receiving provider (`answer_roles` in both pathway templates) and refuses a provider with
+// none, so those are not offered. Until the roster has loaded every provider stays listed.
+export function consultableProviders<P extends { provider_id: string }>(
+  providers: P[],
+  list: RosterActorLike[],
+): P[] {
+  if (list.length === 0) return providers;
+  return providers.filter((p) => physiciansAt(p.provider_id, list).length > 0);
+}
+
 // The move form follows the engine's `record_provider_move` action, whose roles are the
 // template's for `patient_moved_provider`; the server still rejects any other caller.
 export function canRecordMove(detail: Pick<CaseDetailResponse, "case" | "available_actions">): boolean {

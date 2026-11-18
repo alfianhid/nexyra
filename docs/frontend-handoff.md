@@ -138,3 +138,29 @@ colonoscopy, case 2, case 1, programme; inbound steps through `npm run demo:step
 `docs/shots/case3-*`, `case2-*`, `case1-*`, `patient-ar.png`, `programme-*` at 1280×800 (56 s of
 clicks at that pace). `--video` walks the video's path only (33 s); `--no-shots` times without writing.
 Reset before and after: it writes to the demo database.
+
+## Role sweep, 18 Nov
+
+The screen offers a role only what the server lets it do. The rules the nav and pages use live in
+`src/api/permissions.ts`: `canReadProgramme(role)` mirrors `PROGRAMME_READ_ROLES` in
+`server/programme.ts` (responsible physician, program manager), and `src/api/permissions.test.ts`
+fails if the two lists drift apart. Coordination staff get no **Programme** nav item and no
+**Programme view** link on the 404 page. A typed `/programme`, or switching to Coordinator while on
+it, shows a plain notice with **Switch to Program manager** and **Back to Cases**, and sends no
+request (it used to show the server's 403 in a red box).
+
+Other fixes from the same sweep (every route × the three roles, plus a role switch on each page):
+
+- **Consultation form** offers only providers with a physician who can answer
+  (`consultableProviders` in `src/handoff.ts`, same rule as the server's `answer_roles`). On CX-1003
+  it used to start on Endoscopy Unit E, and sending gave `Provider "prov_endo_e" has nobody who can
+  answer a consultation.` A note now says which provider was left out and why.
+- **Closure review**: the red *No citation on this proposal* box shows only while a closure is waiting
+  on a pathway the engine reads. A mammography case (no AI reading) gets a plain note instead, and
+  **Confirm closure** no longer needs citations there; the server still checks the evidence.
+- **Outreach** on an MM case asks for the ladder only when the case has one, so the typed URL shows
+  its notice without a 404 request behind it.
+- **404 page**: the example case is CX-1001 (CX-0417 exists only in the old fixtures).
+
+Expected, not errors: `/cases/<unknown ref>` answers 404 (the page says *Case not found*), and
+`/p/<bad token>` shows the patient-facing *This link is not valid* notice.

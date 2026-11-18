@@ -83,6 +83,9 @@ export default function Closure() {
   // Only a citation the server validated against the report text counts as evidence.
   const citations = fields.filter((f) => f.validated).length;
   const notRead = extraction?.origin === "not_read";
+  // A pathway with no AI reading (mammography in the demo) has no citations to show; a person
+  // reads its reports, and the engine still checks the attached evidence when closure is confirmed.
+  const unverifiedPathway = extraction?.origin === "pathway_not_verified";
   const proposalLabel = extraction
     ? notRead
       ? "Latest report not read yet"
@@ -107,7 +110,7 @@ export default function Closure() {
 
   function confirm() {
     if (!canConfirm) return;
-    if (citations === 0) {
+    if (citations === 0 && !unverifiedPathway) {
       setError("This proposal carries no citation. A closure cannot be confirmed without evidence.");
       return;
     }
@@ -212,10 +215,16 @@ export default function Closure() {
           </select>
         </div>
 
-        {citations === 0 && !notRead && (
+        {awaiting && decision === null && citations === 0 && !notRead && !unverifiedPathway && (
           <p className="notice alarm">
             <strong>No citation on this proposal</strong>
             Closing is blocked until a report has been read and its evidence attached.
+          </p>
+        )}
+        {awaiting && decision === null && unverifiedPathway && (
+          <p className="note">
+            No AI reading on this pathway: the physician reads the report. The engine checks that the
+            report is attached when the closure is confirmed.
           </p>
         )}
         {fields.length > 0 && (
@@ -295,7 +304,7 @@ export default function Closure() {
           <>
             <p className="note">
               {canConfirm
-                ? "Confirm the outcome only when the cited evidence supports it. Reopen when the examination has to be repeated."
+                ? `Confirm the outcome only when the ${unverifiedPathway ? "report" : "cited evidence"} supports it. Reopen when the examination has to be repeated.`
                 : `Confirming, reopening and rejecting are reserved to a responsible physician. You are acting as ${
                     role === "coordinator" ? "coordination staff" : "the program manager"
                   }.`}
@@ -307,7 +316,7 @@ export default function Closure() {
                 value={reason}
                 disabled={busy || (!canReopen && !canReject)}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Repeat colonoscopy needed."
+                placeholder="The examination has to be repeated."
               />
             </div>
             {error && (

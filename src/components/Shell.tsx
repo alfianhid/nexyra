@@ -2,6 +2,8 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { actorFor } from "../api/actors";
 import { api } from "../api";
+import { canReadProgramme, showsUnstitchedInNav } from "../api/permissions";
+import { roleFor } from "../api/roles";
 import type { Actor } from "../api/types";
 import { useAsync } from "../hooks/useAsync";
 
@@ -85,9 +87,9 @@ export function Shell() {
             <NavLink to="/cases" end>
               Cases
             </NavLink>
-            <NavLink to="/programme">Programme</NavLink>
-            {/* TICKET-08: the not-yet-stitched queue is coordination and programme work. */}
-            {role !== "physician" && <NavLink to="/ingest/unstitched">Unstitched</NavLink>}
+            {/* Only the screens this role can use; the rules live in src/api/permissions.ts. */}
+            {canReadProgramme(roleFor[role]) && <NavLink to="/programme">Programme</NavLink>}
+            {showsUnstitchedInNav(roleFor[role]) && <NavLink to="/ingest/unstitched">Unstitched</NavLink>}
           </nav>
           <div className="role">
             <label htmlFor="role">Acting as</label>

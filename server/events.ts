@@ -109,7 +109,7 @@ function eventStatement(
   input: EventInput,
   occurredAt: string,
 ): { id: string; statement: InStatement } {
-  const id = `e_${randomUUID().slice(0, 8)}`;
+  const id = `e_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
   const payload = { ...(input.payload ?? {}) };
   if (input.summary && payload.summary === undefined) payload.summary = input.summary;
 
@@ -900,7 +900,7 @@ export const SYSTEM_ACTOR: WriteActor = {
 export const REFERRAL_PRIORITIES = ["routine", "asap", "stat"] as const;
 export const SNOMED_SYSTEM = "http://snomed.info/sct";
 
-const newId = (prefix: string) => `${prefix}_${randomUUID().slice(0, 8)}`;
+const newId = (prefix: string) => `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
 async function assertProviderExists(db: Db, providerId: string): Promise<void> {
   const row = await db.prepare("SELECT id FROM providers WHERE id = ?").get(providerId);

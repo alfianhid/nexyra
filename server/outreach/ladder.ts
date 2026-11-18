@@ -125,7 +125,7 @@ function parse(json: string): Record<string, unknown> {
 }
 
 function newId(prefix: string): string {
-  return `${prefix}_${randomUUID().slice(0, 8)}`;
+  return `${prefix}_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
 }
 
 export async function loadLadderCase(db: Db, caseId: string): Promise<LadderCase> {

@@ -44,8 +44,9 @@ export async function buildDemoState(options: ResetOptions = {}): Promise<Db> {
 type Row = Record<string, unknown>;
 type Table = { name: string; sql: string; columns: string[]; rows: Row[] };
 
-// The ids the engine generates: a short prefix and 8 hex characters from randomUUID.
-const RANDOM_ID = /\b([a-z]{1,3})_([0-9a-f]{8})\b/g;
+// The ids the engine generates: a short prefix and 12 hex characters from randomUUID
+// (8 before 18 Nov, which collided about once in 30 resets of ~5,300 events).
+const RANDOM_ID = /\b([a-z]{1,3})_([0-9a-f]{12}|[0-9a-f]{8})\b/g;
 
 // Parents before children, so every foreign key points at a row that is already there.
 // Tables another module adds later are picked up from sqlite_master the same way.
