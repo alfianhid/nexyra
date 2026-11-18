@@ -239,8 +239,8 @@ describe("TICKET-18: second-pathway cases appear in the worklist like FIT cases"
       stage_label: "Patient recalled for assessment",
       owner: { actor_id: "act_007", role: "navigator" },
     });
-    // Due 20 Nov 09:00, three days into a 72-hour deadline at day 0.
-    expect(row("MM-2001").hours_left_stage).toBe(69);
+    // Due 24 Nov 09:00, recalled 17 Nov 09:00 on a 168-hour deadline, read at day 0 11:42.
+    expect(row("MM-2001").hours_left_stage).toBe(165);
     expect(row("CX-1001")).toMatchObject({ pathway_id: "fit-colonoscopy", stage_label: "Result received" });
     // Its own limit: 21 days from referral to diagnostic imaging, met on day 8.
     expect(row("MM-2002").days_left_referral_limit).toBe(13);
@@ -280,7 +280,8 @@ describe("TICKET-18: second-pathway cases appear in the worklist like FIT cases"
 });
 
 describe("TICKET-18: second-pathway cases escalate like FIT cases", () => {
-  it("escalates MM-2001 on day 3 and MM-2002 on day 4, each by its own ladder", async () => {
+  // The scripted FIT demo ends on day 6 (23 Nov 11:42); the MM deadlines fall after it.
+  it("escalates no MM case through day 6, then MM-2001 and MM-2002 on day 7, each by its own ladder", async () => {
     const day1 = await call("POST", "/api/clock/advance", { body: { days: 1 } });
     const day2 = await call("POST", "/api/clock/advance", { body: { days: 1 } });
     const mm = (body: { escalations_per_case?: { case_id: string }[] }) =>
@@ -290,15 +291,28 @@ describe("TICKET-18: second-pathway cases escalate like FIT cases", () => {
 
     const { tick } = await import("./escalation.js");
     const { advanceDays } = await import("./clock.js");
-    await advanceDays(db, 1); // day 3: 20 Nov 11:42, past MM-2001's 20 Nov 09:00
-    const day3 = await tick(db);
-    expect(mm(day3)).toEqual([{ case_id: "MM-2001", level: 1, role: "responsible_physician" }]);
+    for (let day = 3; day <= 6; day++) {
+      await advanceDays(db, 1);
+      expect(mm(await tick(db)), `day ${day}`).toEqual([]);
+    }
+    const missedByDay6 = await db
+      .prepare("SELECT count(*) AS n FROM events WHERE case_id LIKE 'MM-%' AND type = 'deadline_missed'")
+      .get<{ n: number }>();
+    expect(missedByDay6?.n).toBe(0);
 
-    await advanceDays(db, 1); // day 4: past MM-2002's 21 Nov 10:00
-    const day4 = await tick(db);
-    expect(mm(day4)).toEqual([
-      { case_id: "MM-2001", level: 2, role: "program_manager" },
+    // day 7: 24 Nov 11:42, past MM-2001's 24 Nov 09:00 and MM-2002's 24 Nov 10:00
+    await advanceDays(db, 1);
+    const day7 = await tick(db);
+    expect(mm(day7)).toEqual([
+      { case_id: "MM-2001", level: 1, role: "responsible_physician" },
       { case_id: "MM-2002", level: 1, role: "responsible_physician" },
+    ]);
+
+    await advanceDays(db, 1); // day 8: the template's 24-hour spacing, so each climbs its ladder
+    const day8 = await tick(db);
+    expect(mm(day8)).toEqual([
+      { case_id: "MM-2001", level: 2, role: "program_manager" },
+      { case_id: "MM-2002", level: 2, role: "program_manager" },
     ]);
 
     const event = await db

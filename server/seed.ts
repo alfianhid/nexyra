@@ -301,13 +301,14 @@ const CASES: SeedCase[] = [
 // demonstration and not clinically reviewed. They run on the same engine and sit in the
 // same worklist as the FIT cases. Owned by the breast care navigator and the breast
 // imaging centre's physician, so the coordinator's register is the FIT one it was.
-// Their deadlines fall after day 2 on purpose: advancing the demo clock 3 days escalates
-// MM-2001, 4 days escalates MM-2002.
+// Their deadlines fall after the scripted demo on purpose: its last clock jump lands on
+// day 6 (23 Nov 11:42), so no MM case escalates during it. Advancing the clock 7 days
+// escalates MM-2001 (due 24 Nov 09:00) and MM-2002 (due 24 Nov 10:00).
 const MAMMOGRAPHY = "mammography-biopsy";
 
 const MAMMOGRAPHY_CASES: SeedCase[] = [
   {
-    // Recalled on day 0 but the assessment referral has not gone out: due 20 Nov 09:00.
+    // Recalled on day 0 but the assessment referral has not gone out: due 24 Nov 09:00.
     id: "MM-2001",
     patient_name: "F. Al Mazrouei",
     patient_age: 49,
@@ -334,8 +335,8 @@ const MAMMOGRAPHY_CASES: SeedCase[] = [
     ],
   },
   {
-    // Imaging asked for tissue; the core biopsy was taken on 14 Nov and the pathology is
-    // due 21 Nov 10:00.
+    // Imaging asked for tissue; the core biopsy was taken on 17 Nov (day 0) and the
+    // pathology is due 24 Nov 10:00.
     id: "MM-2002",
     patient_name: "J. Santos",
     patient_age: 56,
@@ -409,7 +410,7 @@ const MAMMOGRAPHY_CASES: SeedCase[] = [
         id: "e_2002_8",
         type: "biopsy_performed",
         actor_id: "act_008",
-        at: "2026-11-14T10:00:00+07:00",
+        at: "2026-11-17T10:00:00+07:00",
         summary: "Ultrasound-guided core biopsy performed",
       },
     ],

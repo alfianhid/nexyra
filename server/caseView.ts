@@ -17,6 +17,8 @@ import {
 } from "./engine.js";
 import { HttpError } from "./errors.js";
 import { hasOpenConsultation } from "./events.js";
+// TICKET-17
+import { COHORT_PREFIX, notCohortSql } from "./cohort.js";
 import { proposedOutcomeFor, type ExtractionField } from "./verify/index.js";
 
 // Reads only. Every rule (which stage, which owner, which actions) comes from
@@ -96,23 +98,32 @@ function parsePayload(json: string): Record<string, unknown> {
   }
 }
 
-function caseRows(db: Db): Promise<CaseRow[]> {
-  return db
-    .prepare(
-      `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.status,
+// ---- TICKET-17: filter in SQL, so a read never loads the whole cohort to find one row --
+const CASE_SELECT = `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.status,
               c.owner_actor_id, c.final_outcome, c.stage_entered_at, c.created_at, c.updated_at,
               a.display_name AS owner_name, a.role AS owner_role,
               c.provider_id, p.name AS provider_name, c.patient_identifier, c.pathway_id
          FROM cases c
          LEFT JOIN actors a ON a.id = c.owner_actor_id
-         LEFT JOIN providers p ON p.id = c.provider_id`,
-    )
+         LEFT JOIN providers p ON p.id = c.provider_id`;
+
+function caseRows(db: Db, includeCohort = true): Promise<CaseRow[]> {
+  return db
+    .prepare(`${CASE_SELECT}${includeCohort ? "" : ` WHERE ${notCohortSql("c.id")}`}`)
     .all<CaseRow>();
 }
 
 async function caseRow(db: Db, caseId: string): Promise<CaseRow | undefined> {
-  return (await caseRows(db)).find((row) => row.id === caseId);
+  return db.prepare(`${CASE_SELECT} WHERE c.id = ?`).get<CaseRow>(caseId);
 }
+
+async function cohortSize(db: Db): Promise<number> {
+  const row = await db
+    .prepare(`SELECT count(*) AS n FROM cases WHERE id LIKE '${COHORT_PREFIX}%'`)
+    .get<{ n: number }>();
+  return row?.n ?? 0;
+}
+// ---- end TICKET-17 --------------------------------------------------------------------
 
 function documentsFor(
   db: Db,
@@ -220,15 +231,18 @@ function passesFilter(
   return isAwaitingClosure(row.stage, row.pathway_id) && !isClosed(toClosedShape(row));
 }
 
-function taskRows(db: Db): Promise<TaskRow[]> {
+// TICKET-17: `where` narrows the rows in SQL (one case, or no cohort); it is a constant
+// fragment from this file, never request input.
+function taskRows(db: Db, where = "", ...args: string[]): Promise<TaskRow[]> {
   return db
     .prepare(
       `SELECT t.id, t.case_id, t.kind, t.owner_actor_id, t.due_at, t.status,
               a.display_name AS owner_name, a.role AS owner_role
          FROM tasks t
-         LEFT JOIN actors a ON a.id = t.owner_actor_id`,
+         LEFT JOIN actors a ON a.id = t.owner_actor_id${where ? ` WHERE ${where}` : ""}
+        ORDER BY t.rowid`,
     )
-    .all<TaskRow>();
+    .all<TaskRow>(...args);
 }
 
 function taskRolesByCase(tasks: TaskRow[]): Map<string, Set<string>> {
@@ -249,7 +263,11 @@ function taskRolesByCase(tasks: TaskRow[]): Map<string, Set<string>> {
 // stage the count runs from the result, which is never more lenient than the limit.
 type LimitSpan = { start: string | null; end: string | null };
 
-async function limitSpans(db: Db, cases: readonly CaseRow[]): Promise<Map<string, LimitSpan>> {
+async function limitSpans(
+  db: Db,
+  cases: readonly CaseRow[],
+  includeCohort = true,
+): Promise<Map<string, LimitSpan>> {
   const spans = new Map<string, LimitSpan>();
   // TICKET-18: each case is measured against its own template's limit.
   const pathwayOfCase = new Map(cases.map((c) => [c.id, c.pathway_id]));
@@ -258,7 +276,7 @@ async function limitSpans(db: Db, cases: readonly CaseRow[]): Promise<Map<string
     .prepare(
       `SELECT case_id, id, type, actor_id, actor_role, occurred_at, recorded_at, payload,
               NULL AS actor_name
-         FROM events ORDER BY rowid`,
+         FROM events${includeCohort ? "" : ` WHERE ${notCohortSql("case_id")}`} ORDER BY rowid`,
     )
     .all<EventRow & { case_id: string }>();
 
@@ -306,10 +324,15 @@ export async function listCases(
   role: Role,
   filter: CaseFilter | undefined,
   now: string,
+  // TICKET-17: the synthetic cohort is hidden unless the caller asks for it.
+  options: { includeCohort?: boolean } = {},
 ) {
-  const rows = await caseRows(db);
-  const rolesByCase = taskRolesByCase(await taskRows(db));
-  const spans = await limitSpans(db, rows);
+  const includeCohort = options.includeCohort === true;
+  const rows = await caseRows(db, includeCohort);
+  const rolesByCase = taskRolesByCase(
+    await (includeCohort ? taskRows(db) : taskRows(db, notCohortSql("t.case_id"))),
+  );
+  const spans = await limitSpans(db, rows, includeCohort);
 
   const visible = rows
     .filter((row) => visibleToRole(row, rolesByCase.get(row.id) ?? new Set(), role))
@@ -349,6 +372,9 @@ export async function listCases(
   const open = visible.filter(({ row }) => !isClosed(toClosedShape(row)));
   return {
     clock: await embeddedClock(db),
+    // TICKET-17: whether the synthetic cohort is in `cases` and `counts`, and how many
+    // cohort cases there are in all (not scoped to the role), so the UI can offer them.
+    cohort: { included: includeCohort, cases: await cohortSize(db) },
     counts: {
       open: open.length,
       unowned: open.filter(({ row }) => row.owner_actor_id === null).length,
@@ -523,7 +549,7 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
   const deadline =
     definition?.sla_hours != null ? addHours(entered, definition.sla_hours) : entered;
 
-  const tasks = (await taskRows(db)).filter((task) => task.case_id === caseId);
+  const tasks = await taskRows(db, "t.case_id = ?", caseId); // TICKET-17: one case's rows
   const documents = await documentsFor(db, caseId);
 
   return {
@@ -727,7 +753,13 @@ async function ownershipView(db: Db, row: CaseRow) {
 
 // GET /api/unowned: one query. Every open case without an owner, with the spell that
 // made it unowned and the assign-owner task, longest unowned first.
-export async function listUnowned(db: Db, now: string) {
+export async function listUnowned(
+  db: Db,
+  now: string,
+  // TICKET-17: the synthetic cohort is hidden unless the caller asks for it.
+  options: { includeCohort?: boolean } = {},
+) {
+  const cohortFilter = options.includeCohort === true ? "" : ` AND ${notCohortSql("c.id")}`;
   const rows = await db
     .prepare(
       `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.pathway_id,
@@ -747,7 +779,7 @@ export async function listUnowned(db: Db, now: string) {
                 SELECT id FROM tasks WHERE case_id = c.id AND kind = 'assign_owner' AND status = 'open'
                  ORDER BY rowid DESC LIMIT 1)
          LEFT JOIN actors ta ON ta.id = t.owner_actor_id
-        WHERE c.owner_actor_id IS NULL AND c.status != 'closed'
+        WHERE c.owner_actor_id IS NULL AND c.status != 'closed'${cohortFilter}
         ORDER BY unowned_since, c.id`,
     )
     .all<{

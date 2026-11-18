@@ -28,6 +28,8 @@ import { runCaseVerification } from "./verify/caseVerification.js";
 // TICKET-10
 import { afterOutreachLogged, evaluateCase } from "./outreach/ladder.js";
 import { outreachRouter } from "./outreach/routes.js";
+// TICKET-21
+import { demoResetRouter } from "./demoReset.js";
 
 // Reads and writes both lean on server/engine.ts for the rules. The handlers here parse
 // input, call the engine, and return the case view: no permission check lives in a route.
@@ -56,6 +58,15 @@ function param(req: express.Request, name: string): string {
   const value = req.params[name];
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
+
+// ---- TICKET-17: `?cohort=include` shows the synthetic cohort (hidden by default) ------
+function cohortParam(req: Request): boolean {
+  const raw = req.query.cohort;
+  if (raw === undefined || raw === "hide") return false;
+  if (raw === "include") return true;
+  throw new HttpError(400, "validation_failed", 'cohort must be "include" or "hide".');
+}
+// ---- end TICKET-17 ---------------------------------------------------------------------
 
 // The write envelope: the updated case view plus the id of the event that produced it.
 async function writeResponse(
@@ -154,6 +165,7 @@ app.get(
         role,
         isCaseFilter(rawFilter) ? rawFilter : undefined,
         (await getClock(db)).now,
+        { includeCohort: cohortParam(req) }, // TICKET-17
       ),
     );
   }),
@@ -346,7 +358,7 @@ app.get(
   handle(async (req, res) => {
     const db = await getDb();
     if (req.header("x-nexyra-actor") !== undefined) await roleForRead(req, db);
-    res.json(await listUnowned(db, (await getClock(db)).now));
+    res.json(await listUnowned(db, (await getClock(db)).now, { includeCohort: cohortParam(req) })); // TICKET-17
   }),
 );
 
@@ -472,6 +484,9 @@ app.post(
 // ---- TICKET-10: outreach ladder and patient page -------------------------------------
 app.use(outreachRouter);
 // ---- end TICKET-10 --------------------------------------------------------------------
+// ---- TICKET-21: daily reset of the hosted demo (404 unless a secret is set) ----------
+app.use(demoResetRouter);
+// ---- end TICKET-21 --------------------------------------------------------------------
 
 // Anything under /api that matched no route still uses the error envelope.
 app.use("/api", (_req, res) => {

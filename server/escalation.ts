@@ -4,6 +4,8 @@ import { addHours, advanceDays, getClock, hoursBetween, setClock, type Clock } f
 import { type Db } from "./db.js";
 import { PATHWAY, pathwayOf, stageDefinition, type PathwayRef, type Role } from "./engine.js";
 import { SYSTEM_ACTOR, consultationTimerStage, prepareEvent } from "./events.js";
+// TICKET-17
+import { cohortFilterSql, type TickOptions } from "./cohort.js";
 // TICKET-10
 import { tickOutreach, type OutreachTickResult } from "./outreach/ladder.js";
 
@@ -35,6 +37,7 @@ type OpenCaseRow = {
   created_at: string;
   // TICKET-18
   pathway_id: string;
+  owner_actor_id: string | null;
 };
 
 export type TickResult = {
@@ -59,46 +62,64 @@ function stageDeadline(row: OpenCaseRow): string | null {
   return addHours(row.stage_entered_at ?? row.created_at, definition.sla_hours);
 }
 
-async function actorOfRole(db: Db, role: Role): Promise<string | null> {
-  const row = await db
-    .prepare("SELECT id FROM actors WHERE role = ? ORDER BY id LIMIT 1")
-    .get<{ id: string }>(role);
-  return row?.id ?? null;
+// ---- TICKET-17: one query per lookup for all cases, never one per case -------------
+// Deployed, every query is a round trip to Turso, so a tick must cost the same handful of
+// round trips however many cases are open.
+
+// The first actor of each role (by id), the owner an escalation task goes to.
+async function actorsByRole(db: Db): Promise<Map<string, string>> {
+  const rows = await db
+    .prepare("SELECT role, id FROM actors ORDER BY id")
+    .all<{ role: string; id: string }>();
+  const map = new Map<string, string>();
+  for (const row of rows) if (!map.has(row.role)) map.set(row.role, row.id);
+  return map;
 }
 
-async function lastFired(
-  db: Db,
-  caseId: string,
-  stage: string,
-  dueAt: string,
-): Promise<{ level: number; fired_at: string } | null> {
-  const row = await db
+type LastFired = { level: number; fired_at: string };
+
+const timerKey = (caseId: string, stage: string, dueAt: string) => `${caseId}|${stage}|${dueAt}`;
+
+// The highest fired level per (case, stage, due_at). A cancelled timer does not count.
+async function lastFiredByKey(db: Db, includeCohort = false): Promise<Map<string, LastFired>> {
+  const rows = await db
     .prepare(
-      `SELECT level, fired_at FROM timers
-        WHERE case_id = ? AND stage = ? AND due_at = ? AND status = 'fired'
-        ORDER BY level DESC LIMIT 1`,
+      `SELECT case_id, stage, due_at, level, fired_at FROM timers
+        WHERE status = 'fired' AND ${cohortFilterSql("case_id", includeCohort)}
+        ORDER BY case_id, stage, due_at, level DESC`,
     )
-    .get<{ level: number; fired_at: string }>(caseId, stage, dueAt);
-  return row ?? null;
+    .all<{ case_id: string; stage: string; due_at: string; level: number; fired_at: string }>();
+  const map = new Map<string, LastFired>();
+  for (const row of rows) {
+    const key = timerKey(row.case_id, row.stage, row.due_at);
+    if (!map.has(key)) map.set(key, { level: row.level, fired_at: row.fired_at });
+  }
+  return map;
 }
 
-async function openCases(db: Db): Promise<OpenCaseRow[]> {
+// Live cases only: the synthetic cohort is history and the clock never escalates it
+// (server/cohort.ts).
+async function openCases(db: Db, includeCohort = false): Promise<OpenCaseRow[]> {
   return db
     .prepare(
-      `SELECT id, stage, status, stage_entered_at, created_at, pathway_id
+      `SELECT id, stage, status, stage_entered_at, created_at, pathway_id, owner_actor_id
          FROM cases
-        WHERE status != 'closed'`,
+        WHERE status != 'closed' AND ${cohortFilterSql("id", includeCohort)}`,
     )
     .all<OpenCaseRow>();
 }
+// ---- end TICKET-17 ----------------------------------------------------------------
 
 // `tick(now)` processes every open case whose stage deadline has passed. It records a
 // `deadline_missed` event, opens a task for the escalated role and writes the timer row.
 // Every row from one tick goes out in a single batch, so a failure cannot leave an
 // event without its timer.
-export async function tick(db: Db, now?: string): Promise<TickResult> {
+export async function tick(db: Db, now?: string, options: TickOptions = {}): Promise<TickResult> {
+  const includeCohort = options.includeCohort === true;
   const at = now ?? (await getClock(db)).now;
-  const open = await openCases(db);
+  const open = await openCases(db, includeCohort);
+  const fired = await lastFiredByKey(db, includeCohort);
+  const byRole = await actorsByRole(db);
 
   const result: TickResult = { escalations: 0, escalations_per_case: [], per_role: [] };
   const counts = new Map<Role, number>();
@@ -112,14 +133,14 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
 
     const ladder = escalationLadder(row.stage, row.pathway_id);
     const spacing = pathwayOf(row.pathway_id).escalation_spacing_hours; // TICKET-18
-    const last = await lastFired(db, row.id, row.stage, deadline);
+    const last = fired.get(timerKey(row.id, row.stage, deadline)) ?? null; // TICKET-17
     if (last && last.level >= ladder.length) continue; // the ladder is exhausted
     if (last && hoursBetween(last.fired_at, at) < spacing) continue;
     const level: EscalationLevel = (last?.level ?? 0) + 1;
 
     const role = ladder[level - 1];
     if (!role) continue;
-    if (!owners.has(role)) owners.set(role, await actorOfRole(db, role));
+    if (!owners.has(role)) owners.set(role, byRole.get(role) ?? null);
     const overHours = Math.round(hoursBetween(deadline, at));
 
     // The unique (case_id, stage, due_at, level) index is the real guard: if two ticks
@@ -172,7 +193,7 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
   result.unowned_triggered = unowned.cases.length;
   result.unowned_cases = unowned.cases;
 
-  const overdue = await overdueConsultations(db, at);
+  const overdue = await overdueConsultations(db, at, fired, byRole, includeCohort);
   statements.push(...overdue.statements);
   for (const fired of overdue.fired) {
     result.escalations += 1;
@@ -187,7 +208,7 @@ export async function tick(db: Db, now?: string): Promise<TickResult> {
   // ---- TICKET-10: the patient outreach ladder runs on the same clock ----------------
   // Its steps are not stage escalations, so they are reported apart and never counted in
   // `escalations` (the alert-fatigue figure TICKET-06 asks for).
-  result.outreach = await tickOutreach(db, at);
+  result.outreach = await tickOutreach(db, at, options);
   // ---- end TICKET-10 ------------------------------------------------------------------
 
   return result;
@@ -268,22 +289,26 @@ async function unansweredReferrals(
   const statements: InStatement[] = [];
   const cases: string[] = [];
 
+  // TICKET-17: the trigger's timers for every case in one query, whatever their status
+  // (a fired or a cancelled row both mean the trigger already ran). TICKET-18: each
+  // pathway has its own acceptance stage, so the key is built per case below.
+  const ran = new Set(
+    (
+      await db
+        .prepare("SELECT case_id, stage, due_at FROM timers WHERE stage LIKE '%#unanswered'")
+        .all<{ case_id: string; stage: string; due_at: string }>()
+    ).map((t) => timerKey(t.case_id, t.stage, t.due_at)),
+  );
+
   for (const row of open) {
     const unowned = pathwayOf(row.pathway_id).unowned; // TICKET-18: the case's own rule
     if (!unowned || row.stage !== unowned.acceptance_stage) continue;
     const deadline = stageDeadline(row);
     if (deadline === null || hoursBetween(deadline, at) < 0) continue;
 
-    const owner = await db
-      .prepare("SELECT owner_actor_id FROM cases WHERE id = ?")
-      .get<{ owner_actor_id: string | null }>(row.id);
-    if (!owner || owner.owner_actor_id === null) continue; // already unowned
-
+    if (row.owner_actor_id === null) continue; // already unowned
     const key = unansweredTimerStage(row.stage);
-    const fired = await db
-      .prepare("SELECT id FROM timers WHERE case_id = ? AND stage = ? AND due_at = ?")
-      .get(row.id, key, deadline);
-    if (fired) continue;
+    if (ran.has(timerKey(row.id, key, deadline))) continue;
 
     const hoursOver = Math.round(hoursBetween(deadline, at));
     const prepared = await prepareEvent(db, {
@@ -329,6 +354,9 @@ type OpenConsultationRow = {
 async function overdueConsultations(
   db: Db,
   at: string,
+  lastFired: Map<string, LastFired>,
+  byRole: Map<string, string>,
+  includeCohort: boolean,
 ): Promise<{
   statements: InStatement[];
   fired: { case_id: string; level: number; role: Role; consultation_id: string }[];
@@ -340,7 +368,7 @@ async function overdueConsultations(
     .prepare(
       `SELECT k.id, k.case_id, k.due_at, k.to_actor_id, k.requested_by_actor_id, c.pathway_id
          FROM consultations k JOIN cases c ON c.id = k.case_id
-        WHERE k.status = 'open'`,
+        WHERE k.status = 'open' AND ${cohortFilterSql("k.case_id", includeCohort)}`,
     )
     .all<OpenConsultationRow>();
 
@@ -350,8 +378,8 @@ async function overdueConsultations(
     const pathway = pathwayOf(row.pathway_id);
     if (!pathway.consultation) continue;
     const key = consultationTimerStage(row.id);
-    const last = await lastFired(db, row.case_id, key, row.due_at);
-    const ladder = pathway.consultation.escalation;
+    const last = lastFired.get(timerKey(row.case_id, key, row.due_at)) ?? null; // TICKET-17
+    const ladder = pathway.consultation.escalation; // TICKET-18
     if (last && last.level >= ladder.length) continue;
     if (last && hoursBetween(last.fired_at, at) < pathway.escalation_spacing_hours) continue;
     const level = (last?.level ?? 0) + 1;
@@ -362,7 +390,7 @@ async function overdueConsultations(
     const owner =
       level === 1 && row.to_actor_id !== null && role === "responsible_physician"
         ? row.to_actor_id
-        : await actorOfRole(db, role);
+        : (byRole.get(role) ?? null);
     const overHours = Math.round(hoursBetween(row.due_at, at));
 
     statements.push(

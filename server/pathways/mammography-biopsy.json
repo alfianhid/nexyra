@@ -29,7 +29,7 @@
       "label": "Patient recalled for assessment",
       "short_label": "Recalled",
       "owner_role": "navigator",
-      "sla_hours": 72,
+      "sla_hours": 168,
       "urgency": 9,
       "escalation": ["responsible_physician", "program_manager", "program_manager"],
       "consultation": true,

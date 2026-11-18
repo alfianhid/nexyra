@@ -4,8 +4,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/index.ts": { "includeFiles": "server/pathways/*.json" }
+    "api/index.ts": {
+      "maxDuration": 60,
+      "includeFiles": "{server/pathways/*.json,data/generator-assumptions.json}"
+    }
   },
+  "crons": [{ "path": "/api/demo/reset", "schedule": "0 21 * * *" }],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }

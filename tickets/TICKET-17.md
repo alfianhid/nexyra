@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 18 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-08, TICKET-10, TICKET-15
-- **Status:** in progress. 18 Nov: case 2 (CX-1002) runs step by step through the API from the seed's unowned start (moved clinic, consultation, new owner, stitched booking); the steps are in `docs/api.md` and tested in `server/consultation.test.ts`. Cases 1 and 3, the UI walk and `docs/demo-script.md` are open.
+- **Status:** in progress. 18 Nov: all three cases run end to end through the API in stage order (`server/demo.test.ts`, steps in `scripts/demo/steps.ts`), `docs/demo-script.md` and `docs/video-script.md` are drafted, `demo:reset` loads the cohort and is byte-identical every run (about 6 s). Open: the UI walk (several controls are missing or being built, listed in the script) and a timed rehearsal.
 
 ## Goal
 
@@ -25,12 +25,12 @@ Automated tours or animations. A fourth demo case.
 
 ## Done when
 
-- [ ] `npm run demo:reset` finishes in under a minute and always produces the same result
-- [ ] All three cases run from start to finish following the script, without touching the database
-- [ ] The demo runs with the network turned off
+- [x] `npm run demo:reset` finishes in under a minute and always produces the same result (about 6 s; `server/reset.test.ts` compares every row of every table)
+- [ ] All three cases run from start to finish following the script, without touching the database (through the API: yes, `server/demo.test.ts`; on screen: controls still missing, see the script)
+- [x] The demo runs with the network turned off (the scenario test refuses any request off the local server and runs with no model key)
 - [ ] A first-time reader can complete the script in 7 minutes
 - [ ] Case 3 and case 2 can each be shown in under one minute
-- [ ] Automated tests run all three scenarios through the API and check the final state
+- [x] Automated tests run all three scenarios through the API and check the final state
 
 ## Notes
 

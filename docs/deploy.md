@@ -28,14 +28,14 @@ Decided 18 Nov 2026. The frontend is a static Vite build; the API is the same Ex
    ```bash
    npm run demo:reset:remote
    ```
-   It prints `reset libsql://...` and `actors=6 cases=3 events=8`. The same command resets the deployed demo at any time.
+   It prints `reset libsql://...` and `cases=1006 (cohort 1000) events=5276 clock=day 0`, in about 10 s: the state is built on your machine and copied in a few batches (TICKET-17). The same command resets the deployed demo at any time.
 3. **Create the Vercel project.** Either import the GitHub repository in the Vercel dashboard, or run `npx vercel` from the project folder. Importing needs the Vercel GitHub app on the repository owner's account; if you are a collaborator rather than the owner, the CLI route avoids that.
-4. **Set the environment variables** in the Vercel project (Settings → Environment Variables): `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Redeploy after adding them.
+4. **Set the environment variables** in the Vercel project (Settings → Environment Variables): `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`, plus `CRON_SECRET` (a random string of 16 or more characters) for the daily reset below. Redeploy after adding them.
 5. **Check from a logged-out browser:** the worklist loads, `/api/clock` returns JSON, confirming closure on `CX-1003` works as the physician and is refused as the coordinator, and "+1 day" moves the clock.
 
 ## Not done yet
 
-- Automatic periodic reset of the deployed demo (TICKET-21). Until then, run `npm run demo:reset:remote` before the judges look and after every rehearsal.
+- The daily reset (TICKET-21) is configured but has not run on Vercel yet. `vercel.json` has a cron entry that calls `/api/demo/reset` at 21:00 UTC every day (Hobby allows one run a day, at some point in that hour); Vercel sends `Authorization: Bearer $CRON_SECRET`, and without `CRON_SECRET` (or `DEMO_RESET_SECRET`) the route answers 404 and the cron does nothing. To reset by hand: `curl -X POST -H "Authorization: Bearer <secret>" https://<deployment>/api/demo/reset`, or `npm run demo:reset:remote` from a laptop. Still reset before the judges look and after every rehearsal. The reset builds the state in an in-memory libSQL database inside the function, which needs the libSQL native module to load there (it already does, since `@libsql/client` imports it); check the first cron run in the Vercel logs.
 - The deployed app has not been run on Vercel yet. Locally, the libSQL version passes all 95 tests, and its escalation sequence matches the previous `better-sqlite3` build step for step.
 
 ## Things to keep out of git
