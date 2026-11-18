@@ -9,6 +9,8 @@ export default defineConfig({
     // Windows; the tests delete those files right after closing them.
     pool: "forks",
     poolOptions: { forks: { execArgv: ["--expose-gc"] } },
+    // Agent worktrees live under .claude/ and carry their own copies of the tests.
+    exclude: ["**/node_modules/**", "**/dist/**", ".claude/**", "arsip-itmam/**"],
   },
   server: {
     // The API lives in its own process on 3001 (server/index.ts). Proxying keeps every
