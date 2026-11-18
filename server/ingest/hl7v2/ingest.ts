@@ -1,6 +1,7 @@
 import type { Db } from "../../db.js";
 import { getClock } from "../../clock.js";
 import { isClosed } from "../../engine.js";
+import { DEFAULT_PATHWAY } from "../../pathways/index.js";
 import { HttpError } from "../../errors.js";
 import {
   SYSTEM_ACTOR,
@@ -91,10 +92,12 @@ async function stageOf(db: Db, caseId: string): Promise<string> {
 async function openCaseFor(db: Db, patientIdentifier: string): Promise<OpenCase | undefined> {
   const rows = await db
     .prepare(
-      `SELECT id, stage, status, provider_id, owner_actor_id FROM cases
-        WHERE patient_identifier = ? ORDER BY rowid DESC`,
+      // FIT results and colonoscopy referrals only ever concern the FIT pathway: an open case
+        // on another pathway (a mammography recall) is not a reason to hold them (TICKET-18).
+        `SELECT id, stage, status, provider_id, owner_actor_id FROM cases
+        WHERE patient_identifier = ? AND pathway_id = ? ORDER BY rowid DESC`,
     )
-    .all<OpenCase>(patientIdentifier);
+    .all<OpenCase>(patientIdentifier, DEFAULT_PATHWAY.id);
   return rows.find((row) => !isClosed(row));
 }
 
