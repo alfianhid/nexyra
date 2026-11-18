@@ -31,7 +31,7 @@ type RequestOptions = {
   body?: unknown;
 };
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const actor = options.actor ?? (options.role ? actorForContractRole(options.role) : undefined);
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };

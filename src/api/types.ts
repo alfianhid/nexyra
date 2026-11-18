@@ -154,7 +154,102 @@ export type OutreachInput = {
   // outreach screen already has a channel select, so it sends what it shows.
   channel?: OutreachAttempt["channel"];
   minutes?: number;
+  // TICKET-10: whether the call reached the patient, and free text kept apart from the reason.
+  connected?: boolean;
+  note?: string;
 };
+
+// ---- TICKET-10: outreach ladder and patient page (GET /api/cases/{id}/outreach,
+// GET /api/patient/{token}) ------------------------------------------------------------
+
+export type LadderTask = {
+  task_id: string;
+  kind: string;
+  owner: { actor_id: string; role: string; display_name: string } | null;
+  due_at: string;
+  due_label: string;
+  status: string;
+};
+
+export type LadderStep = {
+  key: "message" | "staff_call" | "callback" | "navigator";
+  n: number;
+  label: string;
+  role: string;
+  state: "done" | "scheduled" | "not_needed" | "stopped";
+  at_label: string | null;
+  due_label: string | null;
+  detail: string;
+  task: LadderTask | null;
+};
+
+export type OutreachLadder = {
+  case_id: string;
+  patient_language: string;
+  active: boolean;
+  status: "acknowledged" | "stopped" | "navigator" | "staff_call" | "waiting_for_patient" | "not_started";
+  status_label: string;
+  stopped_reason: string | null;
+  link: { token: string; path: string } | null;
+  message: {
+    sent: boolean;
+    sent_at: string | null;
+    sent_label: string | null;
+    channel: string;
+    delivery: string;
+    language: string;
+    dir: "ltr" | "rtl";
+    text: string;
+    language_fallback: boolean;
+    review_status: string;
+    review_note: string;
+  };
+  ladder: LadderStep[];
+  patient_response: { response: "understood" | "request_call"; at_label: string } | null;
+  delay_reasons: { key: DelayReason; label: string }[];
+  parameters: { key: string; hours: number; label: string; source: string }[];
+  template_note: string;
+  navigator_task_kind: string;
+};
+
+export type PatientPageText = {
+  sms: string;
+  page_title: string;
+  greeting: string;
+  result_heading: string;
+  result: string;
+  next_step_heading: string;
+  next_step: string;
+  urgency_heading: string;
+  urgency: string;
+  contact_heading: string;
+  contact: string;
+  acknowledge: string;
+  callback: string;
+  acknowledged: string;
+  callback_requested: string;
+  language_label: string;
+  draft_notice: string;
+};
+
+export type PatientPage = {
+  patient_name: string;
+  language: string;
+  language_name: string;
+  content_language: string;
+  dir: "ltr" | "rtl";
+  fallback: boolean;
+  fallback_notice: string | null;
+  review_status: string;
+  review_note: string;
+  languages: { code: string; name: string; dir: "ltr" | "rtl"; review_status: string; label: string | null }[];
+  content: PatientPageText;
+  response: "understood" | "request_call" | null;
+  response_text: string | null;
+  phone: string;
+  recorded?: string | null;
+};
+// ---- end TICKET-10 ----------------------------------------------------------------------
 
 // docs/api.md fixes only the five keys of the program summary, not the shape of the
 // rows inside them. These item types mirror the programme summary in src/data.ts.

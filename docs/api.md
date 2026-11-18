@@ -33,7 +33,7 @@ The stage list, deadlines, owners, escalation ladders, outcomes and the evidence
 
 Two events do not move the stage the usual way: `case_created` (the trigger, written by the engine or an ingest, payload `{ "owner_actor_id": "..." }`) and `owner_assigned` (any open stage, payload `{ "owner_actor_id": "..." }`; omitted means the caller takes the case). Event payload fields the engine reads: `outcome` (one of the three outcomes; recorded on the case), `owner_actor_id` (for events that assign an owner; the engine writes the owner it chose into the stored payload so the timeline alone can rebuild the case). `finalises` is reserved for the closure endpoint and is stripped from client payloads. `procedure_incomplete` and `reopened` clear the recorded outcome.
 
-Event types outside the template (`outreach_attempted`, `task_completed`, `deadline_missed`, `extraction_completed`, and anything a later ticket adds) are history: they appear in the timeline but do not change the stage, owner or outcome.
+Event types outside the template (`outreach_attempted`, `task_completed`, `deadline_missed`, `extraction_completed`, the TICKET-10 outreach events `outreach_message_sent`, `outreach_staff_call_due`, `outreach_navigator_assigned`, `outreach_ladder_stopped`, `patient_acknowledged` and `callback_requested`, and anything a later ticket adds) are history: they appear in the timeline but do not change the stage, owner or outcome.
 
 ## Actor and trust model
 
@@ -54,7 +54,7 @@ A JSON object, because the role picker switches all three fields together. The s
 
 **What this is not.** This is not security. A prototype user can send any actor they like, and the deck must not claim otherwise. What it *does* guarantee is that no event can be recorded without an actor that exists, that the closure guard cannot be bypassed by omitting a role, and that a demo cannot accidentally attribute a clinician decision to the system. `docs/limitations.md` must say this plainly.
 
-**Permission table** (also enforced in the engine, per `TICKET-05`). Which role may record which stage event is data in `server/pathways/fit-colonoscopy.json` (`events.<type>.roles`); the table below summarises it. Telling the patient the result (`patient_notified`) is outreach work, so it is coordination staff and navigators only.
+**Permission table** (also enforced in the engine, per `TICKET-05`). Which role may record which stage event is data in `server/pathways/fit-colonoscopy.json` (`events.<type>.roles`); the table below summarises it. Telling the patient the result (`patient_notified`) is outreach work, so it is coordination staff and navigators only; the template also lists `system`, which records it only when the patient confirms on the patient page (TICKET-10). `system` is never accepted in the actor header, so no HTTP caller can use that.
 
 | Action | coordination staff | navigator | responsible physician | program manager |
 |---|---|---|---|---|
@@ -269,6 +269,9 @@ Records one patient outreach attempt (`TICKET-10`). Body: `{ "outcome": "no_answ
 - `channel` is `call`, `sms` or `letter`; omitted means `call`.
 - `delay_reason` is the same closed set as `POST /api/tasks/{task_id}/complete`. Free text belongs in `note`.
 - `minutes` is optional.
+- `connected` (optional, `true` or `false`) records whether the call reached the patient; anything else is `400 validation_failed` (TICKET-10).
+
+**Outreach ladder side effects (TICKET-10).** While the case is on the ladder (open, at `result_received`), logging an attempt also completes the caller's own open ladder task (`outreach_call` or `patient_callback` for coordination staff, `outreach_navigator` for a navigator) with a `task_completed` event, and a `delay_reason` logged by coordination staff escalates the case to the navigator at once (see "Patient outreach ladder" below). `recorded` is still the `outreach_attempted` event; the timeline may end with the ladder's events after it.
 
 Contacting a patient does not advance a case, so this endpoint appends an `outreach_attempted` event and leaves the stage where it is. The case view's `outreach_attempts[]` is derived from those events, so the ladder and the timeline cannot disagree. Only coordination staff and navigators may call it (`log_outreach` in the permission table), and never on a closed case.
 
@@ -314,9 +317,88 @@ The `POST` response adds two fields to the `GET` shape: `proposed_outcome` (the 
 
 Body: `{ "outcome": "connected", "delay_reason": "fear" }`. `delay_reason` is one of `fear`, `transport`, `cost`, `language`, `other` (`TICKET-10`). Free text is not stored as a reason; it goes in the event payload only.
 
+A `delay_reason` on a completed task counts as a barrier for the outreach ladder in the same way as one logged through `/outreach`.
+
+### Patient outreach ladder (TICKET-10)
+
+Templates and step deadlines are data in `server/outreach/templates/` (see `docs/architecture.md`). The ladder runs inside `tick()`, so `POST /api/clock/advance` and `POST /api/clock/tick` climb it; their responses carry an extra `outreach` object, reported apart from `escalations`:
+
+```json
+"outreach": { "messages_sent": 0, "staff_calls": 1, "navigator_escalations": 0, "stopped": 0,
+              "per_case": [ { "case_id": "CX-1001", "step": "staff_call", "reason": "no_response" } ] }
+```
+
+| Step | When | Event (actor `system`) | Task |
+|---|---|---|---|
+| 1. Automated message | case open at `result_received`, once per visit | `outreach_message_sent` `{ run_id, channel: "sms", delivery: "simulated", template_id, language, requested_language, language_fallback, review_status, dir, text, link, reply_by }` | none |
+| 2. Staff call | 48 h after the message, no answer, no call already arranged | `outreach_staff_call_due` `{ run_id, task_id, task_owner_actor_id, due_at, reason: "no_response" }` | `outreach_call`, owner: the coordinator who owns the case (else the first coordinator), due +24 h |
+| 3. Navigator | 48 h after the first call step with the case still at `result_received`, or at once when coordination staff record a `delay_reason` | `outreach_navigator_assigned` `{ run_id, task_id, task_owner_actor_id, due_at, reason: "no_movement" \| "barrier", delay_reason? }` | `outreach_navigator`, owner: the navigator, due +48 h |
+
+The ladder never moves a stage except as described under the patient response. It stops when the patient confirms, the case leaves `result_received`, or the case closes; open ladder tasks are then set to `cancelled` and an `outreach_ladder_stopped` event `{ reason, stage, cancelled_task_ids }` is written. Each fired step is unique per `(case_id, run_id, step)`, so ticking twice at one instant changes nothing.
+
+### `GET /api/cases/{case_id}/outreach`
+
+The staff view of the ladder, read by `/cases/:ref/outreach`. Same role rules as `GET /api/cases/{case_id}` (header or `?role=`).
+
+```json
+{
+  "case_id": "CX-1001",
+  "patient_language": "ar",
+  "active": true,
+  "status": "staff_call",
+  "status_label": "Staff call",
+  "stopped_reason": null,
+  "link": { "token": "hq7m3kx9va", "path": "/p/hq7m3kx9va" },
+  "message": { "sent": true, "sent_at": "...", "sent_label": "16 Nov 10:20", "channel": "sms", "delivery": "simulated",
+               "language": "ar", "dir": "rtl", "text": "...", "language_fallback": false,
+               "review_status": "written_not_reviewed", "review_note": "..." },
+  "ladder": [
+    { "key": "message", "n": 1, "label": "Automated message", "role": "system", "state": "done",
+      "at_label": "16 Nov 10:20", "due_label": null, "detail": "...", "task": null },
+    { "key": "staff_call", "n": 2, "label": "Staff call", "role": "coordination_staff", "state": "done",
+      "at_label": "18 Nov 11:42", "due_label": null, "detail": "...",
+      "task": { "task_id": "t_...", "kind": "outreach_call", "owner": { }, "due_at": "...", "due_label": "19 Nov 11:42", "status": "open" } },
+    { "key": "navigator", "n": 3, "label": "Navigator", "role": "navigator", "state": "scheduled",
+      "at_label": null, "due_label": "20 Nov 11:42", "detail": "...", "task": null }
+  ],
+  "patient_response": null,
+  "delay_reasons": [ { "key": "fear", "label": "Fear (of the test, the preparation or the result)" } ],
+  "parameters": [ { "key": "staff_call_after_hours", "hours": 48, "label": "...", "source": "unsourced, needs clinical review" } ],
+  "template_note": "Atlas et al. (JAMA 2023) sent letters in week 2 ...",
+  "navigator_task_kind": "outreach_navigator"
+}
+```
+
+`state` is `done`, `scheduled`, `not_needed` (a callback or a barrier made the step unnecessary) or `stopped`. A `callback` row appears between steps 2 and 3 when the patient asked for a call. `status` is `not_started`, `waiting_for_patient`, `staff_call`, `navigator`, `acknowledged` or `stopped`. When no message has been sent yet, `message.sent` is `false` and `text` is the preview step 1 would send.
+
+### `GET /api/patient/{token}`
+
+The patient page, no actor header (the patient has no login). Optional `?lang=` picks one of `en`, `ar`, `ur`, `hi`, `tl`; without it the case's language is used. An unknown token is `404 not_found` with the same message for every token.
+
+```json
+{
+  "patient_name": "Y. Al Hammadi",
+  "language": "ar", "language_name": "العربية",
+  "content_language": "ar", "dir": "rtl",
+  "fallback": false, "fallback_notice": null,
+  "review_status": "written_not_reviewed", "review_note": "...",
+  "languages": [ { "code": "ur", "name": "اردو", "dir": "rtl", "review_status": "draft_slot", "label": "draft, not reviewed by a native speaker" } ],
+  "content": { "page_title": "...", "greeting": "...", "result_heading": "...", "result": "...", "next_step_heading": "...", "next_step": "...",
+               "urgency_heading": "...", "urgency": "...", "contact_heading": "...", "contact": "...", "acknowledge": "...", "callback": "...",
+               "acknowledged": "...", "callback_requested": "...", "language_label": "...", "draft_notice": "...", "sms": "..." },
+  "response": null, "response_text": null,
+  "phone": "+971 2 000 0000"
+}
+```
+
+`content` is the template with its variables filled in, nothing else. A draft slot (`ur`, `hi`, `tl`) has no text: `content_language` is then `en`, `dir` is `ltr`, `fallback` is `true` and `fallback_notice` says why. The page sets `dir` and `lang` from `dir` and `content_language`, never from the choice.
+
 ### `POST /api/patient/{token}/response`
 
-The patient page, unauthenticated by design. Body: `{ "response": "understood" }` or `{ "response": "request_call" }`. The token is opaque and maps to one case; it grants nothing beyond these two actions.
+Unauthenticated by design. Body: `{ "response": "understood" }` or `{ "response": "request_call" }`, optional `"language"`. The token is opaque and maps to one case; it grants nothing beyond these two actions. Anything else is `400 validation_failed`. Returns the `GET` shape plus `recorded` (the event id, or `null` when the same answer was already recorded).
+
+- `understood` records `patient_acknowledged` (actor `act_patient`, role `patient`). If the case is still at `result_received` the engine then records `patient_notified` as `system` with `{ channel: "patient_page", acknowledged_event_id }`, which moves the case on, and the ladder stops. A second tap records nothing.
+- `request_call` records `callback_requested` and opens a `patient_callback` task owned by coordination staff (the case owner if a coordinator), due 24 h later; the payload carries `task_id`, `task_owner_actor_id` and `due_at`. It counts as the ladder's call step, so no second call task is opened at the message deadline. One per run.
 
 ### `POST /api/ingest/fhir`
 

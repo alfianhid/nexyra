@@ -7,6 +7,9 @@ import { advanceClock, tick } from "./escalation.js";
 import { applyEvent, completeTask, confirmCaseClosure, logOutreach, reopenCase } from "./events.js";
 import { HttpError, sendError } from "./errors.js";
 import { runCaseVerification } from "./verify/caseVerification.js";
+// TICKET-10
+import { afterOutreachLogged, evaluateCase } from "./outreach/ladder.js";
+import { outreachRouter } from "./outreach/routes.js";
 
 // Reads and writes both lean on server/engine.ts for the rules. The handlers here parse
 // input, call the engine, and return the case view: no permission check lives in a route.
@@ -103,6 +106,8 @@ app.post(
       escalations: result.escalations,
       cases_advanced: 0,
       escalations_per_role: result.per_role,
+      // TICKET-10
+      ...(result.outreach ? { outreach: result.outreach } : {}),
     });
   }),
 );
@@ -231,6 +236,10 @@ app.post(
       actor,
       payload: (body.payload ?? {}) as Record<string, unknown>,
     });
+    // TICKET-10: a case that leaves the ladder's stage stops its open ladder tasks now.
+    await evaluateCase(await getDb(), param(req, "case_id"), (await getClock(await getDb())).now, {
+      stopOnly: true,
+    });
     await writeResponse(res, param(req, "case_id"), actor.role, recorded);
   }),
 );
@@ -246,6 +255,7 @@ app.post(
       delay_reason?: unknown;
       minutes?: unknown;
       note?: unknown;
+      connected?: unknown;
     };
     const caseId = param(req, "case_id");
 
@@ -257,7 +267,10 @@ app.post(
       delayReason: body.delay_reason,
       minutes: body.minutes,
       note: body.note,
+      connected: body.connected,
     });
+    // TICKET-10: the caller's ladder task is done, and a barrier escalates at once.
+    await afterOutreachLogged(await getDb(), { caseId, actor, eventId: recorded });
     await writeResponse(res, caseId, actor.role, recorded);
   }),
 );
@@ -280,9 +293,20 @@ app.post(
       delayReason: body.delay_reason,
       note: body.note,
     });
+    // TICKET-10: a delay reason recorded on a task is a barrier for the outreach ladder.
+    await afterOutreachLogged(await getDb(), {
+      caseId,
+      actor,
+      eventId: recorded,
+      completeOwnTasks: false,
+    });
     await writeResponse(res, caseId, actor.role, recorded);
   }),
 );
+
+// ---- TICKET-10: outreach ladder and patient page -------------------------------------
+app.use(outreachRouter);
+// ---- end TICKET-10 --------------------------------------------------------------------
 
 // Anything under /api that matched no route still uses the error envelope.
 app.use("/api", (_req, res) => {

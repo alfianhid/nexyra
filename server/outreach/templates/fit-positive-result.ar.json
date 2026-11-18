@@ -1,0 +1,29 @@
+{
+  "template_id": "fit-positive-result",
+  "language": "ar",
+  "language_name": "العربية",
+  "dir": "rtl",
+  "date_locale": "ar-AE-u-nu-latn",
+  "review_status": "written_not_reviewed",
+  "review_note": "Written by the team. Not yet reviewed by a native speaker, and the clinical wording has not been reviewed by a clinician (TICKET-19).",
+  "source": "unsourced, needs clinical review",
+  "text": {
+    "sms": "عزيزي/عزيزتي {name}، نتيجة فحص القولون من {place} جاهزة. يرجى قراءتها والرد هنا: {link}. للاستفسار: {phone}.",
+    "page_title": "نتيجة فحص القولون",
+    "greeting": "عزيزي/عزيزتي {name}،",
+    "result_heading": "نتيجتك",
+    "result": "وجد فحص البراز (FIT) كمية صغيرة من الدم لا تُرى بالعين. هذا لا يعني أنك مصاب بالسرطان، فمعظم الأشخاص الذين تظهر لديهم هذه النتيجة ليس لديهم سرطان، لكن يجب فحص السبب.",
+    "next_step_heading": "الخطوة التالية",
+    "next_step": "الخطوة التالية هي تنظير القولون. ينظر الطبيب داخل الأمعاء بكاميرا رفيعة ومرنة، وتُعطى دواءً لتكون مسترخياً أو نائماً. في اليوم السابق تشرب سائلاً يُفرغ الأمعاء، وستشرح لك العيادة ذلك وتساعدك على الاستعداد.",
+    "urgency_heading": "متى",
+    "urgency": "من فضلك لا تنتظر. ردّ علينا أو اتصل بنا قبل {date} حتى نحجز لك موعد تنظير القولون خلال الأسابيع القادمة.",
+    "contact_heading": "للاستفسار",
+    "contact": "اتصل على {phone}. {place}.",
+    "acknowledge": "فهمت وسأحضر",
+    "callback": "أريد اتصالاً هاتفياً",
+    "acknowledged": "شكراً لك. سجّلنا أنك فهمت نتيجتك. ستتواصل معك العيادة لحجز الموعد.",
+    "callback_requested": "شكراً لك. سيتصل بك أحد أفراد فريقنا قبل {callback_date}.",
+    "language_label": "اللغة",
+    "draft_notice": "هذه اللغة مسودة لم يراجعها متحدث أصلي، لذلك يظهر النص باللغة الإنجليزية."
+  }
+}

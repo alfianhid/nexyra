@@ -23,6 +23,7 @@ Vite + React 18 + TypeScript, no UI library. Router is `react-router-dom` v6. St
 | `/cases/:ref/outreach` | `src/pages/Outreach.tsx` | TICKET-10 | Attempt ladder and the log form with its error state |
 | `/cases/:ref/closure` | `src/pages/Closure.tsx` | TICKET-15 | Proposal, evidence, confirm/return, role gate |
 | `/programme` | `src/pages/Programme.tsx` | TICKET-16 | Stage bars (unowned = signal blue share), exception list with reasons |
+| `/p/:token` | `src/pages/Patient.tsx` | TICKET-10 | Patient page from the message link, outside the staff shell: result, next step, urgency, phone, two answers, language switch, Arabic right-to-left |
 | anything else | `src/pages/NotFound.tsx` | — | 404 with routes back into the product |
 
 ## State that is deliberately fake

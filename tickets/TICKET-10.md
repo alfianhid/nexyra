@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 17 Nov · **Estimate:** 4 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-06, TICKET-09
-- **Status:** not started
+- **Status:** done (18 Nov), except that delay reasons appearing in the program view waits on TICKET-16
 
 ## Goal
 
@@ -23,12 +23,19 @@ Real SMS or WhatsApp delivery. Free-form Q&A chatbot. Clinical answers from AI.
 
 ## Done when
 
-- [ ] Test: a silent patient escalates to a staff call and then to a navigator according to the template deadlines
-- [ ] Test: patient confirmation stops the ladder and advances the case
-- [ ] Test: a call request creates a task with an owner and a deadline
-- [ ] Delay reasons are stored as structured choices and appear in the program view (TICKET-16)
-- [ ] The Arabic patient page renders right-to-left correctly
-- [ ] Arabic template text is marked "not yet reviewed by a native speaker" in the documentation until someone reviews it
+- [x] Test: a silent patient escalates to a staff call and then to a navigator according to the template deadlines (`server/outreach/ladder.test.ts`)
+- [x] Test: patient confirmation stops the ladder and advances the case (`server/outreach/ladder.test.ts`)
+- [x] Test: a call request creates a task with an owner and a deadline (`server/outreach/ladder.test.ts`)
+- [ ] Delay reasons are stored as structured choices and appear in the program view (TICKET-16). Stored as structured choices: done and tested (`delay_reason` on `outreach_attempted` and `task_completed`, closed set of five). Appearing in the program view is TICKET-16's work.
+- [x] The Arabic patient page renders right-to-left correctly (`server/outreach/ladder.test.ts` for the payload, `src/pages/Patient.test.tsx` for the markup; checked in a browser at desktop and 375 px width)
+- [x] Arabic template text is marked "not yet reviewed by a native speaker" in the documentation until someone reviews it (`docs/limitations.md`, and `review_status` in the template file)
+
+## Built (18 Nov)
+
+- Templates: `server/outreach/templates/` (English and Arabic written; Urdu, Hindi, Tagalog as draft slots; step deadlines with `"source": "unsourced, needs clinical review"`).
+- Ladder: `server/outreach/ladder.ts`, run by `tick()`. Patient page: `/p/:token` (`src/pages/Patient.tsx`). Staff screen: `/cases/:ref/outreach` shows the ladder, the message as sent and the simulated link.
+- Navigator: the picker keeps three roles. The program manager sees the navigator task in the register; the outreach screen records the navigator's call under the navigator's own actor (`act_002`). See `docs/architecture.md`.
+- Demo: CX-1001's message is seeded on 16 Nov 10:20 (link `/p/hq7m3kx9va`). `+1 day` opens the staff call; two more days with no movement open the navigator task.
 
 ## Notes
 

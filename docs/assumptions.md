@@ -31,6 +31,24 @@ The pathway in code (`server/engine.ts`) has seven stages. Deadlines are hours a
 - A level fires once per case per stage, and levels are spaced at least 24 demo-clock hours apart. **Demo setting**.
 - Level 1 goes to the responsible physician. Levels 2 and 3 go to the program manager. **Assumption**.
 
+## Patient outreach ladder (TICKET-10)
+
+Parameters in `server/outreach/templates/fit-positive.ladder.json`, each marked `"source": "unsourced, needs clinical review"`.
+
+| Step | Value | Label |
+|---|---|---|
+| Automated message | when the case is at Result received | Assumption |
+| No answer to the message, then a staff call task | 48 h after the message | Assumption |
+| Staff call task deadline | 24 h | Assumption |
+| Deadline of a call the patient asked for | 24 h | Assumption |
+| Still no movement, then the navigator | 48 h after the first call step | Assumption |
+| Navigator task deadline | 48 h | Assumption |
+| A delay reason recorded by coordination staff sends the case to the navigator at once | rule | Assumption |
+
+- Atlas et al. (JAMA 2023) sent letters in week 2 and phone calls in week 4. That is too slow for the 31-day referral-to-colonoscopy limit, so these values are deliberately shorter (message on day 0, staff call on day 2, navigator on day 4). They are not taken from Atlas and are not findings. `[CLINICAL REVIEW PENDING — TICKET-19]`
+- The clinic name and phone number in the message (`Demo Screening Clinic, Abu Dhabi`, `+971 2 000 0000`) are fictional. **Demo setting**.
+- CX-1001's message is seeded on 16 Nov 10:20 so the first `+1 day` crosses the 48-hour mark. **Demo setting**.
+
 ## Closure
 
 - Three conditions must all hold: a valid outcome from a closed list, evidence attached (a colonoscopy or pathology document), and confirmation by the responsible physician. **Assumption**, to be checked in clinical review.

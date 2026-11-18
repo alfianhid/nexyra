@@ -6,10 +6,14 @@ import Outreach from "./pages/Outreach";
 import Closure from "./pages/Closure";
 import Programme from "./pages/Programme";
 import NotFound from "./pages/NotFound";
+// TICKET-10
+import PatientPage from "./pages/Patient";
 
 export default function App() {
   return (
     <Routes>
+      {/* TICKET-10: the patient page from the message link, outside the staff shell. */}
+      <Route path="/p/:token" element={<PatientPage />} />
       <Route element={<Shell />}>
         <Route index element={<Navigate to="/cases" replace />} />
         <Route path="/cases" element={<Worklist />} />

@@ -1,0 +1,29 @@
+{
+  "template_id": "fit-positive-result",
+  "language": "en",
+  "language_name": "English",
+  "dir": "ltr",
+  "date_locale": "en-GB",
+  "review_status": "written",
+  "review_note": "Written by the team in plain English. The clinical wording has not been reviewed by a clinician yet (TICKET-19).",
+  "source": "unsourced, needs clinical review",
+  "text": {
+    "sms": "Dear {name}, your bowel screening result from {place} is ready. Please read it and reply here: {link}. Questions: {phone}.",
+    "page_title": "Your bowel screening result",
+    "greeting": "Dear {name},",
+    "result_heading": "Your result",
+    "result": "Your stool test (FIT) found a small amount of blood that cannot be seen by eye. This does not mean you have cancer. Most people with this result do not have cancer, but the cause must be checked.",
+    "next_step_heading": "The next step",
+    "next_step": "The next step is a colonoscopy. A doctor looks inside your bowel with a thin, flexible camera. You are given medicine so that you are relaxed or asleep. The day before, you drink a liquid that empties the bowel. The clinic explains this and helps you prepare.",
+    "urgency_heading": "How soon",
+    "urgency": "Please do not wait. Reply or call us by {date}, so that we can book your colonoscopy in the coming weeks.",
+    "contact_heading": "Questions",
+    "contact": "Call {phone}. {place}.",
+    "acknowledge": "I understand and I will come",
+    "callback": "I would like a phone call",
+    "acknowledged": "Thank you. We have recorded that you understood your result. The clinic will contact you to book the appointment.",
+    "callback_requested": "Thank you. Someone from our team will call you by {callback_date}.",
+    "language_label": "Language",
+    "draft_notice": "This language is a draft slot that has not been reviewed by a native speaker, so the English text is shown."
+  }
+}

@@ -509,7 +509,7 @@ export function reopenCase(
   });
 }
 
-const DELAY_REASONS = ["fear", "transport", "cost", "language", "other"] as const;
+export const DELAY_REASONS = ["fear", "transport", "cost", "language", "other"] as const;
 
 const CHANNELS = ["call", "sms", "letter"] as const;
 
@@ -526,9 +526,15 @@ export async function logOutreach(
     delayReason?: unknown;
     minutes?: unknown;
     note?: unknown;
+    // TICKET-10: whether the call reached the patient, as a structured yes/no.
+    connected?: unknown;
   },
 ): Promise<{ recorded: string; caseId: string }> {
   const engineCase = await loadEngineCase(db, input.caseId);
+
+  if (input.connected !== undefined && typeof input.connected !== "boolean") {
+    throw new HttpError(400, "validation_failed", "connected must be true or false.");
+  }
 
   if (!availableActions(engineCase, input.actor.role as Role).includes("log_outreach")) {
     throw new HttpError(
@@ -576,6 +582,7 @@ export async function logOutreach(
       ...(typeof input.minutes === "number" ? { minutes: input.minutes } : {}),
       ...(input.delayReason !== undefined ? { delay_reason: input.delayReason } : {}),
       ...(typeof input.note === "string" ? { note: input.note } : {}),
+      ...(typeof input.connected === "boolean" ? { connected: input.connected } : {}),
       summary:
         input.delayReason !== undefined
           ? `${channel}: ${input.outcome} (${input.delayReason})`
@@ -664,3 +671,16 @@ export async function completeTask(
 
   return { recorded: id, caseId: task.case_id };
 }
+
+// ---- TICKET-10: outreach ladder writes ---------------------------------------------
+// The ladder (server/outreach/ladder.ts) commits an event together with its task and its
+// step row in one batch. It builds the event through this, so the INSERT into `events`
+// still exists in one place only.
+export function outreachEventStatement(
+  db: Db,
+  input: { caseId: string; type: string; actor: WriteActor; payload?: Record<string, unknown> },
+  occurredAt: string,
+): { id: string; statement: InStatement } {
+  return eventStatement(db, input, occurredAt);
+}
+// ---- end TICKET-10 ------------------------------------------------------------------
