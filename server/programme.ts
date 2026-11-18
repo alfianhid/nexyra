@@ -53,10 +53,12 @@ const DELAY_REASONS = [
   { key: "other", label: "Other" },
 ] as const;
 
-// Staff record a delay reason on an outreach attempt or when completing a task; both
-// are counted, one per record.
-function carriesStaffDelayReason(type: string): boolean {
-  return type.startsWith("outreach_") || type === "task_completed";
+// Staff record a delay reason on an outreach attempt or when completing a task, one count
+// per barrier. A `task_completed` the outreach ladder writes for a logged call carries the
+// call's reason as a copy (`outreach_event_id` names the call), so it is not counted again.
+function carriesStaffDelayReason(type: string, payload: Record<string, unknown>): boolean {
+  if (type.startsWith("outreach_")) return true;
+  return type === "task_completed" && typeof payload.outreach_event_id !== "string";
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -290,11 +292,26 @@ export async function programmeSummary(db: Db, role: Role) {
   const delayCounts = new Map<string, number>();
   const escalations: { day: number; role: string }[] = [];
 
+  // TICKET-15: where the physician and the AI reading parted ways. A rejected proposal, or
+  // a closure confirmed while the reading on the case proposed something other than closure.
+  const lastProposal = new Map<string, string>();
+  const divergence = { proposals_rejected: 0, closed_against_reading: 0 };
+
   for (const event of events) {
     const payload = parsePayload(event.payload);
 
-    if (carriesStaffDelayReason(event.type) && typeof payload.delay_reason === "string") {
+    if (carriesStaffDelayReason(event.type, payload) && typeof payload.delay_reason === "string") {
       delayCounts.set(payload.delay_reason, (delayCounts.get(payload.delay_reason) ?? 0) + 1);
+    }
+    if (event.type === "extraction_completed" && typeof payload.proposal === "string") {
+      lastProposal.set(event.case_id, payload.proposal);
+    }
+    if (event.type === "proposal_rejected" && event.actor_role === "responsible_physician") {
+      divergence.proposals_rejected += 1;
+    }
+    if (event.type === "closure_confirmed" && event.actor_role === "responsible_physician") {
+      const reading = lastProposal.get(event.case_id);
+      if (reading !== undefined && reading !== "propose_closure") divergence.closed_against_reading += 1;
     }
     if (event.type === "deadline_missed" && typeof payload.escalated_to === "string") {
       escalations.push({
@@ -594,6 +611,10 @@ export async function programmeSummary(db: Db, role: Role) {
     funnel,
     referral_to_colonoscopy: referral,
     delay_reasons,
+    ai_divergence: {
+      count: divergence.proposals_rejected + divergence.closed_against_reading,
+      ...divergence,
+    },
     escalations_per_role_per_day,
     escalations_by_day,
     scenario,

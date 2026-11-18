@@ -7,6 +7,8 @@
 // - `docs/demo-script.md` refers to the step ids.
 // All people, providers and reports are fictional.
 
+import { PATHOLOGY_REPORT, REPEAT_COLONOSCOPY_REPORT } from "../../server/demoReports.js";
+
 export type DemoActor = { actor_id: string; role: string; display_name: string };
 
 export const ACTORS = {
@@ -37,14 +39,7 @@ export type Memo = Record<string, unknown>;
 
 // ---- reports and messages from outside (fictional) --------------------------------------
 
-const REPEAT_COLONOSCOPY_REPORT =
-  "Procedure: repeat colonoscopy. Preparation was adequate (Boston Bowel Preparation Scale 8). " +
-  "The cecum was reached and photographed. One 8 mm sessile polyp in the sigmoid colon was " +
-  "removed by cold snare and sent for histology. No other lesion seen.";
-
-const PATHOLOGY_REPORT =
-  "Specimen: sigmoid polyp, cold snare polypectomy. Diagnosis: tubular adenoma with low-grade " +
-  "dysplasia, 8 mm, completely excised. Recommendation: surveillance colonoscopy in 3 years.";
+// The report texts live in server/demoReports.ts: the seed caches their reading.
 
 const fromProvider = (provider: string) => ({ source: `urn:nexyra:provider:${provider}` });
 
@@ -143,18 +138,19 @@ export const DEMO_STEPS: DemoStep[] = [
   {
     id: "3.3",
     case: "CX-1003",
-    title: "Reopen: the physician records the examination as incomplete; the case goes back to referral",
-    screen: "Physician · Closure review → Reopen",
+    title:
+      "Reopen: the engine records the examination as incomplete with the reading's reasons; the case goes back to referral",
+    screen: "Physician · Closure review → Reopen case",
+    method: "POST",
+    path: () => "/api/cases/CX-1003/reopen",
     actor: ACTORS.physician,
-    ...event("CX-1003", "procedure_incomplete", {
-      summary: "Reopened: preparation inadequate and caecum not reached, repeat colonoscopy needed",
-    }),
+    body: () => ({ reason: "Repeat colonoscopy needed" }),
   },
   {
     id: "3.4",
     case: "CX-1003",
     title: "Hand the case to S. Al Ali to rebook",
-    screen: "Physician · Case CX-1003 → Assign owner",
+    screen: "Physician · Case CX-1003 → Record next step: Owner assigned or handed over, S. Al Ali",
     actor: ACTORS.physician,
     ...event("CX-1003", "owner_assigned", {
       owner_actor_id: "act_005",
@@ -165,7 +161,7 @@ export const DEMO_STEPS: DemoStep[] = [
     id: "3.5",
     case: "CX-1003",
     title: "The endoscopy unit accepts the repeat referral",
-    screen: "Coordination · Case CX-1003 → Record step",
+    screen: "Coordinator · Case CX-1003 → Record next step: Receiving provider accepted the referral",
     actor: ACTORS.coordinatorB,
     ...event("CX-1003", "referral_accepted", { summary: "Endoscopy unit E accepted the repeat colonoscopy" }),
   },
@@ -193,7 +189,7 @@ export const DEMO_STEPS: DemoStep[] = [
     id: "3.8",
     case: "CX-1003",
     title: "The physician records the pathology order",
-    screen: "Physician · Case CX-1003 → Record step",
+    screen: "Physician · Case CX-1003 → Record next step: Pathology ordered",
     actor: ACTORS.physician,
     ...event("CX-1003", "pathology_ordered", { summary: "Polyp sent for histology" }),
   },
@@ -211,7 +207,7 @@ export const DEMO_STEPS: DemoStep[] = [
     id: "3.10",
     case: "CX-1003",
     title: "Propose closure with the surveillance outcome",
-    screen: "Coordination · Case CX-1003 → Propose closure",
+    screen: "Coordinator · Case CX-1003 → Record next step: Closure proposed with an outcome (Surveillance scheduled)",
     actor: ACTORS.coordinatorB,
     ...event("CX-1003", "closure_proposed", {
       outcome: "surveillance_scheduled",
@@ -220,6 +216,16 @@ export const DEMO_STEPS: DemoStep[] = [
   },
   {
     id: "3.11",
+    case: "CX-1003",
+    title: "Read the latest report: the repeat colonoscopy and its pathology, read together (cached reading)",
+    screen: "Physician · Closure review → Read the latest report",
+    method: "POST",
+    path: () => "/api/cases/CX-1003/verification",
+    actor: ACTORS.physician,
+    body: () => ({}),
+  },
+  {
+    id: "3.12",
     case: "CX-1003",
     title: "The physician confirms closure: surveillance scheduled",
     screen: "Physician · Closure review → Confirm closure",

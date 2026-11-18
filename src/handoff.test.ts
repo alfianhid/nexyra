@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actorName, rosterActor } from "./api/actors";
+import { actorName, rosterActor, type RosterActor } from "./api/actors";
 import type { Action, CaseDetailResponse, Consultation } from "./api/types";
 import {
   answerBody,
@@ -24,16 +24,29 @@ function consultation(status: string, id = "k_1"): Consultation {
     to_actor_id: "act_006",
     referral_id: "REF-4377-1",
     requested_at: "2026-11-17T11:42:00+07:00",
+    requested_label: "17 Nov 11:42",
     due_at: "2026-11-19T11:42:00+07:00",
+    due_label: "19 Nov 11:42",
     task_id: "t_1",
     status,
     outcome: null,
     answer_note: null,
     answered_by_actor_id: null,
     answered_at: null,
+    answered_label: null,
     hours_to_answer: null,
   };
 }
+
+// The shape GET /api/actors gives the screens (the seed's six people).
+const ROSTER: RosterActor[] = [
+  { actor_id: "act_001", role: "coordination_staff", display_name: "R. Haddad", provider_id: "prov_clinic_a" },
+  { actor_id: "act_002", role: "navigator", display_name: "Nur H.", provider_id: "prov_clinic_b" },
+  { actor_id: "act_003", role: "responsible_physician", display_name: "Dr. Fulan", provider_id: "prov_clinic_b" },
+  { actor_id: "act_004", role: "program_manager", display_name: "A. Al Suwaidi", provider_id: null },
+  { actor_id: "act_005", role: "coordination_staff", display_name: "S. Al Ali", provider_id: "prov_clinic_b" },
+  { actor_id: "act_006", role: "responsible_physician", display_name: "Dr. Fulana", provider_id: "prov_hospital_b" },
+];
 
 function detail(status: string, actions: Action[]) {
   return { case: { status } as CaseDetailResponse["case"], available_actions: actions };
@@ -85,8 +98,8 @@ describe("answerProblem", () => {
 describe("defaults", () => {
   it("starts the owner picker on whoever holds the open assign-owner task", () => {
     const tasks = [
-      { task_id: "t_old", kind: "assign_owner", owner: { actor_id: "act_001", role: "coordination_staff" as const, display_name: "R. Haddad" }, due_at: "", status: "done" },
-      { task_id: "t_new", kind: "assign_owner", owner: { actor_id: "act_005", role: "coordination_staff" as const, display_name: "S. Al Ali" }, due_at: "", status: "open" },
+      { task_id: "t_old", kind: "assign_owner", owner: { actor_id: "act_001", role: "coordination_staff" as const, display_name: "R. Haddad" }, due_at: "", due_label: "", status: "done" },
+      { task_id: "t_new", kind: "assign_owner", owner: { actor_id: "act_005", role: "coordination_staff" as const, display_name: "S. Al Ali" }, due_at: "", due_label: "", status: "open" },
     ];
     expect(defaultOwnerId({ tasks })).toBe("act_005");
     expect(defaultOwnerId({ tasks: [] })).toBeUndefined();
@@ -98,18 +111,19 @@ describe("defaults", () => {
   });
 
   it("offers Dr. Fulana as the physician at hospital B, and never the program manager as owner", () => {
-    expect(physiciansAt("prov_hospital_b").map((a) => a.display_name)).toEqual(["Dr. Fulana"]);
-    expect(ownerCandidates().some((a) => a.role === "program_manager")).toBe(false);
-    expect(rosterActor("act_006")?.role).toBe("responsible_physician");
-    expect(actorName("act_404")).toBe("act_404");
-    expect(actorName(null)).toBe("nobody");
+    expect(physiciansAt("prov_hospital_b", ROSTER).map((a) => a.display_name)).toEqual(["Dr. Fulana"]);
+    expect(ownerCandidates(ROSTER).some((a) => a.role === "program_manager")).toBe(false);
+    expect(ownerCandidates(ROSTER)).toHaveLength(ROSTER.length - 1);
+    expect(rosterActor(ROSTER, "act_006")?.role).toBe("responsible_physician");
+    expect(actorName(ROSTER, "act_404")).toBe("act_404");
+    expect(actorName(ROSTER, null)).toBe("nobody");
   });
 });
 
 describe("canRecordMove", () => {
-  it("follows the server's log_outreach action on an open case", () => {
-    expect(canRecordMove(detail("open", ["log_outreach", "assign_owner"]))).toBe(true);
-    expect(canRecordMove(detail("open", ["assign_owner", "request_consultation"]))).toBe(false);
-    expect(canRecordMove(detail("closed", ["log_outreach"]))).toBe(false);
+  it("follows the server's record_provider_move action on an open case", () => {
+    expect(canRecordMove(detail("open", ["record_provider_move", "assign_owner"]))).toBe(true);
+    expect(canRecordMove(detail("open", ["log_outreach", "assign_owner", "request_consultation"]))).toBe(false);
+    expect(canRecordMove(detail("closed", ["record_provider_move"]))).toBe(false);
   });
 });

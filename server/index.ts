@@ -17,6 +17,7 @@ import {
   completeTask,
   confirmCaseClosure,
   logOutreach,
+  rejectProposal,
   reopenCase,
   requestConsultation,
 } from "./events.js";
@@ -230,14 +231,55 @@ app.post(
   actorMiddleware(),
   handle(async (req, res) => {
     const actor = actorOf(res);
-    const body = (req.body ?? {}) as { owner_actor_id?: unknown };
+    const body = (req.body ?? {}) as { owner_actor_id?: unknown; reason?: unknown };
     const caseId = param(req, "case_id");
     const { recorded } = await reopenCase(await getDb(), {
       caseId,
       actor,
       ownerActorId: typeof body.owner_actor_id === "string" ? body.owner_actor_id : undefined,
+      reason: body.reason,
     });
+    // TICKET-10: a case that leaves the ladder's stage stops its open ladder tasks now.
+    await evaluateCase(await getDb(), caseId, (await getClock(await getDb())).now, { stopOnly: true });
     await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
+
+// TICKET-15: the physician rejects the AI proposal with a reason. An event in their name;
+// the case does not move.
+app.post(
+  "/api/cases/:case_id/proposal/reject",
+  actorMiddleware(),
+  handle(async (req, res) => {
+    const actor = actorOf(res);
+    const body = (req.body ?? {}) as { reason?: unknown };
+    const caseId = param(req, "case_id");
+    const { recorded } = await rejectProposal(await getDb(), { caseId, actor, reason: body.reason });
+    await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
+
+// The people the prototype knows, for names and pickers. Fictional, like every actor in
+// the seed; the system actor is not a person and is left out.
+app.get(
+  "/api/actors",
+  handle(async (_req, res) => {
+    const db = await getDb();
+    const actors = await db
+      .prepare(
+        `SELECT a.id AS actor_id, a.role, a.display_name, a.provider_id, p.name AS provider_name
+           FROM actors a LEFT JOIN providers p ON p.id = a.provider_id
+          WHERE a.role != 'system' ORDER BY a.id`,
+      )
+      .all<{ actor_id: string; role: string; display_name: string; provider_id: string | null; provider_name: string | null }>();
+    res.json({
+      actors: actors.map((a) => ({
+        actor_id: a.actor_id,
+        role: a.role,
+        display_name: a.display_name,
+        provider: a.provider_id === null ? null : { provider_id: a.provider_id, name: a.provider_name ?? a.provider_id },
+      })),
+    });
   }),
 );
 

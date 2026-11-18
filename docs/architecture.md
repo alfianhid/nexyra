@@ -13,7 +13,8 @@ SQLite dialect through libSQL (`server/db.ts`): a local file in development and 
 | `actors` | Who can act, with one role each (`coordination_staff`, `navigator`, `responsible_physician`, `program_manager`, `patient`, `system`). |
 | `tasks` | Work for a person: owner, deadline, status. |
 | `documents` | Colonoscopy and pathology report text attached to a case. |
-| `extractions` | Cached report extractions, keyed by text hash. |
+| `extractions` | A case's readings, one per report document and text hash (`report_text` keeps the text the quote offsets point into). The verification reads the latest report: the latest colonoscopy report with the pathology reports after it. |
+| `extraction_cache` | The model's readings keyed by the sha256 of the text read, so the same text is never sent twice; a hit is attached to the new document as its own `extractions` row and event. The seed caches the two readings the offline demo needs. |
 | `clocks`, `timers` | The demo clock (one row) and one row per escalation that fired. |
 | `providers` | Clinics, hospitals, endoscopy units. `cases.provider_id` is the case's current provider (a cache, folded from `case_created` and `patient_moved_provider` like the other status columns); `actors.provider_id` says where a person works. |
 | `referrals` | One row per referral: from/to provider, `status`, `priority`, SNOMED `specialty_*`, the event that sent it, the referral it replaces. The key stitching matches on. |

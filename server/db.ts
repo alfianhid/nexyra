@@ -81,7 +81,23 @@ CREATE TABLE IF NOT EXISTS extractions (
   created_at        TEXT NOT NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS extractions_by_text ON extractions (text_hash);
+-- A reading is attached per document: the same text arriving for a new document gets its
+-- own row (and its own audit line) from the cache below. The old index was unique on
+-- text_hash alone, so a second document with a cached text stored nothing.
+DROP INDEX IF EXISTS extractions_by_text;
+CREATE INDEX IF NOT EXISTS extractions_by_hash ON extractions (text_hash);
+
+-- The model readings themselves, keyed by the sha256 of the text read. A cache hit costs
+-- no model call; what a case shows is its own row in extractions.
+CREATE TABLE IF NOT EXISTS extraction_cache (
+  text_hash       TEXT PRIMARY KEY,
+  prompt_version  TEXT NOT NULL,
+  model           TEXT NOT NULL,
+  fields          TEXT NOT NULL DEFAULT '[]',
+  proposal        TEXT NOT NULL,
+  proposal_reason TEXT NOT NULL DEFAULT '',
+  created_at      TEXT NOT NULL
+);
 
 -- The demo clock (TICKET-06). One row, so it survives a restart and every read measures
 -- deadlines against the same instant. now is demo time; day is the offset from day 0.
@@ -267,6 +283,7 @@ const TABLES = [
   "outreach_steps",
   "outreach_links",
   "extractions",
+  "extraction_cache",
   "timers",
   "tasks",
   "documents",
@@ -391,6 +408,10 @@ async function prepareSchema(db: Db): Promise<void> {
   }
 
   await prepareOwnershipSchema(db);
+  // The text a reading's offsets point into (several reports read together), then the
+  // per-document uniqueness the index above no longer gives.
+  await addColumnIfMissing(db, "extractions", "report_text", "TEXT");
+  await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS extractions_by_document ON extractions (document_id, text_hash);");
 }
 
 // A local file path (tests, scripts) or a full target. The schema is created on open.

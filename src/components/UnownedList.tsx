@@ -1,7 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { getUnowned } from "../api/ownership";
 import type { Role } from "../api/types";
-import { formatStamp } from "../handoff";
 import { useAsync } from "../hooks/useAsync";
 
 // TICKET-08: the dedicated unowned list, straight from GET /api/unowned. The server
@@ -58,7 +57,7 @@ export function UnownedList({ role, clockVersion }: { role: Role; clockVersion: 
               <td>
                 {r.patient.display_name}, {r.patient.age}
                 <br />
-                <small className="who">{r.stage_label}</small>
+                <small className="who">{r.pathway_label ? `${r.pathway_label} · ` : ""}{r.stage_label}</small>
               </td>
               <td className="reason">
                 <span className="mark" aria-hidden="true">
@@ -66,7 +65,7 @@ export function UnownedList({ role, clockVersion }: { role: Role; clockVersion: 
                 </span>{" "}
                 {r.unowned_label}
                 <br />
-                <small className="due">since {formatStamp(r.unowned_since)}</small>
+                <small className="due">since {r.unowned_since_label}</small>
               </td>
               <td>
                 {r.trigger ? (
@@ -92,7 +91,7 @@ export function UnownedList({ role, clockVersion }: { role: Role; clockVersion: 
               <td>{r.provider?.name ?? "—"}</td>
               <td className="who">
                 {r.assign_owner_task
-                  ? `${r.assign_owner_task.owner?.display_name ?? "nobody"}, due ${formatStamp(r.assign_owner_task.due_at)}`
+                  ? `${r.assign_owner_task.owner?.display_name ?? "nobody"}, due ${r.assign_owner_task.due_label ?? "—"}`
                   : "none open"}
               </td>
             </tr>

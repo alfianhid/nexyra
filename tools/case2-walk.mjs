@@ -42,7 +42,7 @@ await pause();
 
 // 2. Open CX-1002
 await page.getByRole("link", { name: "CX-1002" }).click();
-await page.getByText("No owner since").waitFor();
+await page.getByText("Unowned 20h").first().waitFor();
 mark("case open, unowned");
 await shot("case2-2-case-unowned.png");
 await pause();

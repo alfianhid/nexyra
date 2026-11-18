@@ -157,6 +157,7 @@ function toDetail(c: Case, role: Role, stageOverride?: StageId): CaseDetailRespo
       type: "event",
       actor: e.actor === "system" ? null : ownerActor(e.actor),
       occurred_at: e.at,
+      occurred_label: e.at,
       recorded_at: e.at,
       summary: e.what,
       payload: { audit: e.audit },
@@ -170,6 +171,7 @@ function toDetail(c: Case, role: Role, stageOverride?: StageId): CaseDetailRespo
               kind: "confirm_closure",
               owner: null,
               due_at: c.dueLabel,
+              due_label: c.dueLabel,
               status: "open",
             },
           ]
@@ -188,7 +190,13 @@ function toDetail(c: Case, role: Role, stageOverride?: StageId): CaseDetailRespo
     },
     // The fixtures carry no providers or referrals; TICKET-08 data lives in the seed.
     provider: null,
-    ownership: { state: c.owner === null ? "unowned" : "owned", unowned_since: null, gaps: [] },
+    ownership: {
+      state: c.owner === null ? "unowned" : "owned",
+      unowned_since: null,
+      unowned_since_label: null,
+      unowned_label: null,
+      gaps: [],
+    },
     referrals: [],
     consultations: [],
   };

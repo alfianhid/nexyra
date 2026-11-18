@@ -35,8 +35,30 @@ export function useRole() {
   return useContext(RoleContext);
 }
 
+// The picked role survives a page refresh (the demo refreshes after each inbound FHIR
+// step), per browser tab. Storage can be unavailable; the picker then starts as coordinator.
+const ROLE_KEY = "nexyra.role";
+
+function storedRole(): Role {
+  try {
+    const value = sessionStorage.getItem(ROLE_KEY);
+    if (value === "coordinator" || value === "physician" || value === "program_manager") return value;
+  } catch {
+    // no storage: fall through
+  }
+  return "coordinator";
+}
+
 export function Shell() {
-  const [role, setRole] = useState<Role>("coordinator");
+  const [role, setRoleState] = useState<Role>(storedRole);
+  const setRole = (next: Role) => {
+    setRoleState(next);
+    try {
+      sessionStorage.setItem(ROLE_KEY, next);
+    } catch {
+      // no storage: the choice lasts until the next refresh
+    }
+  };
   const [clockVersion, setClockVersion] = useState(0);
   const clock = useAsync(() => api.getClock(), [clockVersion]);
 

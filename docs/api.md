@@ -94,11 +94,11 @@ A JSON object, because the role picker switches all three fields together. The s
 | Record an incomplete examination (`procedure_incomplete`) | no | no | yes | no |
 | Record patient outreach outcome | yes | yes | no | no |
 | Assign owner to an unowned case | yes | yes | yes | no |
-| Record that the patient moved provider (`patient_moved_provider`) | yes | yes | no | no |
+| Record that the patient moved provider (`patient_moved_provider`, action `record_provider_move`) | yes | yes | no | no |
 | Ask a consultation (`request_consultation`) | no | no | yes | no |
-| Answer a consultation | no | no | yes | no |
+| Answer a consultation | no | no | yes, only the physician it is addressed to (`to_actor_id`) | no |
 | Confirm closure | no | no | yes | no |
-| Reopen a case | no | no | yes | no |
+| Reopen a case (closed: `reopened`; after the procedure and before closure: `procedure_incomplete`) | no | no | yes | no |
 | Reject an AI proposal | no | no | yes | no |
 | Read the program view | no | no | yes | yes |
 
@@ -148,7 +148,7 @@ Ordered server-side by clinical urgency from the pathway template, then by time 
 
 `cohort` (`TICKET-17`) says whether the synthetic cohort is in this response and how many cohort cases exist in all (not scoped to the role), so the UI can offer to show them: `"cohort": { "included": false, "cases": 1000 }`.
 
-`counts` is the register's own summary, scoped to what the calling role may see (and to the cohort setting). It is not the program view: a coordinator receives it on the worklist without holding `GET /api/program/summary`. `closed_this_week` appears in both because both screens print it; neither copies the other's number.
+`counts` is the register's own summary, scoped to what the calling role may see (and to the cohort setting), and counted over the role's whole register whatever `filter` says: `filter` narrows `cases`, never `counts` (a coordinator on the empty "Unowned" filter still sees how many open cases the register holds). `register` says what that register is, in words the UI prints: `{ "scope": "cases this role owns or holds a task on, plus every open case with no owner", "total": 5 }` (`"every case"` for the program manager). Each row also carries `pathway_label`, the template's `short_label` (`"FIT → colonoscopy"`, `"Mammogram → biopsy"`). It is not the program view: a coordinator receives it on the worklist without holding `GET /api/program/summary`. `closed_this_week` appears in both because both screens print it; neither copies the other's number.
 
 ### `GET /api/cases/{case_id}`
 
@@ -195,7 +195,14 @@ Everything the case detail page needs in one call (`TICKET-09`): timeline, stage
 
 `provider`, `ownership`, `referrals` and `consultations` are TICKET-08/11. `ownership.gaps` is the per-case metric "time from trigger to owned again": one row per unowned spell, `hours_to_owner` stored when an owner returns, `null` while the case is still unowned. `case.patient.identifier` is the identifier incoming FHIR resources are matched on. `available_actions` may include `request_consultation` (a stage the template marks `consultation`, no consultation open) and `answer_consultation` (one is open).
 
-`available_actions` is computed by the engine from the caller's role plus the case state. This is what stops the UI and the guards from drifting apart: one function produces both.
+`available_actions` is computed by the engine from the caller's role plus the case state. This is what stops the UI and the guards from drifting apart: one function produces both. `record_provider_move` is in it when the role may record `patient_moved_provider` on the open case (the roles are the template's, `actions.record_provider_move`). `reopen_case` is in it for the physician on a closed case and, since 18 Nov, on an open case past the procedure (the stages whose exits include the template's incomplete-examination event: `procedure_completed` to `closure_proposed` in the FIT template).
+
+**Added 18 Nov (demo walk).**
+
+- `case.pathway.short_label` (`"FIT → colonoscopy"`), `case.has_outreach` (whether the pathway has the patient outreach ladder and its screen; only the FIT pathway does) and `case.awaiting_closure` (a closure decision is waiting on the physician at this stage).
+- `next_steps`: every event the caller's role may record now, read from the template by `nextSteps` in `server/engine.ts`. Each item is `{ "event", "label", "to", "to_label", "moves_stage", "needs_outcome", "needs_owner" }`, forward steps first, then steps that leave the stage alone, then steps back. Left out because each has its own control: the closure confirmation, consultation answers, the provider move, system-only events, and an assignment while the case is unowned (the assign-owner form). A step into an `awaiting_closure` stage (the closure proposal) is listed only once a document that could support some outcome is attached; `needs_outcome` asks the client for the outcome, `needs_owner` for the new owner. The case page's "Record next step" posts the chosen one to `POST /events`, which checks it again.
+- Server-formatted labels for every timestamp a screen prints, in the `stage_due_label` format ("16 Nov 15:40", demo clock): `timeline[].occurred_label`, `tasks[].due_label`, `ownership.unowned_since_label`, `ownership.unowned_label` (`"Unowned 20h"`, the same words as `GET /api/unowned`; `null` while owned), `ownership.gaps[].unowned_at_label` / `owned_at_label`, `referrals[].sent_label`, `consultations[].requested_label` / `due_label` / `answered_label`. The ISO fields stay for machines.
+- A timeline event recorded without a `summary` prints the template's label for its type.
 
 `stage_due_label` is the stage deadline written as display text, in the same spirit as `flags_renderable`: the server formats it, the client prints it, and no page derives a date. `final_outcome` is the outcome already recorded on the case, or `null`. `outcomes` is the closed vocabulary a closure decision may choose from, sent with its labels so the screen does not carry a second copy of either.
 
@@ -226,7 +233,9 @@ The two-pane closure screen (`TICKET-15`): report text plus extraction fields wi
 
 `quote_offset` is what makes citation highlighting land on the right sentence (`TICKET-15` done-when). The server computes the offset by locating the quote in the text; the client never searches for it. A field with `validated: false` renders as "not found in the report".
 
-`source` and `read_at` are provenance, and `docs/frontend-handoff.md` requires all three of source, offset and read time on every extracted value. `read_at` is the real time the report was read, which is why it is not the same clock as `occurred_at`. A field with no quote sends an empty `quote_offset` and keeps `source` and `read_at`.
+`source` and `read_at` are provenance, and `docs/frontend-handoff.md` requires all three of source, offset and read time on every extracted value. `read_at` is the real time the report was read, which is why it is not the same clock as `occurred_at`. A field with no quote sends an empty `quote_offset` and keeps `source` and `read_at`. Each field also carries `read_label` ("17 Nov 09:14"), which the screens print.
+
+**The latest report, not the latest reading (18 Nov).** The `GET` returns the stored reading of the case's *latest report*, never an older one. The latest report is the most recent `colonoscopy` document together with every `pathology` document attached after it, read as one text (a physician signs off on both; the prompt already says the outcome follows the pathology). Several documents are joined under the headings `COLONOSCOPY REPORT` and `PATHOLOGY REPORT`; one document is its own text, unchanged. `report` is `{ "document_id", "document_ids", "title", "text" }`: `document_id` is the latest document (the reading is attached to it), `text` is the text the offsets point into. `extraction` adds `extraction_id`, `read_label` and `origin`: `stored`, or `not_read` when the latest report has no reading yet (fields empty, `proposal: "needs_human_reading"`, a reason that says to read it), `no_report`, or `pathway_not_verified`. After case 3's repeat colonoscopy and pathology, the closure review therefore shows "not read yet" until someone reads them, not the first report's `reopen`.
 
 ### `GET /api/unowned`
 
@@ -254,6 +263,16 @@ The dedicated unowned list (`TICKET-08`), one query, no client-side filtering. E
 ### `GET /api/providers`
 
 `{ "providers": [ { "provider_id": "prov_clinic_a", "name": "Clinic A", "kind": "clinic" } ] }`. For pickers (move, redirect).
+
+### `GET /api/actors`
+
+The people the prototype knows (all fictional), for names printed against ids and for the owner and addressee pickers. No role required. The system actor is left out.
+
+`{ "actors": [ { "actor_id": "act_006", "role": "responsible_physician", "display_name": "Dr. Fulana", "provider": { "provider_id": "prov_hospital_b", "name": "Hospital B" } } ] }`
+
+The role picker's three seats (R. Haddad, Dr. Fulan, A. Al Suwaidi) stay a client mapping in `src/api/actors.ts`; everything else the screens name comes from this list.
+
+**Unowned list labels (18 Nov).** `GET /api/unowned` rows add `unowned_since_label`, `pathway_label` and `assign_owner_task.due_label`. A move while the case is already unowned hands the open assign-owner task to coordination staff at the new provider **with a fresh due time** (`unowned.assign_owner_hours` from the move). `GET /api/ingest/unstitched` items add `received_label`.
 
 ### `GET /api/program/summary`
 
@@ -305,6 +324,10 @@ Everything is computed at request time, at the demo clock's `now`, from `cases`,
 
 Arrays are shortened above: `funnel` carries every stage of the template in order, `buckets` has six rows, and `delay_reasons` always lists all five reasons.
 
+`delay_reasons` counts each barrier once: an `outreach_attempted` event with a `delay_reason`, or a `task_completed` with one that staff recorded through `POST /api/tasks/{id}/complete`. The `task_completed` the outreach ladder writes when a logged call closes the caller's ladder task copies the call's reason and names the call in `outreach_event_id`; it is not counted again.
+
+`ai_divergence` (TICKET-15, added 18 Nov): `{ "count": 1, "proposals_rejected": 1, "closed_against_reading": 0 }`. `proposals_rejected` counts `proposal_rejected` events by a physician; `closed_against_reading` counts closures a physician confirmed while the case's last `extraction_completed` reading proposed something other than `propose_closure`. A count to review, not an error rate.
+
 `reason`, `owner`, `stage_label`, `due_label`, `label` and `role_label` are renderable strings: the page prints them as written and never derives a date. `due_at` is ISO 8601, or `null` for a stage with no deadline.
 
 **Exceptions** (the actionable part, first on the screen). One row per case and reason, so a case can appear twice. Every row carries `case_id` and opens that case. Rows are ordered by kind, then by severity.
@@ -313,7 +336,7 @@ Arrays are shortened above: `funnel` carries every stage of the template in orde
 |---|---|---|
 | `unowned` | an open case with no owner; `reason` says for how long, counted from the event that cleared the owner | the stage deadline |
 | `past_referral_limit` | an open case with no colonoscopy yet whose referral limit has run out, measured exactly as the worklist's `days_left_referral_limit` (from first entering `referral_sent`, or from the result before any referral) | when the 31 days ran out |
-| `closure_held` | a case waiting on closure (an `awaiting_closure` stage) whose latest reading proposes anything other than `propose_closure`. The reading is the latest `extractions` row, the same one the case detail's `verification` reads. A case never read is not listed | the stage deadline |
+| `closure_held` | a case waiting on closure (an `awaiting_closure` stage) whose latest reading proposes anything other than `propose_closure`. The reading is the case's latest `extractions` row (one query for all cases); the case detail's `verification` reads the reading of the latest report, which differs only while a newer report is unread. A case never read is not listed | the stage deadline |
 
 **Unstitched** events have no case, so they are not exception rows. The section checks `sqlite_master` for an `unstitched` table (`TICKET-08`). Without the table it returns `{ "available": false, "count": 0, "rows": [] }` and no error. With it, each row not yet matched to a case (no `stitched_case_id`, `case_id`, `stitched_at` or `resolved_at`) becomes `{ id, received_at, received_label, reason, summary }`, read from the likely column names: `id`/`event_id`, `received_at`/`recorded_at`/`occurred_at`/`created_at`, `reason`/`status`, `summary`/`resource_type`/`kind`/`type`/`source`.
 
@@ -390,7 +413,12 @@ When it is absent the case's own recorded outcome is what the three conditions j
 
 ### `POST /api/cases/{case_id}/reopen`
 
-Clinician reopen. Writes a `reopened` event and assigns an owner, never leaves the case unowned (`TICKET-05`, `TICKET-17` case 3).
+Clinician reopen, never leaving the case unowned (`TICKET-05`, `TICKET-17` case 3). Optional body `{ "reason": "Repeat colonoscopy needed", "owner_actor_id": "act_005" }`. Which event it writes is the engine's answer (`reopenEventFor` in `server/engine.ts`), and the write goes through `applyEvent` like every event:
+
+- On a closed case: the template's reopen event (`reopened`, back to `result_received`).
+- On an open case past the procedure, the closure review's **Reopen case**: the exit from the current stage that goes back and clears the outcome. In the FIT template that is `procedure_incomplete` (back to `referral_sent`) from `procedure_completed`, `pathology_ordered`, `pathology_received` and `closure_proposed`; in the mammography template `assessment_incomplete`. The payload records the reading on the table: `{ "reopened_at_stage", "reason", "summary": "Reopened at closure review: Incomplete exam and inadequate prep; Repeat colonoscopy needed", "verification": { "extraction_id", "proposal", "proposal_reason", "findings": [ { "key", "value", "quote" } ] } }`.
+
+`403 role_not_permitted` when another role could reopen the case here (a coordinator at `closure_proposed`); `409 invalid_transition` when no role can (a case at `result_received`).
 
 ### `POST /api/cases/{case_id}/outreach`
 
@@ -408,15 +436,17 @@ Contacting a patient does not advance a case, so this endpoint appends an `outre
 
 ### `POST /api/cases/{case_id}/proposal/reject`
 
-Body: `{ "reason": "..." }`. Records the rejection and the divergence, which `TICKET-16` counts.
+Body: `{ "reason": "..." }` (5 to 500 characters, else `400 validation_failed`). The responsible physician says the AI proposal on the table does not hold. Allowed where `available_actions` has `reject_proposal` (a physician, an `awaiting_closure` stage); another role gets `403`, a case with no closure waiting `409`. Writes one `proposal_rejected` event in the physician's name with `{ "proposal", "proposal_reason", "extraction_id", "reason", "summary" }` (the reading of the latest report). It never moves, closes or reopens the case: the physician then confirms another outcome, reopens, or leaves it. Returns the case view plus `recorded`. The program view counts it in `ai_divergence`.
 
 ### `POST /api/cases/{case_id}/verification`
 
 Runs extraction and stores the result as an event with prompt version and model (`TICKET-13`). Returns the same shape as the `GET`. Idempotent per report: if the text hash is already cached, returns the cached result and does not call the model again. With no key and no cache, returns `proposal: "needs_human_reading"`.
 
-Requires the `X-Nexyra-Actor` header (any human role). Optional body `{ "document_id": "d_4" }`; without it the case's most recently attached `colonoscopy` or `pathology` document is read. One document is read per extraction, because `quote_offset` is an offset into that one document's text.
+Requires the `X-Nexyra-Actor` header (any human role). Optional body `{ "document_id": "d_4" }` reads that one document; without it the case's latest report is read (the latest colonoscopy report with the pathology reports after it, see the `GET`). `quote_offset` is an offset into the text that was read, which the response returns as `report.text`.
 
-What it writes: one `extractions` row (keyed by the sha256 of the report text) and one `extraction_completed` event with `actor_role: "system"` and a payload of `{ prompt_version, model, proposal, proposal_reason, document_id, text_hash, extraction_id, requested_by }`. Both are written only when the model actually read the report: a cache hit and an unavailable result write nothing. It never touches the case row, so no extraction result can move, propose or close a case; closure stays `POST /closure/confirm` under `TICKET-05`'s rules.
+What it writes. The model's reading goes into `extraction_cache` (keyed by the sha256 of the text; the same text is never sent to the model twice). The case's reading is an `extractions` row attached to the latest document (unique per document and text hash; `report_text` keeps the text the offsets point into), with one `extraction_completed` event, `actor_role: "system"`, payload `{ prompt_version, model, proposal, proposal_reason, document_id, document_ids, text_hash, extraction_id, origin, requested_by }`. A cache hit for a document that has no reading yet (the same text arriving for a new document, or the seeded reading of case 3's repeat reports) attaches the cached reading to that document with its own event (`origin: "cache"`); a second hit on the same document writes nothing, and so does an unavailable result. It never touches the case row, so no extraction result can move, propose or close a case; closure stays `POST /closure/confirm` under `TICKET-05`'s rules.
+
+**Offline demo.** The seed caches two readings: the first colonoscopy report of CX-1003 (`reopen`) and the repeat colonoscopy report plus its pathology as the demo sends them (steps 3.7 and 3.9; texts in `server/demoReports.ts`): complete exam, adequate prep, polyp removed, pathology back, so `POST /verification` answers `propose_closure` → `surveillance_scheduled` with no key. That second reading was written by hand for the demo, not by a model, and its `model` says so ("hand-written demo reading (no model call)"); its proposal comes from the same rules.
 
 The `POST` response adds `origin` (`model`, `cache`, `unavailable`, `no_report`, or `pathway_not_verified` for a case on a pathway without report verification, TICKET-18) to the `GET` shape, plus `proposed_outcome` (the outcome key a `propose_closure` asks the physician to confirm, otherwise `null`). Since TICKET-15's follow-up the `GET` carries `extraction.proposed_outcome` too, computed by the same `proposedOutcomeFor`.
 
@@ -569,7 +599,7 @@ Body: `{ "outcome": "accepted" | "redirected" | "more_data_requested", "note": "
 - `redirected` → `consultation_redirected`: needs `redirect_to_provider_id`. The case moves to `referral_sent` with a new referral to that provider (same priority and specialty unless `referral` overrides them), so the acceptance deadline restarts. The old referral is `redirected`.
 - `more_data_requested` → `consultation_more_data_requested`: the stage stays; a `supply_referral_data` task goes to the physician who asked, due `consultation.more_data_hours` (72) later.
 
-An answer that is not a legal step from the case's stage (for example `accepted` at `closure_proposed`) fails with `409` and the consultation stays open. On an unowned case the answer assigns `owner_actor_id`, or else the physician who asked. The consultation row records `outcome` and `hours_to_answer` (the TICKET-11 metric). The task completes and the consultation's timers are cancelled. A second answer fails with `409`. `POST /api/tasks/{id}/complete` refuses an `answer_consultation` task.
+Only the physician the consultation is addressed to (`to_actor_id`) may answer it: any other physician gets `403 role_not_permitted` (since 18 Nov; the screen already sent the addressee's header). An answer that is not a legal step from the case's stage (for example `accepted` at `closure_proposed`) fails with `409` and the consultation stays open. On an unowned case the answer assigns `owner_actor_id`, or else the physician who asked. The consultation row records `outcome` and `hours_to_answer` (the TICKET-11 metric). The task completes and the consultation's timers are cancelled. A second answer fails with `409`. `POST /api/tasks/{id}/complete` refuses an `answer_consultation` task.
 
 **Unanswered consultations escalate** through `tick` like stage deadlines: a `consultation_overdue` event, an `escalation` task and a timer row keyed `consultation:<id>`. Level *n* goes to the *n*-th role of the template's `consultation.escalation` (responsible physician, then program manager). Level 1 goes to the physician who owes the answer. The same spacing and idempotency apply, and these alerts count in `escalations` and `escalations_per_role`.
 

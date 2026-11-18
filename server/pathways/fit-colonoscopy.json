@@ -2,6 +2,7 @@
   "id": "fit-colonoscopy",
   "version": 3,
   "label": "Positive FIT to colonoscopy, pathology and follow-up",
+  "short_label": "FIT → colonoscopy",
   "trigger": {
     "description": "A positive faecal immunochemical test (FIT) result from the lab creates one case.",
     "event": "case_created",
@@ -283,7 +284,8 @@
     "request_consultation": { "roles": ["responsible_physician"] },
     "confirm_closure": { "event": "closure_confirmed" },
     "reject_proposal": { "roles": ["responsible_physician"] },
-    "reopen_case": { "event": "reopened" }
+    "reopen_case": { "event": "reopened" },
+    "record_provider_move": { "event": "patient_moved_provider" }
   },
   "limits": [
     {
