@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 19 Nov · **Estimate:** 4 hours · **Assignee:** Claude Code drafts, human proofreads
 - **Depends on:** TICKET-14, TICKET-19
-- **Status:** not started
+- **Status:** in progress
 
 ## Goal
 

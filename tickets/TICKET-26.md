@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** skeleton 17 Nov, full content 19 Nov · **Estimate:** 5 hours · **Assignee:** Claude Code drafts, human reviews
 - **Depends on:** TICKET-01 (template), TICKET-14, TICKET-19
-- **Status:** not started
+- **Status:** in progress
 
 ## Goal
 
