@@ -32,7 +32,9 @@ export type Action =
   | "answer_consultation"
   | "confirm_closure"
   | "reopen_case"
-  | "reject_proposal";
+  | "reject_proposal"
+  // TICKET-11
+  | "request_consultation";
 
 // The `cases.status` column. A case is open until it reaches the pathway's terminal
 // stage; the status word is shared by every pathway, the terminal stage's key is not.
@@ -50,4 +52,6 @@ export const ACTIONS: readonly Action[] = [
   "confirm_closure",
   "reject_proposal",
   "reopen_case",
+  // TICKET-11
+  "request_consultation",
 ];

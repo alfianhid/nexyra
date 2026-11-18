@@ -12,11 +12,17 @@
 // or the transition table the template defines.
 
 import {
+  CONSULTATION_ANSWERS,
   DEFAULT_PATHWAY,
+  type ConsultationAnswer,
   type Pathway,
+  type PathwayConsultation,
   type PathwayEvent,
   type PathwayLimit,
   type PathwayStage,
+  type PathwayStitching,
+  type PathwayUnowned,
+  type StitchingRule,
 } from "./pathways/index.js";
 import {
   ACTIONS,
@@ -108,6 +114,8 @@ export type EngineCase = {
   documents: readonly { kind: string }[];
   // True when a closure confirmation written by a physician already exists.
   physician_confirmed: boolean;
+  // TICKET-11: true while a consultation on the case is waiting for its answer.
+  open_consultation?: boolean;
 };
 
 export function isClosed(c: { stage: string; status: string }): boolean {
@@ -243,6 +251,9 @@ export type CaseState = {
   owner_actor_id: string | null;
   final_outcome: string | null;
   stage_entered_at: string | null;
+  // TICKET-08: the case's current provider, set by events the template marks
+  // `sets_provider` (payload.provider_id). Optional so older call sites still type.
+  provider_id?: string | null;
 };
 
 export type RecordedEvent = {
@@ -298,6 +309,7 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
       owner_actor_id: owner,
       final_outcome: null,
       stage_entered_at: event.occurred_at,
+      provider_id: payloadProvider(event),
     };
   }
 
@@ -327,6 +339,14 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
       ? outcome
       : state.final_outcome;
 
+  let provider = state.provider_id ?? null;
+  if (definition.sets_provider) {
+    provider = payloadProvider(event);
+    if (provider === null) {
+      throw new ReplayError("validation_failed", `"${event.type}" must name provider_id.`);
+    }
+  }
+
   return {
     stage: target,
     status: target === TERMINAL_STAGE ? CASE_CLOSED : CASE_OPEN,
@@ -334,7 +354,13 @@ export function nextState(state: CaseState | null, event: RecordedEvent): CaseSt
     final_outcome: finalOutcome,
     stage_entered_at:
       definition.moves_stage || target !== state.stage ? event.occurred_at : state.stage_entered_at,
+    provider_id: provider,
   };
+}
+
+function payloadProvider(event: RecordedEvent): string | null {
+  const provider = event.payload.provider_id;
+  return typeof provider === "string" && provider.length > 0 ? provider : null;
 }
 
 export function foldEvents(events: readonly RecordedEvent[]): CaseState | null {
@@ -371,18 +397,39 @@ export function availableActions(c: EngineCase, role: Role): Action[] {
       case "advance_case":
         // A forward exit this role may record, other than a closure: closing has its
         // own action and its own three conditions.
+        // A consultation answer is not a way to advance a case: it is recorded only by
+        // answering an open consultation (TICKET-11).
         return (
           open &&
           exitsFrom(c.stage).some(
-            ({ event, to }) => !event.closure && isForward(c.stage, to) && event.roles.includes(role),
+            ({ event, to }) =>
+              !event.closure &&
+              event.consultation_answer === null &&
+              isForward(c.stage, to) &&
+              event.roles.includes(role),
           )
         );
       case "log_outreach":
         return open && actionAllowedByTemplate(action, c.stage, role);
       case "assign_owner":
         return open && c.owner_actor_id === null && actionAllowedByTemplate(action, c.stage, role);
+      // TICKET-11: a question can be asked at a stage the template marks `consultation`,
+      // one at a time, and answered only while one is open.
       case "answer_consultation":
-        return open && stage.consultation && actionAllowedByTemplate(action, c.stage, role);
+        return (
+          open &&
+          c.open_consultation === true &&
+          consultationRoleAllowed("answer", role) &&
+          actionAllowedByTemplate(action, c.stage, role)
+        );
+      case "request_consultation":
+        return (
+          open &&
+          stage.consultation &&
+          c.open_consultation !== true &&
+          consultationRoleAllowed("request", role) &&
+          actionAllowedByTemplate(action, c.stage, role)
+        );
       case "reject_proposal":
         return open && stage.awaiting_closure && actionAllowedByTemplate(action, c.stage, role);
       case "confirm_closure":
@@ -396,6 +443,59 @@ export function availableActions(c: EngineCase, role: Role): Action[] {
 
 export function canPerform(c: EngineCase, role: Role, action: Action): boolean {
   return availableActions(c, role).includes(action);
+}
+
+// ---------------------------------------------------------------------------
+// TICKET-08 / TICKET-11: unowned triggers, consultations, stitching (all template data)
+// ---------------------------------------------------------------------------
+
+export const UNOWNED: PathwayUnowned | null = PATHWAY.unowned;
+export const CONSULTATION: PathwayConsultation | null = PATHWAY.consultation;
+export const STITCHING: PathwayStitching | null = PATHWAY.stitching;
+
+function consultationRoleAllowed(kind: "request" | "answer", role: Role): boolean {
+  if (!CONSULTATION) return false;
+  return (kind === "request" ? CONSULTATION.request_roles : CONSULTATION.answer_roles).includes(role);
+}
+
+// Every event the template marks `owner: "clear"` is an unowned trigger.
+export function clearsOwner(type: string): boolean {
+  return eventDefinition(type)?.owner === "clear";
+}
+
+export function isConsultationAnswerEvent(type: string): boolean {
+  return (eventDefinition(type)?.consultation_answer ?? null) !== null;
+}
+
+// The event that records one kind of consultation answer.
+export function consultationAnswerEvent(answer: ConsultationAnswer): PathwayEvent | null {
+  return Object.values(PATHWAY.events).find((event) => event.consultation_answer === answer) ?? null;
+}
+
+export function isConsultationAnswer(value: unknown): value is ConsultationAnswer {
+  return typeof value === "string" && (CONSULTATION_ANSWERS as readonly string[]).includes(value);
+}
+
+// The stitching rule for an incoming resource: by type, status and (for reports) the
+// kind of document it carries. Null when the template has no rule for it.
+export function stitchingRule(
+  resource: string,
+  status: string,
+  documentKind: string | null,
+): StitchingRule | null {
+  if (!STITCHING) return null;
+  return (
+    STITCHING.rules.find(
+      (rule) =>
+        rule.resource === resource &&
+        rule.statuses.includes(status) &&
+        (rule.document_kind === null || rule.document_kind === documentKind),
+    ) ?? null
+  );
+}
+
+export function stitchedResourceTypes(): string[] {
+  return [...new Set((STITCHING?.rules ?? []).map((rule) => rule.resource))];
 }
 
 // ---------------------------------------------------------------------------

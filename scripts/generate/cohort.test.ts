@@ -149,7 +149,7 @@ describe("cohort ingest through the engine", () => {
     // Every case rebuilds from its events, and the rebuild equals the stored row.
     const rows = await first
       .prepare(
-        `SELECT id, stage, status, owner_actor_id, final_outcome, stage_entered_at
+        `SELECT id, stage, status, owner_actor_id, final_outcome, stage_entered_at, provider_id
            FROM cases WHERE id LIKE 'SY-%' ORDER BY id`,
       )
       .all<{
@@ -159,6 +159,7 @@ describe("cohort ingest through the engine", () => {
         owner_actor_id: string | null;
         final_outcome: string | null;
         stage_entered_at: string | null;
+        provider_id: string | null;
       }>();
     expect(rows).toHaveLength(80);
     for (const row of rows) {
@@ -169,6 +170,8 @@ describe("cohort ingest through the engine", () => {
         owner_actor_id: row.owner_actor_id,
         final_outcome: row.final_outcome,
         stage_entered_at: row.stage_entered_at,
+        // TICKET-08 folds the provider into the rebuilt state as well.
+        provider_id: row.provider_id,
       });
     }
 

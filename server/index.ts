@@ -1,12 +1,28 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { actorMiddleware, roleForRead, type Actor } from "./actor.js";
-import { getCaseDetail, getVerification, isCaseFilter, listCases } from "./caseView.js";
+import {
+  getCaseDetail,
+  getVerification,
+  isCaseFilter,
+  listCases,
+  listUnowned,
+  listUnstitched,
+} from "./caseView.js";
 import { DEMO_START, getClock, setClock } from "./clock.js";
 import { databaseLabel, getDb } from "./db.js";
 import { advanceClock, tick } from "./escalation.js";
-import { applyEvent, completeTask, confirmCaseClosure, logOutreach, reopenCase } from "./events.js";
+import {
+  answerConsultation,
+  applyEvent,
+  completeTask,
+  confirmCaseClosure,
+  logOutreach,
+  reopenCase,
+  requestConsultation,
+} from "./events.js";
 import { HttpError, sendError } from "./errors.js";
 import { programmeSummary } from "./programme.js";
+import { ingestFhir } from "./ingest.js";
 import { runCaseVerification } from "./verify/caseVerification.js";
 
 // Reads and writes both lean on server/engine.ts for the rules. The handlers here parse
@@ -104,6 +120,7 @@ app.post(
       escalations: result.escalations,
       cases_advanced: 0,
       escalations_per_role: result.per_role,
+      unowned_triggered: result.unowned_triggered ?? 0,
     });
   }),
 );
@@ -294,6 +311,108 @@ app.post(
       outcome: body.outcome,
       delayReason: body.delay_reason,
       note: body.note,
+    });
+    await writeResponse(res, caseId, actor.role, recorded);
+  }),
+);
+
+// --- TICKET-08 / TICKET-11 --------------------------------------------------------
+// The unowned list, the unstitched queue, FHIR ingest and consultations. The rules are
+// the engine's and the template's; these handlers parse and call.
+
+app.get(
+  "/api/unowned",
+  handle(async (req, res) => {
+    const db = await getDb();
+    if (req.header("x-nexyra-actor") !== undefined) await roleForRead(req, db);
+    res.json(await listUnowned(db, (await getClock(db)).now));
+  }),
+);
+
+app.get(
+  "/api/providers",
+  handle(async (_req, res) => {
+    const db = await getDb();
+    res.json({
+      providers: await db
+        .prepare("SELECT id AS provider_id, name, kind FROM providers ORDER BY id")
+        .all(),
+    });
+  }),
+);
+
+app.get(
+  "/api/ingest/unstitched",
+  handle(async (req, res) => {
+    const db = await getDb();
+    if (req.header("x-nexyra-actor") !== undefined) await roleForRead(req, db);
+    const raw = req.query.status;
+    const status = raw === undefined ? "queued" : raw;
+    if (status !== "queued" && status !== "stitched" && status !== "all") {
+      throw new HttpError(400, "validation_failed", 'status must be "queued", "stitched" or "all".');
+    }
+    res.json(await listUnstitched(db, status));
+  }),
+);
+
+app.post(
+  "/api/ingest/fhir",
+  actorMiddleware(),
+  handle(async (req, res) => {
+    const actor = actorOf(res);
+    if (req.body === undefined || req.body === null || typeof req.body !== "object") {
+      throw new HttpError(400, "validation_failed", "Send one FHIR resource or a Bundle.");
+    }
+    res.json(await ingestFhir(await getDb(), req.body, actor));
+  }),
+);
+
+app.post(
+  "/api/cases/:case_id/consultations",
+  actorMiddleware(),
+  handle(async (req, res) => {
+    const actor = actorOf(res);
+    const body = (req.body ?? {}) as {
+      question?: unknown;
+      to_provider_id?: unknown;
+      to_actor_id?: unknown;
+    };
+    const caseId = param(req, "case_id");
+    const { recorded, consultationId } = await requestConsultation(await getDb(), {
+      caseId,
+      actor,
+      question: body.question,
+      toProviderId: body.to_provider_id,
+      toActorId: body.to_actor_id,
+    });
+    res.json({
+      ...(await getCaseDetail(await getDb(), caseId, actor.role)),
+      recorded,
+      consultation_id: consultationId,
+    });
+  }),
+);
+
+app.post(
+  "/api/consultations/:consultation_id/answer",
+  actorMiddleware(),
+  handle(async (req, res) => {
+    const actor = actorOf(res);
+    const body = (req.body ?? {}) as {
+      outcome?: unknown;
+      note?: unknown;
+      owner_actor_id?: unknown;
+      redirect_to_provider_id?: unknown;
+      referral?: unknown;
+    };
+    const { recorded, caseId } = await answerConsultation(await getDb(), {
+      consultationId: param(req, "consultation_id"),
+      actor,
+      outcome: body.outcome,
+      note: body.note,
+      ownerActorId: body.owner_actor_id,
+      redirectToProviderId: body.redirect_to_provider_id,
+      referral: body.referral,
     });
     await writeResponse(res, caseId, actor.role, recorded);
   }),

@@ -120,7 +120,8 @@ describe("GET /api/cases/:case_id", () => {
     expect(body.timeline).toHaveLength(11);
     expect(body.documents).toHaveLength(1);
     expect(body.tasks[0].kind).toBe("confirm_closure");
-    expect(body.verification).toEqual({ status: "ready", proposal: "reopen" });
+    // TICKET-15: a reopen proposal asks for no outcome, so proposed_outcome is null.
+    expect(body.verification).toEqual({ status: "ready", proposal: "reopen", proposed_outcome: null });
     expect(body.available_actions).toContain("confirm_closure");
     expect(body.available_actions).toContain("reject_proposal");
   });

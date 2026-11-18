@@ -223,12 +223,16 @@ describe("TICKET-16 done-when", () => {
       expect(row.reason.length).toBeGreaterThan(0);
     }
     const kinds = (kind: string) => summary.exceptions.filter((e) => e.kind === kind).map((e) => e.case_id);
-    expect(kinds("unowned")).toEqual(["F-3"]);
+    // F-2's referral has waited since day 3 with no answer, so TICKET-08's
+    // "referral not answered by the acceptance deadline" trigger makes it unowned too.
+    expect(kinds("unowned").sort()).toEqual(["F-2", "F-3"]);
     expect(kinds("past_referral_limit").sort()).toEqual(["F-2", "F-3"]);
     expect(kinds("closure_held")).toEqual(["F-4"]);
     // Unowned since the rejection on day 5: 35 days at day 40.
-    expect(summary.exceptions.find((e) => e.kind === "unowned")?.reason).toBe("Unowned 35 days");
-    expect(summary.counts.unowned).toBe(1);
+    expect(
+      summary.exceptions.find((e) => e.kind === "unowned" && e.case_id === "F-3")?.reason,
+    ).toBe("Unowned 35 days");
+    expect(summary.counts.unowned).toBe(2);
     expect(summary.counts.closures_held).toBe(1);
   });
 

@@ -1,19 +1,24 @@
 import type { InStatement } from "@libsql/client";
 import { randomUUID } from "node:crypto";
 import type { Actor } from "./actor.js";
-import { getClock } from "./clock.js";
+import { addHours, getClock, hoursBetween } from "./clock.js";
 import type { Db } from "./db.js";
 import {
   CLOSURE_CONFIRMATION_EVENT,
+  CONSULTATION,
   INITIAL_STAGE,
   OUTCOMES,
   PATHWAY,
   REOPEN_EVENT,
   ReplayError,
+  UNOWNED,
   availableActions,
   confirmClosure,
+  consultationAnswerEvent,
   eventDefinition,
   foldEvents,
+  isConsultationAnswer,
+  isConsultationAnswerEvent,
   isValidOutcome,
   nextState,
   rolesForEvent,
@@ -25,6 +30,8 @@ import {
   type Role,
 } from "./engine.js";
 import { HttpError } from "./errors.js";
+import { roundHours } from "./ownership.js";
+import { REFERRAL_STATUSES } from "./pathways/index.js";
 
 // Every write in the prototype ends up in this file. Nothing outside it updates a case
 // row, and nothing at all updates an event row: the events table is append-only.
@@ -39,12 +46,14 @@ type CaseStateRow = {
   final_outcome: string | null;
   stage_entered_at: string | null;
   created_at: string;
+  provider_id: string | null;
 };
 
 async function loadCase(db: Db, caseId: string): Promise<CaseStateRow> {
   const row = await db
     .prepare(
-      `SELECT id, stage, status, owner_actor_id, final_outcome, stage_entered_at, created_at
+      `SELECT id, stage, status, owner_actor_id, final_outcome, stage_entered_at, created_at,
+              provider_id
          FROM cases WHERE id = ?`,
     )
     .get<CaseStateRow>(caseId);
@@ -71,7 +80,16 @@ export async function loadEngineCase(db: Db, caseId: string): Promise<EngineCase
     final_outcome: row.final_outcome,
     documents: documents.map((doc) => ({ kind: doc.kind })),
     physician_confirmed: (confirmed?.n ?? 0) > 0,
+    open_consultation: await hasOpenConsultation(db, caseId),
   };
+}
+
+// TICKET-11: whether a consultation on the case is waiting for its answer.
+export async function hasOpenConsultation(db: Db, caseId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT count(*) AS n FROM consultations WHERE case_id = ? AND status = 'open'")
+    .get<{ n: number }>(caseId);
+  return (row?.n ?? 0) > 0;
 }
 
 type EventInput = {
@@ -131,6 +149,7 @@ function caseStateOf(row: CaseStateRow): CaseState {
     owner_actor_id: row.owner_actor_id,
     final_outcome: row.final_outcome,
     stage_entered_at: row.stage_entered_at,
+    provider_id: row.provider_id,
   };
 }
 
@@ -144,23 +163,43 @@ function replayHttpError(error: ReplayError): HttpError {
 // computed by the same `nextState` step that `rebuildCase` replays, from the event as
 // it will be stored, so a write and a rebuild cannot disagree. The event and the case
 // update commit together in one batch.
+export type ApplyEventInput = {
+  caseId: string;
+  type: string;
+  actor: WriteActor;
+  payload?: Record<string, unknown>;
+  // Owner to assign when the event assigns one (reopen, an incomplete procedure on an
+  // unowned case, owner_assigned). Defaults to payload.owner_actor_id, then the actor.
+  ownerActorId?: string;
+  // The outcome a closure screen chose but which is not on the case row yet.
+  judgedOutcome?: unknown;
+  // Set only by the closure endpoint: the physician's confirmation is the act that
+  // finalises the case, so it enters the terminal stage in one event.
+  finalise?: boolean;
+  // TICKET-08/11: demo-clock time to record (tick passes its own `now`), whether this
+  // call is the consultation answer endpoint (the only way to record an answer event),
+  // and rows that must commit in the same batch as the event.
+  occurredAt?: string;
+  consultationAnswer?: boolean;
+  extraStatements?: InStatement[];
+};
+
 export async function applyEvent(
   db: Db,
-  input: {
-    caseId: string;
-    type: string;
-    actor: WriteActor;
-    payload?: Record<string, unknown>;
-    // Owner to assign when the event assigns one (reopen, an incomplete procedure on an
-    // unowned case, owner_assigned). Defaults to payload.owner_actor_id, then the actor.
-    ownerActorId?: string;
-    // The outcome a closure screen chose but which is not on the case row yet.
-    judgedOutcome?: unknown;
-    // Set only by the closure endpoint: the physician's confirmation is the act that
-    // finalises the case, so it enters the terminal stage in one event.
-    finalise?: boolean;
-  },
+  input: ApplyEventInput,
 ): Promise<{ recorded: string; caseId: string }> {
+  const prepared = await prepareEvent(db, input);
+  await db.batch(prepared.statements);
+  return { recorded: prepared.recorded, caseId: prepared.caseId };
+}
+
+// Everything applyEvent does except the write: validation, the next case row, and the
+// statements that record it. Callers that must add rows to the same atomic write (the
+// tick, the consultation answer) batch the result themselves.
+export async function prepareEvent(
+  db: Db,
+  input: ApplyEventInput,
+): Promise<{ recorded: string; caseId: string; statements: InStatement[]; next: CaseState }> {
   const actor = input.actor;
   // `finalises` is the engine's own marker; a client cannot set it through the events
   // endpoint and skip the explicit closure step.
@@ -208,6 +247,16 @@ export async function applyEvent(
     );
   }
 
+  // TICKET-11: a consultation answer moves the case, so it is recorded only by answering
+  // an open consultation, never through the generic events endpoint.
+  if (isConsultationAnswerEvent(input.type) && input.consultationAnswer !== true) {
+    throw new HttpError(
+      409,
+      "invalid_transition",
+      `"${input.type}" is recorded by answering a consultation (POST /api/consultations/{id}/answer).`,
+    );
+  }
+
   // Who owns the case after this event, written into the payload so the timeline alone
   // can say it (rebuildCase reads it back).
   const definition = eventDefinition(input.type);
@@ -232,12 +281,15 @@ export async function applyEvent(
     if (caseRow.owner_actor_id !== null && caseRow.owner_actor_id !== requested) {
       payload.previous_owner_actor_id = caseRow.owner_actor_id;
     }
+    // TICKET-08: an assignment records who handed the case over and who received it.
+    await recordHandOver(db, caseRow, actor, requested, payload);
   } else {
     delete payload.owner_actor_id;
   }
   if (input.finalise === true) payload.finalises = true;
+  await prepareOwnershipPayload(db, caseRow, input.type, transition.to, transition.moves_stage, payload);
 
-  const now = (await getClock(db)).now;
+  const now = input.occurredAt ?? (await getClock(db)).now;
   const recordedEvent: RecordedEvent = {
     type: input.type,
     actor_id: actor.actor_id,
@@ -261,13 +313,13 @@ export async function applyEvent(
     now,
   );
 
-  await db.batch([
+  const statements: InStatement[] = [
     statement,
     db
       .prepare(
         `UPDATE cases
             SET stage = ?, status = ?, owner_actor_id = ?, final_outcome = ?,
-                stage_entered_at = ?, updated_at = ?
+                stage_entered_at = ?, updated_at = ?, provider_id = ?
           WHERE id = ?`,
       )
       .bind(
@@ -277,6 +329,7 @@ export async function applyEvent(
         next.final_outcome,
         next.stage_entered_at,
         new Date().toISOString(),
+        next.provider_id ?? null,
         input.caseId,
       ),
     // TICKET-06: a timer belongs to the stage that created it. Leaving the stage stops it,
@@ -291,9 +344,20 @@ export async function applyEvent(
             .bind(input.caseId, caseRow.stage),
         ]
       : []),
-  ]);
+    // TICKET-08: referral rows, the ownership gap and the assign-owner task.
+    ...(await ownershipStatements(db, {
+      caseId: input.caseId,
+      eventId: id,
+      type: input.type,
+      before: caseRow,
+      next,
+      payload,
+      now,
+    })),
+    ...(input.extraStatements ?? []),
+  ];
 
-  return { recorded: id, caseId: input.caseId };
+  return { recorded: id, caseId: input.caseId, statements, next };
 }
 
 // TICKET-05: a case is created from a positive FIT result with the initial owner the
@@ -307,6 +371,10 @@ export async function createCase(
     actor: WriteActor;
     ownerActorId?: string;
     payload?: Record<string, unknown>;
+    // TICKET-08: the provider the case starts at and the patient identifier incoming
+    // FHIR resources are matched on. Both optional.
+    providerId?: string;
+    patientIdentifier?: string;
   },
 ): Promise<{ recorded: string; caseId: string }> {
   const existing = await db.prepare("SELECT id FROM cases WHERE id = ?").get(input.caseId);
@@ -326,7 +394,12 @@ export async function createCase(
   await assertOwnerExists(db, owner);
 
   const now = (await getClock(db)).now;
-  const payload = { ...(input.payload ?? {}), owner_actor_id: owner };
+  if (input.providerId !== undefined) await assertProviderExists(db, input.providerId);
+  const payload = {
+    ...(input.payload ?? {}),
+    owner_actor_id: owner,
+    ...(input.providerId !== undefined ? { provider_id: input.providerId } : {}),
+  };
   let state: CaseState | null;
   try {
     state = nextState(null, {
@@ -353,8 +426,9 @@ export async function createCase(
       .prepare(
         `INSERT INTO cases (
            id, patient_name, patient_age, patient_language, pathway_id,
-           owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at,
+           provider_id, patient_identifier
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         input.caseId,
@@ -369,6 +443,8 @@ export async function createCase(
         state.stage_entered_at,
         now,
         createdAt,
+        state.provider_id ?? null,
+        input.patientIdentifier ?? null,
       ),
     statement,
   ]);
@@ -432,7 +508,8 @@ export async function rebuildCase(db: Db, caseId: string): Promise<CaseState> {
   await db
     .prepare(
       `UPDATE cases
-          SET stage = ?, status = ?, owner_actor_id = ?, final_outcome = ?, stage_entered_at = ?
+          SET stage = ?, status = ?, owner_actor_id = ?, final_outcome = ?, stage_entered_at = ?,
+              provider_id = ?
         WHERE id = ?`,
     )
     .run(
@@ -441,6 +518,7 @@ export async function rebuildCase(db: Db, caseId: string): Promise<CaseState> {
       state.owner_actor_id,
       state.final_outcome,
       state.stage_entered_at,
+      state.provider_id ?? null,
       caseId,
     );
   return state;
@@ -624,6 +702,15 @@ export async function completeTask(
 
   // Which permission the task needs: an outreach task is coordination work, a closure
   // task is a clinician's. Both are asked of the engine, never hardcoded here.
+  // TICKET-11: a consultation is answered with an outcome that moves the case, so its
+  // task closes through the answer endpoint, never as a generic completion.
+  if (task.kind === CONSULTATION_TASK) {
+    throw new HttpError(
+      409,
+      "invalid_transition",
+      "Answer the consultation instead (POST /api/consultations/{id}/answer).",
+    );
+  }
   const permission =
     task.kind === "confirm_closure" ? "confirm_closure" : ("log_outreach" as const);
   const engineCase = await loadEngineCase(db, task.case_id);
@@ -663,4 +750,779 @@ export async function completeTask(
   ]);
 
   return { recorded: id, caseId: task.case_id };
+}
+
+// ===========================================================================
+// TICKET-08 / TICKET-11: unowned triggers, hand-over, referrals, consultations and
+// FHIR stitching. Which events trigger what is template data (server/pathways); this
+// block only writes the rows those rules call for, in the same batch as the event.
+// ===========================================================================
+
+export const ASSIGN_OWNER_TASK = "assign_owner";
+export const CONSULTATION_TASK = "answer_consultation";
+export const SUPPLY_DATA_TASK = "supply_referral_data";
+export const STITCHED_HISTORY_EVENT = "fhir_resource_stitched";
+export const CONSULTATION_REQUESTED_EVENT = "consultation_requested";
+
+export const SYSTEM_ACTOR: WriteActor = {
+  actor_id: "act_system",
+  role: "system",
+  display_name: "system",
+};
+
+// The attributes a referral (REF) message carries: status, priority and the specialty
+// as a SNOMED CT code. Priority uses the three referral priorities of HL7 v2 (routine,
+// ASAP, STAT); status the referral statuses plus `redirected` (superseded by a new one).
+export const REFERRAL_PRIORITIES = ["routine", "asap", "stat"] as const;
+export const SNOMED_SYSTEM = "http://snomed.info/sct";
+
+const newId = (prefix: string) => `${prefix}_${randomUUID().slice(0, 8)}`;
+
+async function assertProviderExists(db: Db, providerId: string): Promise<void> {
+  const row = await db.prepare("SELECT id FROM providers WHERE id = ?").get(providerId);
+  if (!row) throw new HttpError(400, "validation_failed", `No provider carries the id "${providerId}".`);
+}
+
+// The first actor holding `role` at a provider: who an assign-owner task or a
+// consultation lands with. Null when the provider has nobody in that role.
+export async function actorAtProvider(
+  db: Db,
+  role: string,
+  providerId: string | null,
+): Promise<string | null> {
+  if (providerId === null) return null;
+  const row = await db
+    .prepare("SELECT id FROM actors WHERE role = ? AND provider_id = ? ORDER BY id LIMIT 1")
+    .get<{ id: string }>(role, providerId);
+  return row?.id ?? null;
+}
+
+type OpenGap = { id: string; unowned_at: string; previous_owner_actor_id: string | null };
+
+async function openGap(db: Db, caseId: string): Promise<OpenGap | undefined> {
+  return db
+    .prepare(
+      `SELECT id, unowned_at, previous_owner_actor_id FROM ownership_gaps
+        WHERE case_id = ? AND owned_at IS NULL ORDER BY rowid DESC LIMIT 1`,
+    )
+    .get<OpenGap>(caseId);
+}
+
+type ReferralRow = {
+  id: string;
+  to_provider_id: string;
+  status: string;
+  priority: string;
+  specialty_system: string;
+  specialty_code: string;
+  specialty_display: string;
+};
+
+export async function latestReferral(db: Db, caseId: string): Promise<ReferralRow | undefined> {
+  return db
+    .prepare(
+      `SELECT id, to_provider_id, status, priority, specialty_system, specialty_code, specialty_display
+         FROM referrals WHERE case_id = ? ORDER BY rowid DESC LIMIT 1`,
+    )
+    .get<ReferralRow>(caseId);
+}
+
+// Who handed the case over and who received it. On an unowned case the one who handed
+// over is the last owner before the case lost its owner.
+async function recordHandOver(
+  db: Db,
+  caseRow: CaseStateRow,
+  actor: WriteActor,
+  received: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const gap = caseRow.owner_actor_id === null ? await openGap(db, caseRow.id) : undefined;
+  payload.handed_over_by = caseRow.owner_actor_id ?? gap?.previous_owner_actor_id ?? null;
+  payload.received_by = received;
+  payload.assigned_by = actor.actor_id;
+}
+
+type NormalisedReferral = {
+  referral_id: string;
+  from_provider_id: string | null;
+  to_provider_id: string;
+  status: string;
+  priority: string;
+  specialty: { system: string; code: string; display: string };
+};
+
+function fail(message: string): never {
+  throw new HttpError(400, "validation_failed", message);
+}
+
+async function normaliseReferral(
+  db: Db,
+  raw: unknown,
+  caseId: string,
+  fromProvider: string | null,
+): Promise<NormalisedReferral> {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) fail("referral must be an object.");
+  const r = raw as Record<string, unknown>;
+
+  if (typeof r.to_provider_id !== "string" || r.to_provider_id.length === 0) {
+    fail("referral.to_provider_id is required.");
+  }
+  await assertProviderExists(db, r.to_provider_id);
+
+  const status = r.status === undefined ? "pending" : r.status;
+  if (typeof status !== "string" || !(REFERRAL_STATUSES as readonly string[]).includes(status)) {
+    fail(`referral.status must be one of ${REFERRAL_STATUSES.join(", ")}.`);
+  }
+  if (typeof r.priority !== "string" || !(REFERRAL_PRIORITIES as readonly string[]).includes(r.priority)) {
+    fail(`referral.priority must be one of ${REFERRAL_PRIORITIES.join(", ")}.`);
+  }
+
+  const specialty = r.specialty;
+  if (typeof specialty !== "object" || specialty === null) {
+    fail("referral.specialty must be a SNOMED CT coding { system, code, display }.");
+  }
+  const s = specialty as Record<string, unknown>;
+  if (s.system !== SNOMED_SYSTEM) fail(`referral.specialty.system must be ${SNOMED_SYSTEM}.`);
+  if (typeof s.code !== "string" || !/^\d{6,18}$/.test(s.code)) {
+    fail("referral.specialty.code must be a SNOMED CT concept id (6 to 18 digits).");
+  }
+  if (typeof s.display !== "string" || s.display.trim().length === 0) {
+    fail("referral.specialty.display is required.");
+  }
+
+  let referralId: string;
+  if (r.referral_id !== undefined) {
+    if (typeof r.referral_id !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(r.referral_id)) {
+      fail("referral.referral_id must be 1 to 64 letters, digits, dots, dashes or underscores.");
+    }
+    referralId = r.referral_id;
+  } else {
+    const count = await db
+      .prepare("SELECT count(*) AS n FROM referrals WHERE case_id = ?")
+      .get<{ n: number }>(caseId);
+    referralId = `REF-${caseId}-${(count?.n ?? 0) + 1}`;
+  }
+  const taken = await db.prepare("SELECT id FROM referrals WHERE id = ?").get(referralId);
+  if (taken) throw new HttpError(409, "invalid_transition", `Referral ${referralId} already exists.`);
+
+  return {
+    referral_id: referralId,
+    from_provider_id: fromProvider,
+    to_provider_id: r.to_provider_id,
+    status,
+    priority: r.priority,
+    specialty: { system: SNOMED_SYSTEM, code: s.code, display: s.display },
+  };
+}
+
+// Payload checks for the TICKET-08 parts of an event: the previous owner on a trigger,
+// the provider on a move, and the referral on an event that enters the acceptance stage.
+async function prepareOwnershipPayload(
+  db: Db,
+  caseRow: CaseStateRow,
+  type: string,
+  to: string,
+  movesStage: boolean,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const definition = eventDefinition(type);
+  if (definition?.owner === "clear" && caseRow.owner_actor_id !== null) {
+    payload.previous_owner_actor_id = caseRow.owner_actor_id;
+  }
+
+  if (definition?.sets_provider) {
+    const provider = payload.provider_id;
+    if (typeof provider !== "string" || provider.length === 0) {
+      fail(`"${type}" requires payload.provider_id.`);
+    }
+    await assertProviderExists(db, provider);
+    if (provider === caseRow.provider_id) fail(`The case is already at provider "${provider}".`);
+    payload.from_provider_id = caseRow.provider_id;
+    if (payload.summary === undefined) {
+      const names = await db
+        .prepare("SELECT id, name FROM providers WHERE id IN (?, ?)")
+        .all<{ id: string; name: string }>(provider, caseRow.provider_id ?? "");
+      const name = (id: string | null) => names.find((n) => n.id === id)?.name ?? id ?? "no provider";
+      payload.summary = `Patient moved from ${name(caseRow.provider_id)} to ${name(provider)}`;
+    }
+  }
+
+  if (payload.referral !== undefined) {
+    if (!UNOWNED || !movesStage || to !== UNOWNED.acceptance_stage) {
+      fail(`A referral can only be sent with an event that moves the case to "${UNOWNED?.acceptance_stage}".`);
+    }
+    payload.referral = await normaliseReferral(db, payload.referral, caseRow.id, caseRow.provider_id);
+  }
+}
+
+// The rows that commit with the event: referral status and new referral, the ownership
+// gap (opened by a trigger, closed when an owner returns) and the assign-owner task.
+async function ownershipStatements(
+  db: Db,
+  input: {
+    caseId: string;
+    eventId: string;
+    type: string;
+    before: CaseStateRow;
+    next: CaseState;
+    payload: Record<string, unknown>;
+    now: string;
+  },
+): Promise<InStatement[]> {
+  const out: InStatement[] = [];
+  const definition = eventDefinition(input.type);
+
+  if (definition?.referral_status) {
+    out.push(
+      db
+        .prepare(
+          `UPDATE referrals SET status = ?, updated_at = ?
+            WHERE id = (SELECT id FROM referrals WHERE case_id = ? ORDER BY rowid DESC LIMIT 1)`,
+        )
+        .bind(definition.referral_status, input.now, input.caseId),
+    );
+  }
+
+  const referral = input.payload.referral as NormalisedReferral | undefined;
+  if (referral && typeof referral === "object") {
+    const replaces = await latestReferral(db, input.caseId);
+    out.push(
+      db
+        .prepare(
+          `INSERT INTO referrals (
+             id, case_id, from_provider_id, to_provider_id, status, priority,
+             specialty_system, specialty_code, specialty_display, replaces_referral_id,
+             sent_event_id, sent_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          referral.referral_id,
+          input.caseId,
+          referral.from_provider_id,
+          referral.to_provider_id,
+          referral.status,
+          referral.priority,
+          referral.specialty.system,
+          referral.specialty.code,
+          referral.specialty.display,
+          replaces?.id ?? null,
+          input.eventId,
+          input.now,
+          input.now,
+        ),
+    );
+  }
+
+  if (!UNOWNED) return out;
+  const wasOwned = input.before.owner_actor_id !== null;
+  const isOwned = input.next.owner_actor_id !== null;
+  const provider = input.next.provider_id ?? null;
+
+  if (wasOwned && !isOwned) {
+    const reason =
+      typeof input.payload.reason === "string"
+        ? input.payload.reason
+        : typeof input.payload.summary === "string"
+          ? input.payload.summary
+          : (definition?.label ?? input.type);
+    out.push(
+      db
+        .prepare(
+          `INSERT INTO ownership_gaps (
+             id, case_id, trigger_event_id, trigger_type, reason, previous_owner_actor_id, unowned_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          newId("g"),
+          input.caseId,
+          input.eventId,
+          input.type,
+          reason,
+          input.before.owner_actor_id,
+          input.now,
+        ),
+      db
+        .prepare(
+          `INSERT INTO tasks (id, case_id, kind, owner_actor_id, due_at, status)
+           VALUES (?, ?, ?, ?, ?, 'open')`,
+        )
+        .bind(
+          newId("t"),
+          input.caseId,
+          ASSIGN_OWNER_TASK,
+          await actorAtProvider(db, UNOWNED.assign_owner_role, provider),
+          addHours(input.now, UNOWNED.assign_owner_hours),
+        ),
+    );
+  } else if (!wasOwned && !isOwned && definition?.sets_provider) {
+    // Moved again while unowned: the open spell continues, the task follows the patient.
+    out.push(
+      db
+        .prepare(
+          `UPDATE tasks SET owner_actor_id = ?
+            WHERE case_id = ? AND kind = ? AND status = 'open'`,
+        )
+        .bind(await actorAtProvider(db, UNOWNED.assign_owner_role, provider), input.caseId, ASSIGN_OWNER_TASK),
+    );
+  } else if (!wasOwned && isOwned) {
+    const gap = await openGap(db, input.caseId);
+    if (gap) {
+      out.push(
+        db
+          .prepare(
+            `UPDATE ownership_gaps
+                SET owner_event_id = ?, owner_event_type = ?, owner_actor_id = ?, owned_at = ?,
+                    hours_to_owner = ?
+              WHERE id = ? AND owned_at IS NULL`,
+          )
+          .bind(
+            input.eventId,
+            input.type,
+            input.next.owner_actor_id,
+            input.now,
+            roundHours(hoursBetween(gap.unowned_at, input.now)),
+            gap.id,
+          ),
+      );
+    }
+    out.push(
+      db
+        .prepare(
+          `UPDATE tasks SET status = 'completed'
+            WHERE case_id = ? AND kind = ? AND status = 'open'`,
+        )
+        .bind(input.caseId, ASSIGN_OWNER_TASK),
+    );
+  }
+  return out;
+}
+
+// --- TICKET-11: consultations ------------------------------------------------------
+
+type ConsultationRow = {
+  id: string;
+  case_id: string;
+  question: string;
+  requested_by_actor_id: string;
+  to_provider_id: string | null;
+  to_actor_id: string | null;
+  referral_id: string | null;
+  requested_at: string;
+  due_at: string;
+  task_id: string;
+  status: string;
+};
+
+// The `timers.stage` key an overdue consultation escalates under, so the unique timer
+// index keeps its tick idempotent exactly as it does for stage deadlines.
+export function consultationTimerStage(consultationId: string): string {
+  return `consultation:${consultationId}`;
+}
+
+export async function requestConsultation(
+  db: Db,
+  input: {
+    caseId: string;
+    actor: WriteActor;
+    question: unknown;
+    toProviderId?: unknown;
+    toActorId?: unknown;
+  },
+): Promise<{ recorded: string; caseId: string; consultationId: string }> {
+  if (!CONSULTATION) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
+  const caseRow = await loadCase(db, input.caseId);
+  const engineCase = await loadEngineCase(db, input.caseId);
+  const role = input.actor.role as Role;
+
+  if (!availableActions(engineCase, role).includes("request_consultation")) {
+    if (input.actor.role === "system" || !CONSULTATION.request_roles.includes(role)) {
+      throw new HttpError(403, "role_not_permitted", `The ${input.actor.role} role may not ask a consultation.`);
+    }
+    throw new HttpError(
+      409,
+      "invalid_transition",
+      engineCase.open_consultation
+        ? "A consultation on this case is already waiting for its answer."
+        : `A consultation cannot be asked on a case at stage "${caseRow.stage}".`,
+    );
+  }
+
+  if (typeof input.question !== "string" || input.question.trim().length === 0) {
+    fail("A consultation needs one short question.");
+  }
+  const question = input.question.trim();
+  if (question.length > 500) fail("Keep the question to 500 characters; details travel in e-Referral.");
+
+  const referral = await latestReferral(db, input.caseId);
+  const toProvider =
+    typeof input.toProviderId === "string" && input.toProviderId.length > 0
+      ? input.toProviderId
+      : (referral?.to_provider_id ?? null);
+  if (toProvider === null) fail("to_provider_id is required: the case has no referral to address.");
+  await assertProviderExists(db, toProvider);
+
+  let toActor: string | null;
+  if (input.toActorId !== undefined) {
+    if (typeof input.toActorId !== "string") fail("to_actor_id must be a string.");
+    const row = await db
+      .prepare("SELECT id, role FROM actors WHERE id = ?")
+      .get<{ id: string; role: string }>(input.toActorId);
+    if (!row) fail(`No actor carries the id "${input.toActorId}".`);
+    if (!(CONSULTATION.answer_roles as readonly string[]).includes(row.role)) {
+      fail(`${input.toActorId} cannot answer a consultation (role ${row.role}).`);
+    }
+    toActor = row.id;
+  } else {
+    toActor = null;
+    for (const answerRole of CONSULTATION.answer_roles) {
+      toActor = await actorAtProvider(db, answerRole, toProvider);
+      if (toActor) break;
+    }
+  }
+  if (toActor === null) fail(`Provider "${toProvider}" has nobody who can answer a consultation.`);
+
+  const providerName =
+    (await db.prepare("SELECT name FROM providers WHERE id = ?").get<{ name: string }>(toProvider))?.name ??
+    toProvider;
+  const now = (await getClock(db)).now;
+  const dueAt = addHours(now, CONSULTATION.answer_hours);
+  const consultationId = newId("k");
+  const taskId = newId("t");
+
+  const { id, statement } = eventStatement(
+    db,
+    {
+      caseId: input.caseId,
+      type: CONSULTATION_REQUESTED_EVENT,
+      actor: input.actor,
+      payload: {
+        consultation_id: consultationId,
+        question,
+        to_provider_id: toProvider,
+        to_actor_id: toActor,
+        referral_id: referral?.id ?? null,
+        due_at: dueAt,
+        summary: `Consultation asked of ${providerName}: ${question}`,
+      },
+    },
+    now,
+  );
+
+  await db.batch([
+    statement,
+    db
+      .prepare(
+        `INSERT INTO consultations (
+           id, case_id, question, requested_by_actor_id, to_provider_id, to_actor_id,
+           referral_id, requested_at, due_at, task_id, status
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')`,
+      )
+      .bind(
+        consultationId,
+        input.caseId,
+        question,
+        input.actor.actor_id,
+        toProvider,
+        toActor,
+        referral?.id ?? null,
+        now,
+        dueAt,
+        taskId,
+      ),
+    db
+      .prepare(
+        `INSERT INTO tasks (id, case_id, kind, owner_actor_id, due_at, status)
+         VALUES (?, ?, ?, ?, ?, 'open')`,
+      )
+      .bind(taskId, input.caseId, CONSULTATION_TASK, toActor, dueAt),
+  ]);
+
+  return { recorded: id, caseId: input.caseId, consultationId };
+}
+
+export async function answerConsultation(
+  db: Db,
+  input: {
+    consultationId: string;
+    actor: WriteActor;
+    outcome: unknown;
+    note?: unknown;
+    ownerActorId?: unknown;
+    redirectToProviderId?: unknown;
+    referral?: unknown;
+  },
+): Promise<{ recorded: string; caseId: string }> {
+  if (!CONSULTATION) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
+  const consultation = await db
+    .prepare(
+      `SELECT id, case_id, question, requested_by_actor_id, to_provider_id, to_actor_id, referral_id,
+              requested_at, due_at, task_id, status
+         FROM consultations WHERE id = ?`,
+    )
+    .get<ConsultationRow>(input.consultationId);
+  if (!consultation) {
+    throw new HttpError(404, "not_found", `No consultation carries the id "${input.consultationId}".`);
+  }
+  if (consultation.status !== "open") {
+    throw new HttpError(409, "invalid_transition", "That consultation is already answered.");
+  }
+
+  const engineCase = await loadEngineCase(db, consultation.case_id);
+  if (!availableActions(engineCase, input.actor.role as Role).includes("answer_consultation")) {
+    throw new HttpError(403, "role_not_permitted", `The ${input.actor.role} role may not answer a consultation.`);
+  }
+
+  if (!isConsultationAnswer(input.outcome)) {
+    fail("outcome must be one of accepted, redirected, more_data_requested.");
+  }
+  const outcome = input.outcome;
+  const event = consultationAnswerEvent(outcome);
+  if (!event) throw new HttpError(409, "invalid_transition", `This pathway has no "${outcome}" answer.`);
+  if (input.note !== undefined && typeof input.note !== "string") fail("note must be a string.");
+  if (input.ownerActorId !== undefined && typeof input.ownerActorId !== "string") {
+    fail("owner_actor_id must be a string.");
+  }
+
+  const now = (await getClock(db)).now;
+  const hours = roundHours(hoursBetween(consultation.requested_at, now));
+  const payload: Record<string, unknown> = {
+    consultation_id: consultation.id,
+    outcome,
+    question: consultation.question,
+    hours_to_answer: hours,
+    ...(typeof input.note === "string" ? { note: input.note } : {}),
+    summary: `Consultation answered (${outcome.replace(/_/g, " ")}) after ${hours}h`,
+  };
+
+  if (outcome === "redirected") {
+    const redirect = input.redirectToProviderId;
+    if (typeof redirect !== "string" || redirect.length === 0) {
+      fail("A redirected answer names redirect_to_provider_id.");
+    }
+    const previous = await latestReferral(db, consultation.case_id);
+    const given =
+      typeof input.referral === "object" && input.referral !== null
+        ? (input.referral as Record<string, unknown>)
+        : {};
+    payload.redirect_to_provider_id = redirect;
+    // The new referral keeps the priority and specialty of the one it replaces unless
+    // the answer says otherwise.
+    payload.referral = {
+      priority: previous?.priority,
+      ...(previous
+        ? {
+            specialty: {
+              system: previous.specialty_system,
+              code: previous.specialty_code,
+              display: previous.specialty_display,
+            },
+          }
+        : {}),
+      ...given,
+      to_provider_id: redirect,
+      status: "pending",
+    };
+  }
+
+  const prepared = await prepareEvent(db, {
+    caseId: consultation.case_id,
+    type: event.type,
+    actor: input.actor,
+    payload,
+    ownerActorId:
+      typeof input.ownerActorId === "string" ? input.ownerActorId : consultation.requested_by_actor_id,
+    consultationAnswer: true,
+    occurredAt: now,
+  });
+
+  const statements: InStatement[] = [
+    ...prepared.statements,
+    db
+      .prepare(
+        `UPDATE consultations
+            SET status = 'answered', outcome = ?, answer_note = ?, answered_by_actor_id = ?,
+                answered_at = ?, answer_event_id = ?, hours_to_answer = ?
+          WHERE id = ? AND status = 'open'`,
+      )
+      .bind(
+        outcome,
+        typeof input.note === "string" ? input.note : null,
+        input.actor.actor_id,
+        now,
+        prepared.recorded,
+        hours,
+        consultation.id,
+      ),
+    db
+      .prepare("UPDATE tasks SET status = 'completed' WHERE id = ? AND status = 'open'")
+      .bind(consultation.task_id),
+    db
+      .prepare(
+        `UPDATE timers SET status = 'cancelled'
+          WHERE case_id = ? AND stage = ? AND status = 'fired'`,
+      )
+      .bind(consultation.case_id, consultationTimerStage(consultation.id)),
+  ];
+  if (outcome === "more_data_requested") {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO tasks (id, case_id, kind, owner_actor_id, due_at, status)
+           VALUES (?, ?, ?, ?, ?, 'open')`,
+        )
+        .bind(
+          newId("t"),
+          consultation.case_id,
+          SUPPLY_DATA_TASK,
+          consultation.requested_by_actor_id,
+          addHours(now, CONSULTATION.more_data_hours),
+        ),
+    );
+  }
+
+  await db.batch(statements);
+  return { recorded: prepared.recorded, caseId: consultation.case_id };
+}
+
+// --- TICKET-08: FHIR stitching -----------------------------------------------------
+
+export type IncomingResource = {
+  resource_type: string;
+  resource_id: string;
+  status: string;
+  source_provider_id: string | null;
+  patient_identifier: string | null;
+  referral_id: string | null;
+  summary: string;
+  raw: unknown;
+};
+
+function fhirPayload(resource: IncomingResource, ingestedBy: WriteActor): Record<string, unknown> {
+  return {
+    fhir: {
+      resource_type: resource.resource_type,
+      resource_id: resource.resource_id,
+      key: `${resource.resource_type}/${resource.resource_id}`,
+      status: resource.status,
+      source_provider_id: resource.source_provider_id,
+      referral_id: resource.referral_id,
+      patient_identifier: resource.patient_identifier,
+    },
+    stitched: true,
+    ingested_by: ingestedBy.actor_id,
+  };
+}
+
+// Records a matched resource on its case. When the template maps it to an event that is
+// a legal next step, the system role records that event (the case moves); otherwise it
+// is stitched as history and the reason it did not move is kept with it.
+export async function stitchResource(
+  db: Db,
+  input: {
+    caseId: string;
+    resource: IncomingResource;
+    event: string | null;
+    document: { kind: string; title: string; text: string } | null;
+    ingestedBy: WriteActor;
+  },
+): Promise<{ recorded: string; moved: boolean; stage: string; document_id: string | null }> {
+  const caseRow = await loadCase(db, input.caseId);
+  const now = (await getClock(db)).now;
+  const payload = fhirPayload(input.resource, input.ingestedBy);
+  const documentId = input.document ? newId("d") : null;
+  if (documentId) payload.document_id = documentId;
+
+  const extra: InStatement[] = [
+    db
+      .prepare(
+        `UPDATE unstitched SET status = 'stitched', stitched_case_id = ?
+          WHERE resource_type = ? AND resource_id = ? AND status = 'queued'`,
+      )
+      .bind(input.caseId, input.resource.resource_type, input.resource.resource_id),
+  ];
+  if (input.document && documentId) {
+    extra.push(
+      db
+        .prepare("INSERT INTO documents (id, case_id, kind, title, text) VALUES (?, ?, ?, ?, ?)")
+        .bind(documentId, input.caseId, input.document.kind, input.document.title, input.document.text),
+    );
+  }
+
+  let notMoved: string | null = null;
+  if (input.event !== null) {
+    const transition = transitionFor(caseRow.stage, input.event, "system");
+    if (transition.ok && transition.moves_stage) {
+      const prepared = await prepareEvent(db, {
+        caseId: input.caseId,
+        type: input.event,
+        actor: SYSTEM_ACTOR,
+        payload: { ...payload, summary: `${input.resource.summary} (stitched)` },
+        occurredAt: now,
+        extraStatements: extra,
+      });
+      await db.batch(prepared.statements);
+      return { recorded: prepared.recorded, moved: true, stage: prepared.next.stage, document_id: documentId };
+    }
+    notMoved = transition.ok ? "the event does not move the stage" : transition.message;
+  } else {
+    notMoved = "the template maps this resource to no case event";
+  }
+
+  const { id, statement } = eventStatement(
+    db,
+    {
+      caseId: input.caseId,
+      type: STITCHED_HISTORY_EVENT,
+      actor: SYSTEM_ACTOR,
+      payload: {
+        ...payload,
+        mapped_event: input.event,
+        stage_moved: false,
+        not_moved_reason: notMoved,
+        summary: `${input.resource.summary} (stitched as history: ${notMoved})`,
+      },
+    },
+    now,
+  );
+  await db.batch([statement, ...extra]);
+  return { recorded: id, moved: false, stage: caseRow.stage, document_id: documentId };
+}
+
+// Not matched: kept in the queue with its reason. A resource already in the queue is not
+// queued twice.
+export async function queueUnstitched(
+  db: Db,
+  input: { resource: IncomingResource; reasonCode: string; reason: string },
+): Promise<{ unstitched_id: string; duplicate: boolean }> {
+  const existing = await db
+    .prepare("SELECT id FROM unstitched WHERE resource_type = ? AND resource_id = ?")
+    .get<{ id: string }>(input.resource.resource_type, input.resource.resource_id);
+  if (existing) {
+    await db
+      .prepare("UPDATE unstitched SET reason_code = ?, reason = ? WHERE id = ? AND status = 'queued'")
+      .run(input.reasonCode, input.reason, existing.id);
+    return { unstitched_id: existing.id, duplicate: true };
+  }
+  const id = newId("u");
+  await db
+    .prepare(
+      `INSERT INTO unstitched (
+         id, resource_type, resource_id, source_provider_id, patient_identifier, referral_id,
+         reason_code, reason, resource, received_at, recorded_at, status
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued')`,
+    )
+    .run(
+      id,
+      input.resource.resource_type,
+      input.resource.resource_id,
+      input.resource.source_provider_id,
+      input.resource.patient_identifier,
+      input.resource.referral_id,
+      input.reasonCode,
+      input.reason,
+      JSON.stringify(input.resource.raw),
+      (await getClock(db)).now,
+      new Date().toISOString(),
+    );
+  return { unstitched_id: id, duplicate: false };
 }
