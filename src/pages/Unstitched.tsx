@@ -2,7 +2,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Page, useRole } from "../components/Shell";
 import { getUnstitched } from "../api/ownership";
 import { roleFor } from "../api/roles";
-import { formatStamp } from "../handoff";
 import { useAsync } from "../hooks/useAsync";
 
 // TICKET-08: resources from other providers that matched no case. They are kept and shown
@@ -109,7 +108,7 @@ export default function Unstitched() {
                   <td className="who">
                     {u.patient_identifier ?? "no identifier"} · {u.referral_id ?? "no referral"}
                   </td>
-                  <td className="due">{formatStamp(u.received_at)}</td>
+                  <td className="due">{u.received_label}</td>
                   <td className="reason">
                     {u.status === "stitched" && u.stitched_case_id ? (
                       <>

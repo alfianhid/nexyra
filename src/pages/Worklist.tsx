@@ -88,9 +88,14 @@ export default function Worklist() {
     <Page>
       <div className="summary">
         <div className="figure">
-          <span>Open cases</span>
+          <span>Open cases in this register</span>
           <b>{counts.open}</b>
-          <p>FIT pathway · each case carries an owner, a deadline and an evidence line</p>
+          <p>
+            {role === "program_manager"
+              ? "Every case, all pathways."
+              : "Cases this role owns or holds a task on, plus every open case with no owner."}{" "}
+            The counts ignore the filter below.
+          </p>
           <i aria-hidden="true" />
         </div>
         <div className="counts">
@@ -152,6 +157,7 @@ export default function Worklist() {
                   <span className="ref">{c.case_id}</span>
                   <span className="name">{c.patient.display_name}</span>
                   <span className="stage">{c.stage_label}</span>
+                  {c.pathway_label && <span className="stage path">{c.pathway_label}</span>}
                   <span className="due">
                     <b>{due.value}</b>
                     <i>{due.unit}</i>

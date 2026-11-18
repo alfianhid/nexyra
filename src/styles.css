@@ -455,6 +455,13 @@ main {
   margin-top: 2px;
 }
 
+.cell .path {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+
 .cell .due {
   margin-top: auto;
   display: flex;

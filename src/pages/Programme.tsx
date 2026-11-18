@@ -237,7 +237,7 @@ export default function Programme() {
         <h2>Delay reasons recorded by staff</h2>
         <p className="note">
           The reason staff chose when logging an outreach attempt or completing a task, one count
-          per record.
+          per barrier: a call that also closes a ladder task is counted once.
         </p>
         <div className="bars">
           {programme.delay_reasons.map((r) => (
@@ -252,6 +252,31 @@ export default function Programme() {
           ))}
         </div>
       </section>
+
+      {programme.ai_divergence && (
+        <section className="section">
+          <h2>Physician against the AI reading</h2>
+          <p className="note">
+            Decisions where the responsible physician did not follow the AI proposal: proposals
+            rejected with a reason, and closures confirmed while the reading proposed something
+            other than closure. A count to review, not an error rate.
+          </p>
+          <dl className="handoff-facts">
+            <div>
+              <dt>Divergences</dt>
+              <dd>{programme.ai_divergence.count}</dd>
+            </div>
+            <div>
+              <dt>Proposals rejected</dt>
+              <dd>{programme.ai_divergence.proposals_rejected}</dd>
+            </div>
+            <div>
+              <dt>Closed against the reading</dt>
+              <dd>{programme.ai_divergence.closed_against_reading}</dd>
+            </div>
+          </dl>
+        </section>
+      )}
 
       <section className="section">
         <h2>Escalations per role per demo day</h2>

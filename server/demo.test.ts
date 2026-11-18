@@ -110,10 +110,27 @@ describe("TICKET-17: the demo, start to finish, through the API", () => {
     expect(reread.extraction.origin).toBe("cache");
     expect(reread.extraction.proposal).toBe("reopen");
 
+    const before = await get("/api/cases/CX-1003", "responsible_physician");
+    expect(before.available_actions).toContain("reopen_case");
+
+    // The closure screen's "Reopen case" (POST /reopen) at closure_proposed records the
+    // template's incomplete-examination event with the reading's reasons.
     const reopened = await step("3.3");
     expect(reopened.case).toMatchObject({ stage: "referral_sent", status: "open", final_outcome: null });
     expect(reopened.case.owner.actor_id).toBe("act_003"); // never unowned
     expect(reopened.available_actions).not.toContain("confirm_closure");
+    const reopenEvent = reopened.timeline.find((e: { event_id: string }) => e.event_id === reopened.recorded);
+    expect(reopenEvent.type).toBe("procedure_incomplete");
+    expect(reopenEvent.actor).toMatchObject({ actor_id: "act_003", role: "responsible_physician" });
+    expect(reopenEvent.payload).toMatchObject({
+      reason: "Repeat colonoscopy needed",
+      verification: { extraction_id: "x_1003", proposal: "reopen", proposal_reason: "Incomplete exam and inadequate prep" },
+    });
+    expect(reopenEvent.payload.verification.findings.map((f: { quote: string }) => f.quote)).toEqual([
+      "Preparation was inadequate.",
+      "The cecum was not reached.",
+    ]);
+    expect(reopenEvent.summary).toContain("Incomplete exam and inadequate prep");
 
     const handed = await step("3.4");
     expect(handed.case.owner).toMatchObject({ actor_id: "act_005", display_name: "S. Al Ali" });
@@ -133,7 +150,28 @@ describe("TICKET-17: the demo, start to finish, through the API", () => {
     expect(proposed.case).toMatchObject({ stage: "closure_proposed", final_outcome: "surveillance_scheduled" });
     expect(proposed.available_actions).not.toContain("confirm_closure"); // coordinator view
 
-    const closed = await step("3.11");
+    // The closure review no longer shows the first report's "reopen": the latest report
+    // (the repeat colonoscopy with its pathology) has not been read yet.
+    const stale = await get("/api/cases/CX-1003/verification");
+    expect(stale.extraction).toMatchObject({ origin: "not_read", proposal: "needs_human_reading", fields: [] });
+    expect(stale.report.document_ids).toHaveLength(2);
+    expect(stale.report.text).toContain("tubular adenoma");
+
+    // Reading it is a cache hit (no key, no network) that attaches the reading to the case.
+    const read = await step("3.11");
+    expect(read.extraction).toMatchObject({
+      origin: "cache",
+      proposal: "propose_closure",
+      proposed_outcome: "surveillance_scheduled",
+    });
+    const validated = read.extraction.fields.filter((f: { validated: boolean }) => f.validated);
+    expect(validated).toHaveLength(6);
+    for (const field of validated) expect(read.report.text.slice(...field.quote_offset)).toBe(field.quote);
+    const stored = await get("/api/cases/CX-1003/verification");
+    expect(stored.extraction).toMatchObject({ origin: "stored", proposal: "propose_closure" });
+    expect(stored.extraction.extraction_id).toBe(read.extraction.extraction_id);
+
+    const closed = await step("3.12");
     expect(closed.case).toMatchObject({ stage: "closed", status: "closed", final_outcome: "surveillance_scheduled" });
     expect(closed.documents.map((d: { kind: string }) => d.kind).sort()).toEqual(["colonoscopy", "colonoscopy", "pathology"]);
     const confirmation = closed.timeline.find((e: { type: string }) => e.type === "closure_confirmed");
@@ -213,9 +251,20 @@ describe("TICKET-17: the demo, start to finish, through the API", () => {
     expect(navigatorTask).toMatchObject({ status: "open" });
     expect(navigatorTask.owner).toMatchObject({ actor_id: "act_002", role: "navigator" });
 
+    const fear = (summary: Json): number =>
+      summary.delay_reasons.find((r: { delay_reason: string }) => r.delay_reason === "fear").count;
+    const fearBefore = fear(await get("/api/program/summary"));
     const barrier = await step("1.5");
     const recorded = barrier.timeline.find((e: { event_id: string }) => e.event_id === barrier.recorded);
     expect(recorded.payload).toMatchObject({ delay_reason: "fear", connected: true });
+    // The call closes the navigator's ladder task, and that task_completed copies the
+    // reason; the programme counts the barrier once.
+    const copy = barrier.timeline.find(
+      (e: { type: string; payload: { outreach_event_id?: string } }) =>
+        e.type === "task_completed" && e.payload.outreach_event_id === barrier.recorded,
+    );
+    expect(copy.payload.delay_reason).toBe("fear");
+    expect(fear(await get("/api/program/summary"))).toBe(fearBefore + 1);
 
     const page = await step("1.6");
     expect(JSON.stringify(page)).toContain("rtl");

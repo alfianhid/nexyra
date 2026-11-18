@@ -5,6 +5,10 @@ import { eventDefinition, foldEvents, type CaseState, type RecordedEvent } from 
 import { ownershipGaps } from "./ownership.js";
 // TICKET-10
 import { composeMessage } from "./outreach/ladder.js";
+import { PATHOLOGY_REPORT, REPEAT_COLONOSCOPY_REPORT } from "./demoReports.js";
+import { combineReports } from "./verify/caseVerification.js";
+import type { ExtractionField, FieldKey } from "./verify/fields.js";
+import { decideProposal } from "./verify/proposal.js";
 
 // TICKET-17: three cases, all fictional. Running this file twice must not duplicate
 // anything, so every row has a fixed id and every write is an upsert.
@@ -291,6 +295,7 @@ const CASES: SeedCase[] = [
         actor_id: "act_system",
         at: "2026-11-17T09:14:00+07:00",
         summary: "2 findings extracted with citations; proposal reopen",
+        payload: { extraction_id: "x_1003", document_id: "d_1003", proposal: "reopen" },
       },
     ],
   },
@@ -670,6 +675,51 @@ function textHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+// The repeat colonoscopy of case 3 and its pathology, as the closure review reads them
+// together once both have arrived (server/verify/caseVerification.ts, latestReport). This
+// reading is written by hand for the offline demo, not by a model, and says so in its
+// `model`; the proposal comes from the same rules a model reading goes through, and every
+// quote is located in the text, never typed as an offset.
+const REPEAT_TEXT = combineReports([
+  { kind: "colonoscopy", text: REPEAT_COLONOSCOPY_REPORT },
+  { kind: "pathology", text: PATHOLOGY_REPORT },
+]);
+const REPEAT_SOURCE = "Colonoscopy report (Endoscopy Unit E) + Pathology report (Endoscopy Unit E)";
+const REPEAT_READ_AT = "2026-11-17T09:20:00+07:00";
+
+function repeatField(key: FieldKey, value: string, quote: string): ExtractionField {
+  const start = REPEAT_TEXT.indexOf(quote);
+  if (start < 0) throw new Error(`Seed quote not found in the repeat reports: ${quote}`);
+  return {
+    key,
+    value,
+    quote,
+    quote_offset: [start, start + quote.length] as [number, number],
+    source: REPEAT_SOURCE,
+    read_at: REPEAT_READ_AT,
+    validated: true,
+  };
+}
+
+const REPEAT_FIELDS = [
+  repeatField("complete_exam", "yes", "The cecum was reached and photographed."),
+  repeatField("adequate_prep", "yes", "Preparation was adequate (Boston Bowel Preparation Scale 8)."),
+  repeatField(
+    "tissue_taken",
+    "yes",
+    "One 8 mm sessile polyp in the sigmoid colon was removed by cold snare and sent for histology.",
+  ),
+  repeatField(
+    "pathology_available",
+    "yes",
+    "Diagnosis: tubular adenoma with low-grade dysplasia, 8 mm, completely excised.",
+  ),
+  repeatField("outcome_category", "polyp", "tubular adenoma with low-grade dysplasia"),
+  repeatField("next_step", "stated", "Recommendation: surveillance colonoscopy in 3 years."),
+] satisfies ExtractionField[];
+
+const REPEAT_DECISION = decideProposal(REPEAT_FIELDS);
+
 export async function seed(
   target?: Db,
 ): Promise<{ actors: number; cases: number; events: number }> {
@@ -734,10 +784,22 @@ export async function seed(
        @id, @case_id, @document_id, @prompt_version, @model, @proposal,
        @proposal_reason, @fields, @text_hash, @created_at
      )
-     ON CONFLICT(text_hash) DO UPDATE SET
+     ON CONFLICT(document_id, text_hash) DO UPDATE SET
        proposal = excluded.proposal,
        proposal_reason = excluded.proposal_reason,
        fields = excluded.fields`,
+  );
+
+  const upsertCachedReading = db.prepare(
+    `INSERT INTO extraction_cache (
+       text_hash, prompt_version, model, fields, proposal, proposal_reason, created_at
+     ) VALUES (@text_hash, @prompt_version, @model, @fields, @proposal, @proposal_reason, @created_at)
+     ON CONFLICT(text_hash) DO UPDATE SET
+       prompt_version = excluded.prompt_version,
+       model = excluded.model,
+       fields = excluded.fields,
+       proposal = excluded.proposal,
+       proposal_reason = excluded.proposal_reason`,
   );
 
   const upsertTask = db.prepare(
@@ -811,6 +873,26 @@ export async function seed(
       fields: JSON.stringify(CACHED_FIELDS),
       text_hash: textHash(REPORT_TEXT),
       created_at: "2026-11-17T09:14:00+07:00",
+    }));
+    statements.push(upsertCachedReading.bind({
+      text_hash: textHash(REPORT_TEXT),
+      prompt_version: "v1",
+      model: "deepseek/deepseek-v4.1-flash-1017",
+      fields: JSON.stringify(CACHED_FIELDS),
+      proposal: "reopen",
+      proposal_reason: "Incomplete exam and inadequate prep",
+      created_at: "2026-11-17T09:14:00+07:00",
+    }));
+    // The repeat reports do not exist until the demo sends them (steps 3.7 and 3.9), so
+    // their reading sits in the cache only; reading them attaches it to the case.
+    statements.push(upsertCachedReading.bind({
+      text_hash: textHash(REPEAT_TEXT),
+      prompt_version: "extract-v1",
+      model: "hand-written demo reading (no model call)",
+      fields: JSON.stringify(REPEAT_FIELDS),
+      proposal: REPEAT_DECISION.proposal,
+      proposal_reason: REPEAT_DECISION.proposal_reason,
+      created_at: REPEAT_READ_AT,
     }));
 
     // ---- TICKET-10: the link and the fired message step for CX-1001 ----------------

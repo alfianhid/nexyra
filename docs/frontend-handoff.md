@@ -74,23 +74,22 @@ picker, which keeps its three roles. The answer form appears when the physician 
 **addressee's own actor header** (the open consultation's `to_actor_id`, looked up in the roster),
 so the audit line reads "Dr. Fulana", not "Dr. Fulan". This is the same pattern the outreach screen
 uses for the navigator's call (`Outreach.tsx`). The form's heading says whose name it records under,
-and an accent rule on its left edge marks it. The server does not check that the answering physician
-is the addressee (any responsible physician may answer), so this is a presentation choice, not a
-permission.
+and an accent rule on its left edge marks it. Since 18 Nov the server checks it too: only the
+addressee (`to_actor_id`) may answer; any other physician gets `403`.
 
 **What drives each form.** Assign owner: `assign_owner`. Request consultation: `request_consultation`.
-Answer: `answer_consultation` plus an open consultation. Patient moved provider: the engine sends no
-action for it (its action list stops at the eight in `server/vocabulary.ts`). The template gives
-`patient_moved_provider` the same roles as `log_outreach` (coordination staff, navigator), so the form
-is shown when the case is open and `log_outreach` is available (`canRecordMove` in `src/handoff.ts`).
-The server still rejects any other caller.
+Answer: `answer_consultation` plus an open consultation. Patient moved provider: `record_provider_move`
+(18 Nov; its roles are the template's for `patient_moved_provider`; `canRecordMove` in `src/handoff.ts`).
+The server still rejects any other caller. The move's provider select has no default, so a move is
+never one click on the first provider in the list.
 
-**Client copies, kept small.** `src/api/actors.ts` holds a `roster` of the seed's six human actors
-with their provider, because the API has no actor list and ownership gaps and consultations name
-actors by id only. It feeds the owner picker, the receiving-physician picker and the names printed
-for ids. `formatStamp` reprints a server ISO stamp as "16 Nov 15:40" in the stamp's own offset.
-It does no date arithmetic, and the screens never compute hours: "Unowned 20h", `hours_to_owner` and
-`hours_to_answer` are the server's.
+**Names and dates come from the server (18 Nov).** `src/api/actors.ts` reads `GET /api/actors` once
+(`useRoster()`) for the owner picker, the receiving-physician picker and the names printed for ids; only
+the role picker's three seats stay a client mapping. Every timestamp a screen prints is a server label
+(`occurred_label`, `due_label`, `unowned_since_label`, `sent_label`, `requested_label`, `read_label`,
+...): no screen prints an ISO string or formats a date. `formatStamp` in `src/handoff.ts` is kept (and
+tested) but no screen uses it. The screens never compute hours: "Unowned 20h" (`ownership.unowned_label`
+on the case, `unowned_label` on the list), `hours_to_owner` and `hours_to_answer` are the server's.
 
 **Case 2 click path** (seed state after `npm run demo:reset`):
 
@@ -104,3 +103,38 @@ After each write, the page scrolls back to the Ownership heading. `node tools/ca
 walks these steps in Edge with a 1.5 s pause per action and 25 ms per typed character, and writes
 `docs/shots/case2-*.png` at 1280×800. It takes about 21 s that way and 1.5 s without pauses. It also
 posts one unmatched FHIR `Procedure` for the unstitched screenshot, so reset again afterwards.
+
+## Demo walk fixes, 18 Nov
+
+**Record next step** (`src/components/NextStep.tsx`, case page). One generic control instead of a
+button per event: a select of the case's `next_steps` (the events this role may record now, from the
+template, listed by `nextSteps` in `server/engine.ts`), plus an outcome select when the step proposes
+closure (`needs_outcome`) and an owner select for a hand-over (`needs_owner`), and an optional note that
+becomes the audit line. It posts to `POST /events`. On an unowned case the hand-over forms come first,
+on an owned case this control does.
+
+**Closure review** (`src/pages/Closure.tsx`). The proposal box shows the reading of the *latest report*
+(`GET /verification`); when that report has not been read it says *Latest report not read yet* and the
+primary button is **Read the latest report** (`POST /verification`; a cached reading needs no model).
+Otherwise the button is **Read the report again**. The Decision row has **Confirm closure**, **Reopen
+case** (`POST /reopen`: at closure review the engine records the incomplete examination with the
+reading's reasons) and **Reject proposal** (`POST /proposal/reject`, reason of 5+ characters), each gated
+by `available_actions`; the old local-only "Return to engine" is gone. After a decision the box prints
+the server's actor and `occurred_label` (no hard-coded name or time) and offers **Open the case**. A
+case with no closure waiting (`case.awaiting_closure` false) says so instead of showing the controls.
+
+**Pathway on screen.** Register cells and the unowned list print `pathway_label`; the case and closure
+headers print `case.pathway.short_label`. The **Outreach ladder** link shows only when
+`case.has_outreach` (FIT cases); a typed outreach URL for an MM case shows a notice, not an error.
+
+**Register counts.** The figure reads "Open cases in this register" with the scope in words; the
+counts are the role's whole register and ignore the filter (`GET /api/cases`).
+
+**The role survives a refresh** (`sessionStorage`, per tab, wrapped in try/catch), because the demo
+refreshes after each inbound FHIR step.
+
+**Walk.** `node tools/demo-walk.mjs . 1500` clicks the whole live script (case 3 with the repeat
+colonoscopy, case 2, case 1, programme; inbound steps through `npm run demo:step`) in Edge and writes
+`docs/shots/case3-*`, `case2-*`, `case1-*`, `patient-ar.png`, `programme-*` at 1280×800 (56 s of
+clicks at that pace). `--video` walks the video's path only (33 s); `--no-shots` times without writing.
+Reset before and after: it writes to the demo database.

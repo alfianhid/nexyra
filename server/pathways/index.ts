@@ -119,6 +119,9 @@ export type Pathway = {
   id: string;
   version: number;
   label: string;
+  // A few words for a worklist row or a case header, e.g. "FIT → colonoscopy". Falls back
+  // to `label` when a template has none.
+  short_label: string;
   // TICKET-18: optional free text, e.g. that a template has not been clinically reviewed.
   description: string | null;
   trigger: { description: string; event: string; initial_stage: string; source: string };
@@ -259,6 +262,7 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
   const id = c.string(raw, "id", "template");
   const version = c.number(raw, "version", "template", "positive");
   const label = c.string(raw, "label", "template");
+  const shortLabel = c.optionalString(raw, "short_label", "template") ?? label;
   const description = c.optionalString(raw, "description", "template");
   const terminal = c.string(raw, "terminal_stage", "template");
   const spacing = c.number(raw, "escalation_spacing_hours", "template", "positive");
@@ -530,6 +534,7 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
     id,
     version,
     label,
+    short_label: shortLabel,
     description,
     trigger,
     terminal_stage: terminal,

@@ -34,7 +34,9 @@ export type Action =
   | "reopen_case"
   | "reject_proposal"
   // TICKET-11
-  | "request_consultation";
+  | "request_consultation"
+  // TICKET-08: record that the patient moved to another provider (unowned trigger 3).
+  | "record_provider_move";
 
 // The `cases.status` column. A case is open until it reaches the pathway's terminal
 // stage; the status word is shared by every pathway, the terminal stage's key is not.
@@ -54,4 +56,6 @@ export const ACTIONS: readonly Action[] = [
   "reopen_case",
   // TICKET-11
   "request_consultation",
+  // TICKET-08
+  "record_provider_move",
 ];

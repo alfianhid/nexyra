@@ -10,6 +10,7 @@ import { useAsync } from "../hooks/useAsync";
 const channels: OutreachAttempt["channel"][] = ["call", "sms", "letter"];
 
 // TICKET-10: the navigator has no screen (the picker keeps three roles, tickets/README.md).
+// The form records the call as the navigator task's owner; this is only the fallback.
 // Their task shows on this screen and in the program manager's register; the form below
 // records the navigator's call with the navigator's own actor, so the audit line names them.
 const NAVIGATOR: Actor = { actor_id: "act_002", role: "navigator", display_name: "Nur H." };
@@ -195,6 +196,20 @@ export default function Outreach() {
     );
   }
 
+  // A case on a pathway with no outreach ladder (the mammography demo pathway) has no
+  // screen here; the case page hides the link, and a typed URL lands on this notice.
+  if (detail.data && detail.data.case.has_outreach === false) {
+    return (
+      <Page>
+        <p className="notice">
+          <strong>No outreach ladder on this pathway</strong>
+          {detail.data.case.case_id} runs {detail.data.case.pathway?.short_label ?? "another pathway"}, which has no
+          patient message templates or outreach ladder. <Link to={`/cases/${detail.data.case.case_id}`}>Back to the case</Link>.
+        </p>
+      </Page>
+    );
+  }
+
   if (detail.loading || !detail.data || !ladderState.data) {
     return (
       <Page>
@@ -219,6 +234,11 @@ export default function Outreach() {
   const canLog = c.available_actions.includes("log_outreach");
   const navigatorStep = ladder.ladder.find((step) => step.key === "navigator");
   const navigatorTaskOpen = navigatorStep?.task?.status === "open";
+  // The call is recorded as the person the server gave the navigator task to.
+  const taskOwner = navigatorStep?.task?.owner;
+  const navigator: Actor = taskOwner
+    ? { actor_id: taskOwner.actor_id, role: taskOwner.role as Actor["role"], display_name: taskOwner.display_name }
+    : NAVIGATOR;
 
   function reload() {
     detail.reload();
@@ -365,12 +385,12 @@ export default function Outreach() {
             Task for {navigatorStep.task.owner?.display_name ?? "the navigator"}, due{" "}
             {navigatorStep.task.due_label}. The navigator has no screen in this prototype (the role
             picker keeps three roles); the program manager sees this task in the register, and this
-            form records the navigator&apos;s call as {NAVIGATOR.display_name}.
+            form records the navigator&apos;s call as {navigator.display_name}.
           </p>
           <CallForm
             id="navigator"
             caseId={c.case.case_id}
-            actor={NAVIGATOR}
+            actor={navigator}
             ladder={ladder}
             disabledReason={null}
             onLogged={reload}

@@ -6,6 +6,7 @@ import { roleFor } from "../api/roles";
 import { useAsync } from "../hooks/useAsync";
 // TICKET-08 / TICKET-11
 import { HandoffActions, HandoffRecords, OwnershipSection } from "../components/Handoff";
+import { NextStepForm } from "../components/NextStep";
 
 export default function CaseDetail() {
   const { ref = "" } = useParams();
@@ -50,6 +51,17 @@ export default function CaseDetail() {
 
   const c = detail.data;
   const fields = verification.data?.extraction.fields ?? [];
+  const handoff = (
+    <HandoffActions
+      detail={c}
+      actor={actor}
+      onDone={() => {
+        detail.reload();
+        // Bring the owner state back into view: it is what each hand-over changes.
+        document.getElementById("ownership-h")?.scrollIntoView({ block: "start" });
+      }}
+    />
+  );
 
   return (
     <Page>
@@ -59,7 +71,9 @@ export default function CaseDetail() {
           {c.case.patient.display_name}, {c.case.patient.age}
         </h1>
         <div className="meta">
-          Owner <b>{c.case.owner?.display_name ?? "unowned"}</b>
+          Pathway <b>{c.case.pathway?.short_label ?? "—"}</b>
+          <br />
+          Owner <b>{c.case.owner?.display_name ?? c.ownership.unowned_label ?? "unowned"}</b>
           <br />
           Deadline <b>{c.case.stage_due_label}</b>
           <br />
@@ -73,15 +87,19 @@ export default function CaseDetail() {
 
       <OwnershipSection detail={c} />
 
-      <HandoffActions
+      {/* An unowned case needs an owner before anything else, so its hand-over forms come
+          first; an owned case leads with the next step. */}
+      {c.ownership.state === "unowned" && handoff}
+      <NextStepForm
+        key={`step-${c.timeline.length}-${role}`}
         detail={c}
         actor={actor}
         onDone={() => {
           detail.reload();
-          // Bring the owner state back into view: it is what each hand-over changes.
-          document.getElementById("ownership-h")?.scrollIntoView({ block: "start" });
+          verification.reload();
         }}
       />
+      {c.ownership.state !== "unowned" && handoff}
 
       <section className="section">
         <h2>Stage</h2>
@@ -132,7 +150,7 @@ export default function CaseDetail() {
                   <div className="provenance">
                     {e.validated && <span>offset {e.quote_offset[0]}</span>}
                     <span>{e.source}</span>
-                    <span>read {e.read_at}</span>
+                    <span>read {e.read_label ?? "—"}</span>
                   </div>
                 </dd>
               </div>
@@ -147,7 +165,7 @@ export default function CaseDetail() {
         <ul className="events">
           {c.timeline.map((e) => (
             <li key={e.event_id}>
-              <span className="at">{e.occurred_at}</span>
+              <span className="at">{e.occurred_label}</span>
               <span className="actor">{e.actor?.display_name ?? "system"}</span>
               <span>{e.summary}</span>
               <span className="audit">{String(e.payload.audit ?? "")}</span>
@@ -162,9 +180,12 @@ export default function CaseDetail() {
           Available actions come from the engine for this stage and this role, not from the screen.
         </p>
         <div className="actions">
-          <Link className="btn" to={`/cases/${c.case.case_id}/outreach`}>
-            Outreach ladder
-          </Link>
+          {/* Only the FIT pathway has the patient outreach ladder and its messages. */}
+          {c.case.has_outreach && (
+            <Link className="btn" to={`/cases/${c.case.case_id}/outreach`}>
+              Outreach ladder
+            </Link>
+          )}
           <Link className="btn primary" to={`/cases/${c.case.case_id}/closure`}>
             Closure review
           </Link>

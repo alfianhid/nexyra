@@ -502,12 +502,109 @@ export function availableActions(c: EngineCase, role: Role): Action[] {
       case "reject_proposal":
         return open && stage.awaiting_closure && actionAllowedByTemplate(action, c.stage, role, p);
       case "confirm_closure":
-      case "reopen_case":
         return actionAllowedByTemplate(action, c.stage, role, p);
+      case "reopen_case":
+        return reopenEventFor(c, role) !== null;
+      case "record_provider_move":
+        return open && actionAllowedByTemplate(action, c.stage, role, p);
     }
   };
 
   return ACTIONS.filter(allowed);
+}
+
+// Which event "reopen" records on this case for this role, or null when it cannot be
+// reopened here. A closed (or confirmed) case leaves through the template's reopen event.
+// An open case past the procedure is reopened through the exit that sends it back and
+// clears the outcome (in the FIT template: the incomplete examination, back to Referral sent):
+// the same transition the template already defines, so reopening never bypasses it.
+export function reopenEventFor(
+  c: { stage: string; status: string; pathway_id?: string | null },
+  role: Role | "system",
+): string | null {
+  const p = pathwayOf(c.pathway_id);
+  const reopen = rulesOf(p).reopenEvent;
+  const exits = exitsFrom(c.stage, p).filter(({ event }) => event.roles.includes(role));
+  if (reopen !== null) {
+    const direct = exits.find(({ event }) => event.type === reopen);
+    if (direct) return direct.event.type;
+  }
+  if (!isOpen(c)) return null;
+  const back = exits.find(
+    ({ event, to }) =>
+      event.type !== reopen &&
+      event.clears_outcome &&
+      !event.closure &&
+      event.consultation_answer === null &&
+      !isForward(c.stage, to, p),
+  );
+  return back?.event.type ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// The steps a role may record next (the case page's generic "Record next step")
+// ---------------------------------------------------------------------------
+
+export type NextStep = {
+  event: string;
+  label: string;
+  // The stage the case is in after the step; the current stage for a step that does not move it.
+  to: string;
+  to_label: string;
+  moves_stage: boolean;
+  // The step needs an outcome from the closed vocabulary (a closure proposal).
+  needs_outcome: boolean;
+  // The step names a new owner (a hand-over while the case is owned).
+  needs_owner: boolean;
+};
+
+// Every event this role may record on the case now, read from the template: the exits
+// from the current stage plus the events that do not move it. Left out, because each has
+// its own control and its own rules: the closure confirmation (the physician's closure
+// screen), consultation answers (the answer form), the provider move (its own form), the
+// system's triggers, and an assignment while the case is unowned (the assign-owner form).
+// A proposal to close is offered only once a document that could support some outcome is
+// attached; the closure itself still checks all three conditions.
+export function nextSteps(c: EngineCase, role: Role): NextStep[] {
+  const p = pathwayOf(c.pathway_id);
+  if (!isOpen(c) || !stageDefinition(c.stage, p)) return [];
+  const owned = c.owner_actor_id !== null;
+  // Forward steps first, then the ones that do not move the case, then the ones that
+  // send it back, so the usual next step heads the list.
+  const forward: NextStep[] = [];
+  const stay: NextStep[] = [];
+  const back: NextStep[] = [];
+
+  for (const { event, to } of exitsFrom(c.stage, p)) {
+    if (!event.roles.includes(role) || event.closure || event.consultation_answer !== null) continue;
+    const proposesClosure = isAwaitingClosure(to, p);
+    if (proposesClosure && !evidenceAttached(null, c.documents, p)) continue;
+    (isForward(c.stage, to, p) ? forward : back).push({
+      event: event.type,
+      label: event.label,
+      to,
+      to_label: stageLabel(to, p),
+      moves_stage: true,
+      needs_outcome: proposesClosure,
+      needs_owner: false,
+    });
+  }
+
+  for (const event of Object.values(p.events)) {
+    if (event.moves_stage || !event.roles.includes(role)) continue;
+    if (event.sets_provider || event.consultation_answer !== null || event.owner === "clear") continue;
+    if (event.owner === "assign" && !owned) continue;
+    stay.push({
+      event: event.type,
+      label: event.label,
+      to: c.stage,
+      to_label: stageLabel(c.stage, p),
+      moves_stage: false,
+      needs_outcome: false,
+      needs_owner: event.owner === "assign",
+    });
+  }
+  return [...forward, ...stay, ...back];
 }
 
 export function canPerform(c: EngineCase, role: Role, action: Action): boolean {

@@ -1,4 +1,4 @@
-import { roster, type RosterActor } from "./api/actors";
+import type { RosterActor } from "./api/actors";
 import type {
   CaseDetailResponse,
   Consultation,
@@ -36,21 +36,20 @@ export function defaultOwnerId(detail: Pick<CaseDetailResponse, "tasks">): strin
   return task?.owner?.actor_id ?? undefined;
 }
 
-// People who may hold a case. The program manager reads the programme, not cases.
-export function ownerCandidates(list: RosterActorLike[] = roster): RosterActorLike[] {
+// People who may hold a case (from GET /api/actors). The program manager reads the
+// programme, not cases.
+export function ownerCandidates(list: RosterActorLike[]): RosterActorLike[] {
   return list.filter((a) => a.role !== "program_manager");
 }
 
-export function physiciansAt(providerId: string | undefined, list: RosterActorLike[] = roster): RosterActorLike[] {
+export function physiciansAt(providerId: string | undefined, list: RosterActorLike[]): RosterActorLike[] {
   return list.filter((a) => a.role === "responsible_physician" && a.provider_id === providerId);
 }
 
-// `patient_moved_provider` has no entry in available_actions (the engine's action list
-// stops at the eight in server/vocabulary.ts). The template gives the event the same
-// roles as `log_outreach` (coordination staff, navigator) on an open case, so that
-// server-sent action is the gate; the server still rejects any other caller.
+// The move form follows the engine's `record_provider_move` action, whose roles are the
+// template's for `patient_moved_provider`; the server still rejects any other caller.
 export function canRecordMove(detail: Pick<CaseDetailResponse, "case" | "available_actions">): boolean {
-  return detail.case.status === "open" && detail.available_actions.includes("log_outreach");
+  return detail.case.status === "open" && detail.available_actions.includes("record_provider_move");
 }
 
 export const outcomeWords: Record<ConsultationOutcome, string> = {

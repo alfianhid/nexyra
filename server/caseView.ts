@@ -1,5 +1,5 @@
 import type { Actor } from "./actor.js";
-import { addHours, embeddedClock, formatDue, hoursBetween } from "./clock.js";
+import { addHours, embeddedClock, formatDue, getClock, hoursBetween } from "./clock.js";
 import type { Db } from "./db.js";
 import {
   availableActions,
@@ -7,6 +7,7 @@ import {
   isAwaitingClosure,
   isClosed,
   nextState,
+  nextSteps,
   rulesOf,
   stageDefinition,
   stageLabel,
@@ -20,6 +21,19 @@ import { hasOpenConsultation } from "./events.js";
 // TICKET-17
 import { COHORT_PREFIX, notCohortSql } from "./cohort.js";
 import { proposedOutcomeFor, type ExtractionField } from "./verify/index.js";
+import { currentReading, readCaseVerification, VERIFIED_PATHWAY_ID } from "./verify/caseVerification.js";
+import { LADDER } from "./outreach/templates.js";
+
+// Every user-visible timestamp goes out with a label in one format ("16 Nov 15:40",
+// demo clock time), so no screen prints an ISO string or formats a date itself.
+function stampLabel(iso: string | null | undefined): string | null {
+  return iso ? formatDue(iso) : null;
+}
+
+// What the pathway is called on a worklist row or a case header ("FIT → colonoscopy").
+function pathwayLabel(pathwayId: string): string {
+  return rulesOf(pathwayId).pathway.short_label;
+}
 
 // Reads only. Every rule (which stage, which owner, which actions) comes from
 // server/engine.ts; this file joins the database and formats, it does not decide.
@@ -334,10 +348,12 @@ export async function listCases(
   );
   const spans = await limitSpans(db, rows, includeCohort);
 
-  const visible = rows
+  // The role's register, before any filter: the counts describe it, so picking a filter
+  // never makes "open cases" read 0 while the register holds open cases.
+  const register = rows
     .filter((row) => visibleToRole(row, rolesByCase.get(row.id) ?? new Set(), role))
-    .map((row) => ({ row, hoursLeft: hoursLeftStage(row, now) }))
-    .filter(({ row, hoursLeft }) => passesFilter(row, hoursLeft, filter));
+    .map((row) => ({ row, hoursLeft: hoursLeftStage(row, now) }));
+  const visible = register.filter(({ row, hoursLeft }) => passesFilter(row, hoursLeft, filter));
 
   // Server-side ordering: clinical urgency from the pathway, then time remaining.
   visible.sort((a, b) => {
@@ -361,6 +377,7 @@ export async function listCases(
     stage_label: stageLabel(row.stage, row.pathway_id),
     // TICKET-18: which pathway the row runs, so one worklist can hold several.
     pathway_id: row.pathway_id,
+    pathway_label: pathwayLabel(row.pathway_id),
     owner: ownerOf(row),
     hours_left_stage: hoursLeft,
     days_left_stage: hoursLeft === null ? 0 : Math.round(hoursLeft / 24),
@@ -369,24 +386,33 @@ export async function listCases(
     flags_renderable: renderableFor(row, hoursLeft),
   }));
 
-  const open = visible.filter(({ row }) => !isClosed(toClosedShape(row)));
+  const open = register.filter(({ row }) => !isClosed(toClosedShape(row)));
   return {
     clock: await embeddedClock(db),
     // TICKET-17: whether the synthetic cohort is in `cases` and `counts`, and how many
     // cohort cases there are in all (not scoped to the role), so the UI can offer them.
     cohort: { included: includeCohort, cases: await cohortSize(db) },
+    // Counted over the role's whole register (every row this role sees with no filter),
+    // whatever `filter` narrows `cases` to.
     counts: {
       open: open.length,
       unowned: open.filter(({ row }) => row.owner_actor_id === null).length,
       past_deadline: open.filter(({ hoursLeft }) => hoursLeft !== null && hoursLeft < 0).length,
       awaiting_clinician: open.filter(({ row }) => isAwaitingClosure(row.stage, row.pathway_id)).length,
-      closed_this_week: visible.length - open.length,
+      closed_this_week: register.length - open.length,
+    },
+    register: {
+      scope:
+        role === "program_manager"
+          ? "every case"
+          : "cases this role owns or holds a task on, plus every open case with no owner",
+      total: register.length,
     },
     cases,
   };
 }
 
-async function timelineFor(db: Db, caseId: string) {
+async function timelineFor(db: Db, caseId: string, pathwayId: string) {
   const events = await db
     .prepare(
       `SELECT e.id, e.type, e.actor_id, e.actor_role, e.occurred_at, e.recorded_at, e.payload,
@@ -411,11 +437,13 @@ async function timelineFor(db: Db, caseId: string) {
             display_name: event.actor_name ?? event.actor_id,
           },
     occurred_at: event.occurred_at,
+    occurred_label: formatDue(event.occurred_at),
     recorded_at: event.recorded_at,
+    // An event recorded without a summary prints the template's words for it.
     summary:
       typeof parsePayload(event.payload).summary === "string"
         ? (parsePayload(event.payload).summary as string)
-        : event.type,
+        : (eventDefinition(event.type, pathwayId)?.label ?? event.type.replace(/_/g, " ")),
     payload: parsePayload(event.payload),
   }));
 }
@@ -456,80 +484,28 @@ function proposedOutcomeOf(proposal: string, fieldsJson: string): string | null 
   return proposedOutcomeFor(proposal, Array.isArray(fields) ? (fields as ExtractionField[]) : []);
 }
 
-async function verificationSummary(db: Db, caseId: string) {
-  const row = await db
-    .prepare(
-      "SELECT proposal, fields FROM extractions WHERE case_id = ? ORDER BY created_at DESC LIMIT 1",
-    )
-    .get<{ proposal: string; fields: string }>(caseId);
-
-  return row
-    ? { status: "ready", proposal: row.proposal, proposed_outcome: proposedOutcomeOf(row.proposal, row.fields) }
+// The case view's summary of the reading on the table: the stored reading of the latest
+// report (server/verify/caseVerification.ts, currentReading), the same one the closure
+// screen shows. A reading of an earlier report is not "ready" for this one.
+async function verificationSummary(db: Db, row: CaseRow) {
+  if (row.pathway_id !== VERIFIED_PATHWAY_ID) {
+    return { status: "pending", proposal: "needs_human_reading", proposed_outcome: null };
+  }
+  const { extraction } = await currentReading(db, row.id);
+  return extraction
+    ? {
+        status: "ready",
+        proposal: extraction.proposal,
+        proposed_outcome: proposedOutcomeOf(extraction.proposal, extraction.fields),
+      }
     : { status: "pending", proposal: "needs_human_reading", proposed_outcome: null };
 }
 
-// GET /api/cases/{case_id}/verification. No cached extraction means no report text to
-// cite, so the honest answer is "a human has to read this" rather than an empty claim.
+// GET /api/cases/{case_id}/verification. No stored reading of the latest report means no
+// text to cite, so the honest answer is "a human has to read this", never the reading of
+// an older report.
 export async function getVerification(db: Db, caseId: string) {
-  const row = await caseRow(db, caseId);
-  if (!row) {
-    throw new HttpError(404, "not_found", `No case carries the reference ${caseId}.`);
-  }
-
-  const extraction = await db
-    .prepare(
-      `SELECT x.id, x.document_id, x.prompt_version, x.model, x.fields, x.proposal,
-              x.proposal_reason, d.text
-         FROM extractions x
-         JOIN documents d ON d.id = x.document_id
-        WHERE x.case_id = ?
-        ORDER BY x.created_at DESC
-        LIMIT 1`,
-    )
-    .get<{
-      id: string;
-      document_id: string;
-      prompt_version: string;
-      model: string;
-      fields: string;
-      proposal: string;
-      proposal_reason: string;
-      text: string;
-    }>(caseId);
-
-  if (!extraction) {
-    const document = (await documentsFor(db, caseId))[0];
-    return {
-      report: { document_id: document?.id ?? null, text: "" },
-      extraction: {
-        prompt_version: "v1",
-        model: null,
-        fields: [],
-        proposal: "needs_human_reading",
-        proposal_reason: "No report has been read for this case yet.",
-        proposed_outcome: null,
-      },
-    };
-  }
-
-  let fields: unknown = [];
-  try {
-    fields = JSON.parse(extraction.fields);
-  } catch {
-    fields = [];
-  }
-
-  return {
-    report: { document_id: extraction.document_id, text: extraction.text },
-    extraction: {
-      prompt_version: extraction.prompt_version,
-      model: extraction.model,
-      fields,
-      proposal: extraction.proposal,
-      proposal_reason: extraction.proposal_reason,
-      proposed_outcome: proposedOutcomeOf(extraction.proposal, extraction.fields),
-    },
-  };
+  return readCaseVerification(db, caseId);
 }
 
 export async function getCaseDetail(db: Db, caseId: string, role: Role) {
@@ -573,7 +549,13 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
         id: rules.pathway.id,
         version: rules.pathway.version,
         label: rules.pathway.label,
+        short_label: rules.pathway.short_label,
       },
+      // TICKET-10 / TICKET-18: whether this case's pathway has the patient outreach
+      // ladder (and so an outreach screen). Only the FIT pathway has message templates.
+      has_outreach: row.pathway_id === LADDER.pathway_id,
+      // Whether a closure decision is waiting on the responsible physician at this stage.
+      awaiting_closure: isAwaitingClosure(row.stage, row.pathway_id) && !isClosed(toClosedShape(row)),
     },
     stages: rules.stages.map((stage) => ({
       key: stage.key,
@@ -586,7 +568,7 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
             ? "current"
             : "ahead",
     })),
-    timeline: await timelineFor(db, caseId),
+    timeline: await timelineFor(db, caseId, row.pathway_id),
     documents: documents.map((document) => ({
       document_id: document.id,
       kind: document.kind,
@@ -604,13 +586,17 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
               display_name: task.owner_name ?? task.owner_actor_id,
             },
       due_at: task.due_at,
+      due_label: formatDue(task.due_at),
       status: task.status,
     })),
     outreach_attempts: await outreachAttemptsFor(db, caseId),
     available_actions: availableActions(engineCase, role),
-    verification: await verificationSummary(db, caseId),
+    // The events this role may record next, from the template (engine.nextSteps): what
+    // the case page's "Record next step" offers.
+    next_steps: nextSteps(engineCase, role),
+    verification: await verificationSummary(db, row),
     // TICKET-08 / TICKET-11
-    ...(await ownershipView(db, row)),
+    ...(await ownershipView(db, row, (await getClock(db)).now)),
   };
 }
 
@@ -642,7 +628,9 @@ function gapView(gap: GapRow, pathwayId: string) {
     },
     previous_owner_actor_id: gap.previous_owner_actor_id,
     unowned_at: gap.unowned_at,
+    unowned_at_label: formatDue(gap.unowned_at),
     owned_at: gap.owned_at,
+    owned_at_label: stampLabel(gap.owned_at),
     owner_actor_id: gap.owner_actor_id,
     owner_event_type: gap.owner_event_type,
     hours_to_owner: gap.hours_to_owner,
@@ -653,7 +641,7 @@ function providerOf(id: string | null, name: string | null) {
   return id === null ? null : { provider_id: id, name: name ?? id };
 }
 
-async function ownershipView(db: Db, row: CaseRow) {
+async function ownershipView(db: Db, row: CaseRow, now: string) {
   const gaps = await db
     .prepare(
       `SELECT id, trigger_event_id, trigger_type, reason, previous_owner_actor_id, unowned_at,
@@ -713,11 +701,16 @@ async function ownershipView(db: Db, row: CaseRow) {
       hours_to_answer: number | null;
     }>(row.id);
 
+  const unownedSince = row.owner_actor_id === null ? (open?.unowned_at ?? null) : null;
   return {
     provider: providerOf(row.provider_id, row.provider_name),
     ownership: {
       state: row.owner_actor_id === null ? "unowned" : "owned",
-      unowned_since: row.owner_actor_id === null ? (open?.unowned_at ?? null) : null,
+      unowned_since: unownedSince,
+      unowned_since_label: stampLabel(unownedSince),
+      // The same words GET /api/unowned prints, e.g. "Unowned 20h"; null while owned.
+      unowned_label:
+        unownedSince === null ? null : `Unowned ${Math.round(hoursBetween(unownedSince, now))}h`,
       gaps: gaps.map((gap) => gapView(gap, row.pathway_id)),
     },
     referrals: referrals.map((r) => ({
@@ -729,6 +722,7 @@ async function ownershipView(db: Db, row: CaseRow) {
       specialty: { system: r.specialty_system, code: r.specialty_code, display: r.specialty_display },
       replaces_referral_id: r.replaces_referral_id,
       sent_at: r.sent_at,
+      sent_label: formatDue(r.sent_at),
       updated_at: r.updated_at,
     })),
     consultations: consultations.map((k) => ({
@@ -739,13 +733,16 @@ async function ownershipView(db: Db, row: CaseRow) {
       to_actor_id: k.to_actor_id,
       referral_id: k.referral_id,
       requested_at: k.requested_at,
+      requested_label: formatDue(k.requested_at),
       due_at: k.due_at,
+      due_label: formatDue(k.due_at),
       task_id: k.task_id,
       status: k.status,
       outcome: k.outcome,
       answer_note: k.answer_note,
       answered_by_actor_id: k.answered_by_actor_id,
       answered_at: k.answered_at,
+      answered_label: stampLabel(k.answered_at),
       hours_to_answer: k.hours_to_answer,
     })),
   };
@@ -815,8 +812,10 @@ export async function listUnowned(
         stage: r.stage,
         stage_label: stageLabel(r.stage, r.pathway_id),
         pathway_id: r.pathway_id,
+        pathway_label: pathwayLabel(r.pathway_id),
         provider: providerOf(r.provider_id, r.provider_name),
         unowned_since: r.unowned_since,
+        unowned_since_label: formatDue(r.unowned_since),
         hours_unowned: hours,
         unowned_label: `Unowned ${hours}h`,
         trigger:
@@ -846,6 +845,7 @@ export async function listUnowned(
                         display_name: r.task_owner_name ?? r.task_owner_id,
                       },
                 due_at: r.task_due_at,
+                due_label: stampLabel(r.task_due_at),
               },
       };
     }),
@@ -892,6 +892,7 @@ export async function listUnstitched(db: Db, status: "queued" | "stitched" | "al
       reason_code: r.reason_code,
       reason: r.reason,
       received_at: r.received_at,
+      received_label: formatDue(r.received_at),
       recorded_at: r.recorded_at,
       status: r.status,
       stitched_case_id: r.stitched_case_id,

@@ -261,6 +261,7 @@ describe("TICKET-18: second-pathway cases appear in the worklist like FIT cases"
       id: "mammography-biopsy",
       version: 1,
       label: "Abnormal screening mammogram to diagnostic imaging, biopsy, pathology and follow-up",
+      short_label: "Mammogram → biopsy",
     });
     expect(body.stages.map((s: { key: string }) => s.key)).toEqual(MAMMOGRAPHY.stages.map((s) => s.key));
     expect(body.stages.find((s: { state: string }) => s.state === "current").key).toBe("biopsy_done");

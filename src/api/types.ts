@@ -37,6 +37,9 @@ export type CaseSummary = {
   patient: { display_name: string; age: number; language: string };
   stage: string;
   stage_label: string;
+  pathway_id?: string;
+  // e.g. "FIT → colonoscopy", "Mammogram → biopsy"
+  pathway_label?: string;
   owner: Actor | null;
   hours_left_stage: number | null;
   days_left_stage: number;
@@ -55,7 +58,9 @@ export type CaseListCounts = {
 
 export type CaseListResponse = {
   clock: Clock;
+  // Counted over the role's whole register, whatever the filter.
   counts: CaseListCounts;
+  register?: { scope: string; total: number };
   cases: CaseSummary[];
 };
 
@@ -64,6 +69,8 @@ export type TimelineEvent = {
   type: string;
   actor: Actor | null;
   occurred_at: string;
+  // "16 Nov 15:40", formatted by the server.
+  occurred_label: string;
   recorded_at: string;
   summary: string;
   payload: Record<string, unknown>;
@@ -105,7 +112,22 @@ export type Action =
   | "confirm_closure"
   | "reject_proposal"
   | "reopen_case"
-  | "request_consultation";
+  | "request_consultation"
+  | "record_provider_move";
+
+// One event the role may record next, read from the template (engine.nextSteps).
+export type NextStep = {
+  event: string;
+  label: string;
+  to: string;
+  to_label: string;
+  moves_stage: boolean;
+  needs_outcome: boolean;
+  needs_owner: boolean;
+};
+
+// GET /api/actors
+export type ActorListEntry = Actor & { provider: Provider | null };
 
 // ---- TICKET-08 / TICKET-11: provider, ownership, referrals, consultations ------------
 
@@ -124,7 +146,9 @@ export type OwnershipGap = {
   trigger: OwnershipTrigger;
   previous_owner_actor_id: string | null;
   unowned_at: string;
+  unowned_at_label: string;
   owned_at: string | null;
+  owned_at_label: string | null;
   owner_actor_id: string | null;
   owner_event_type: string | null;
   // null while the spell is still open.
@@ -134,6 +158,9 @@ export type OwnershipGap = {
 export type Ownership = {
   state: "owned" | "unowned";
   unowned_since: string | null;
+  unowned_since_label: string | null;
+  // e.g. "Unowned 20h"; null while owned.
+  unowned_label: string | null;
   gaps: OwnershipGap[];
 };
 
@@ -148,6 +175,7 @@ export type Referral = {
   specialty: { system: string; code: string; display: string };
   replaces_referral_id: string | null;
   sent_at: string;
+  sent_label: string;
   updated_at: string;
 };
 
@@ -161,7 +189,9 @@ export type Consultation = {
   to_actor_id: string | null;
   referral_id: string | null;
   requested_at: string;
+  requested_label: string;
   due_at: string;
+  due_label: string;
   task_id: string;
   // open or answered
   status: string;
@@ -169,6 +199,7 @@ export type Consultation = {
   answer_note: string | null;
   answered_by_actor_id: string | null;
   answered_at: string | null;
+  answered_label: string | null;
   hours_to_answer: number | null;
 };
 
@@ -186,13 +217,20 @@ export type UnownedRow = {
   patient: { display_name: string; age: number; language: string };
   stage: string;
   stage_label: string;
+  pathway_label?: string;
   provider: Provider | null;
   unowned_since: string;
+  unowned_since_label: string;
   hours_unowned: number;
   unowned_label: string;
   trigger: OwnershipTrigger | null;
   previous_owner: { actor_id: string; display_name: string } | null;
-  assign_owner_task: { task_id: string; owner: Actor | null; due_at: string | null } | null;
+  assign_owner_task: {
+    task_id: string;
+    owner: Actor | null;
+    due_at: string | null;
+    due_label: string | null;
+  } | null;
 };
 
 export type UnownedResponse = { clock: Clock; count: number; cases: UnownedRow[] };
@@ -209,6 +247,7 @@ export type UnstitchedItem = {
   reason_code: string;
   reason: string;
   received_at: string;
+  received_label: string;
   recorded_at: string;
   // queued or stitched
   status: string;
@@ -231,6 +270,10 @@ export type CaseDetailResponse = {
     stage_due_label: string;
     final_outcome: string | null;
     outcomes: OutcomeOption[];
+    pathway?: { id: string; version: number; label: string; short_label: string };
+    // Whether the pathway has the patient outreach ladder (and an outreach screen).
+    has_outreach?: boolean;
+    awaiting_closure?: boolean;
   };
   stages: { key: string; state: string; label: string; short_label: string }[];
   timeline: TimelineEvent[];
@@ -240,10 +283,12 @@ export type CaseDetailResponse = {
     kind: string;
     owner: Actor | null;
     due_at: string;
+    due_label: string;
     status: string;
   }[];
   outreach_attempts: OutreachAttempt[];
   available_actions: Action[];
+  next_steps?: NextStep[];
   verification: VerificationSummary;
   // TICKET-08 / TICKET-11
   provider: Provider | null;
@@ -259,19 +304,35 @@ export type VerificationField = {
   quote_offset: [number, number];
   source: string;
   read_at: string;
+  // "17 Nov 09:14", formatted by the server.
+  read_label?: string;
   validated: boolean;
 };
 
+// stored: the reading attached to the latest report (GET). not_read: the latest report
+// has no reading yet. model / cache / unavailable: what a POST just did.
+export type VerificationOrigin =
+  | "stored"
+  | "not_read"
+  | "no_report"
+  | "pathway_not_verified"
+  | "model"
+  | "cache"
+  | "unavailable";
+
 export type Verification = {
-  report: { document_id: string; text: string };
+  report: { document_id: string | null; document_ids?: string[]; title?: string; text: string };
   extraction: {
+    extraction_id?: string | null;
     prompt_version: string;
-    model: string;
+    model: string | null;
     fields: VerificationField[];
     proposal: Proposal;
     proposal_reason: string;
-    // POST only (docs/api.md): the outcome a propose_closure asks the physician to confirm.
+    // The outcome a propose_closure asks the physician to confirm.
     proposed_outcome?: string | null;
+    origin?: VerificationOrigin;
+    read_label?: string | null;
   };
 };
 
@@ -483,6 +544,8 @@ export type ProgramSummary = {
   funnel: FunnelRow[];
   referral_to_colonoscopy: ReferralToColonoscopy | null;
   delay_reasons: DelayReasonCount[];
+  // TICKET-15: physician decisions that went against the AI reading.
+  ai_divergence?: { count: number; proposals_rejected: number; closed_against_reading: number };
   escalations_per_role_per_day: RoleDayCount[];
   escalations_by_day: EscalationDay[];
   scenario: ProgramScenario;

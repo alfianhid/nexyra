@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ApiError } from "../api";
-import { actorName, rosterActor } from "../api/actors";
+import { actorName, rosterActor, useRoster, type RosterActor } from "../api/actors";
 import {
   answerConsultation,
   assignOwner,
@@ -20,7 +20,6 @@ import {
   answerProblem,
   canRecordMove,
   defaultOwnerId,
-  formatStamp,
   openConsultation,
   outcomeWords,
   ownerCandidates,
@@ -30,7 +29,7 @@ import { useAsync } from "../hooks/useAsync";
 
 // TICKET-08 / TICKET-11 on the case page: who holds the case, where it is, the referrals
 // and consultations, and the four hand-over forms. Every form is shown only when the
-// server's available_actions (or, for the move, the action with the same roles) allows it.
+// server's available_actions allows it (record_provider_move for the move).
 
 function useSubmit(onDone: () => void) {
   const [busy, setBusy] = useState(false);
@@ -94,20 +93,20 @@ export function OwnershipSection({ detail }: { detail: CaseDetailResponse }) {
               <span className="mark" aria-hidden="true">
                 ◻
               </span>{" "}
-              No owner since {formatStamp(ownership.unowned_since)}
+              {ownership.unowned_label ?? "No owner"} · since {ownership.unowned_since_label ?? "—"}
             </strong>
             {openGap ? `${openGap.trigger.label}: ${openGap.trigger.reason}.` : "No trigger recorded."}
             {lastMove && (
               <>
                 {" "}
-                {lastMove.summary} ({formatStamp(lastMove.occurred_at)}).
+                {lastMove.summary} ({lastMove.occurred_label}).
               </>
             )}
             {ownerTask && (
               <>
                 {" "}
                 Assign-owner task with {ownerTask.owner?.display_name ?? "nobody"}, due{" "}
-                {formatStamp(ownerTask.due_at)}.
+                {ownerTask.due_label}.
               </>
             )}
           </p>
@@ -120,7 +119,7 @@ export function OwnershipSection({ detail }: { detail: CaseDetailResponse }) {
               Owned by {detail.case.owner?.display_name ?? "—"}
             </strong>
             {lastClosedGap
-              ? `Owner again ${formatStamp(lastClosedGap.owned_at)}, ${lastClosedGap.hours_to_owner}h after "${lastClosedGap.trigger.label.toLowerCase()}".`
+              ? `Owner again ${lastClosedGap.owned_at_label ?? "—"}, ${lastClosedGap.hours_to_owner}h after "${lastClosedGap.trigger.label.toLowerCase()}".`
               : "The case has not been without an owner."}
           </p>
         )}
@@ -145,6 +144,7 @@ export function OwnershipSection({ detail }: { detail: CaseDetailResponse }) {
 
 // The record behind the state above: every ownership spell, referral and consultation.
 export function HandoffRecords({ detail }: { detail: CaseDetailResponse }) {
+  const roster = useRoster();
   const { ownership, referrals, consultations } = detail;
   if (ownership.gaps.length + referrals.length + consultations.length === 0) return null;
 
@@ -173,9 +173,9 @@ export function HandoffRecords({ detail }: { detail: CaseDetailResponse }) {
               <tr key={g.trigger.event_id ?? i}>
                 <td className="reason">{g.trigger.label}</td>
                 <td>{g.trigger.reason || "—"}</td>
-                <td className="due">{formatStamp(g.unowned_at)}</td>
-                <td className="due">{g.owned_at ? formatStamp(g.owned_at) : "still unowned"}</td>
-                <td className="who">{g.owner_actor_id ? actorName(g.owner_actor_id) : "—"}</td>
+                <td className="due">{g.unowned_at_label}</td>
+                <td className="due">{g.owned_at_label ?? "still unowned"}</td>
+                <td className="who">{g.owner_actor_id ? actorName(roster, g.owner_actor_id) : "—"}</td>
                 <td className="due">{g.hours_to_owner === null ? "open" : `${g.hours_to_owner}h`}</td>
               </tr>
             ))}
@@ -209,7 +209,7 @@ export function HandoffRecords({ detail }: { detail: CaseDetailResponse }) {
                 <td>
                   {r.specialty.display} <small className="who">SNOMED {r.specialty.code}</small>
                 </td>
-                <td className="due">{formatStamp(r.sent_at)}</td>
+                <td className="due">{r.sent_label}</td>
               </tr>
             ))}
           </tbody>
@@ -234,12 +234,12 @@ export function HandoffRecords({ detail }: { detail: CaseDetailResponse }) {
               <tr key={k.consultation_id} data-status={k.status}>
                 <td>{k.question}</td>
                 <td className="who">
-                  {actorName(k.to_actor_id)} · {k.to_provider?.name ?? "—"}
+                  {actorName(roster, k.to_actor_id)} · {k.to_provider?.name ?? "—"}
                 </td>
                 <td className="due">
-                  {formatStamp(k.requested_at)} by {actorName(k.requested_by_actor_id)}
+                  {k.requested_label} by {actorName(roster, k.requested_by_actor_id)}
                 </td>
-                <td className="due">{formatStamp(k.due_at)}</td>
+                <td className="due">{k.due_label}</td>
                 <td className="reason">
                   {k.status === "open" ? (
                     <span className="status-word">waiting</span>
@@ -267,8 +267,10 @@ export function HandoffRecords({ detail }: { detail: CaseDetailResponse }) {
 type FormProps = { detail: CaseDetailResponse; actor: Actor; onDone: () => void };
 
 function AssignOwnerForm({ detail, actor, onDone }: FormProps) {
-  const candidates = ownerCandidates();
-  const [owner, setOwner] = useState(defaultOwnerId(detail) ?? candidates[0]?.actor_id ?? "");
+  const roster = useRoster();
+  const candidates = ownerCandidates(roster);
+  const [picked, setOwner] = useState(defaultOwnerId(detail) ?? "");
+  const owner = picked || candidates[0]?.actor_id || "";
   const { busy, error, run } = useSubmit(onDone);
   const id = "assign";
   return (
@@ -304,7 +306,8 @@ function MoveForm({ detail, actor, onDone, providers }: FormProps & { providers:
   const current = detail.provider?.provider_id;
   const choices = providers.filter((p) => p.provider_id !== current);
   const [target, setTarget] = useState("");
-  const chosen = target || choices[0]?.provider_id || "";
+  // No default: a move takes the owner away, so it is never one click on the first provider.
+  const chosen = target;
   const { busy, error, run } = useSubmit(onDone);
   const id = "move";
   return (
@@ -317,6 +320,7 @@ function MoveForm({ detail, actor, onDone, providers }: FormProps & { providers:
       <div className="field">
         <label htmlFor={`${id}-provider`}>Moved to</label>
         <select id={`${id}-provider`} value={chosen} disabled={busy} onChange={(e) => setTarget(e.target.value)}>
+          <option value="">Choose the new provider</option>
           {choices.map((p) => (
             <option key={p.provider_id} value={p.provider_id}>
               {p.name}
@@ -341,9 +345,10 @@ function MoveForm({ detail, actor, onDone, providers }: FormProps & { providers:
 }
 
 function ConsultForm({ detail, actor, onDone, providers }: FormProps & { providers: ProviderOption[] }) {
+  const roster = useRoster();
   const latest = detail.referrals[detail.referrals.length - 1];
   const [provider, setProvider] = useState(latest?.to_provider?.provider_id ?? providers[0]?.provider_id ?? "");
-  const physicians = physiciansAt(provider);
+  const physicians = physiciansAt(provider, roster);
   const [physician, setPhysician] = useState("");
   const chosenPhysician = physicians.some((p) => p.actor_id === physician)
     ? physician
@@ -428,8 +433,8 @@ function ConsultForm({ detail, actor, onDone, providers }: FormProps & { provide
 // The receiving physician (Dr. Fulana in the seed) has no seat in the role picker. The form
 // sends the addressee's own actor header, so the audit line names her, the same way the
 // outreach screen records the navigator's call (docs/frontend-handoff.md).
-function answeringActor(k: Consultation): Actor {
-  const known = rosterActor(k.to_actor_id);
+function answeringActor(k: Consultation, roster: RosterActor[]): Actor {
+  const known = rosterActor(roster, k.to_actor_id);
   if (known) return { actor_id: known.actor_id, role: known.role, display_name: known.display_name };
   return { actor_id: k.to_actor_id ?? "", role: "responsible_physician", display_name: k.to_actor_id ?? "" };
 }
@@ -445,9 +450,10 @@ function AnswerForm({
   onDone: () => void;
   providers: ProviderOption[];
 }) {
-  const answerer = answeringActor(consultation);
+  const roster = useRoster();
+  const answerer = answeringActor(consultation, roster);
   const unowned = detail.ownership.state === "unowned";
-  const candidates = ownerCandidates();
+  const candidates = ownerCandidates(roster);
   const [outcome, setOutcome] = useState<ConsultationOutcome>("accepted");
   const [owner, setOwner] = useState(defaultOwnerId(detail) ?? "");
   const redirectChoices = providers.filter((p) => p.provider_id !== consultation.to_provider?.provider_id);
@@ -474,7 +480,7 @@ function AnswerForm({
         {consultation.to_provider ? ` · ${consultation.to_provider.name}` : ""}
       </h3>
       <p className="note">
-        “{consultation.question}” Due {formatStamp(consultation.due_at)}. {answerer.display_name} has no
+        “{consultation.question}” Due {consultation.due_label}. {answerer.display_name} has no
         seat in the role picker; this form records the answer under her own name.
       </p>
       <fieldset className="field handoff-choice">

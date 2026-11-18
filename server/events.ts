@@ -15,7 +15,9 @@ import {
   isValidOutcome,
   nextState,
   pathwayOf,
+  reopenEventFor,
   rolesForEvent,
+  ROLES,
   rulesOf,
   stageDefinition,
   transitionFor,
@@ -27,6 +29,7 @@ import {
 import { HttpError } from "./errors.js";
 import { roundHours } from "./ownership.js";
 import { DEFAULT_PATHWAY, REFERRAL_STATUSES, UnknownPathwayError, type Pathway } from "./pathways/index.js";
+import { currentReading } from "./verify/caseVerification.js";
 
 // Every write in the prototype ends up in this file. Nothing outside it updates a case
 // row, and nothing at all updates an event row: the events table is append-only.
@@ -594,21 +597,111 @@ export async function confirmCaseClosure(
   });
 }
 
+// POST /reopen. A closed case leaves through the template's reopen event. An open case
+// past the procedure (the closure review's "Reopen case") goes back through the exit the
+// template defines for an incomplete examination; which event that is, is the engine's
+// answer (`reopenEventFor`), and the write is the same applyEvent every event takes. The
+// reading on the table (proposal, reason, cited findings) is recorded with it, so the
+// audit line says why the physician reopened.
 export async function reopenCase(
   db: Db,
-  input: { caseId: string; actor: WriteActor; ownerActorId?: string },
+  input: { caseId: string; actor: WriteActor; ownerActorId?: string; reason?: unknown },
 ) {
-  const reopenEvent = rulesOf((await loadCase(db, input.caseId)).pathway_id).reopenEvent;
-  if (reopenEvent === null) {
-    throw new HttpError(409, "invalid_transition", "This pathway has no reopen event.");
+  const caseRow = await loadCase(db, input.caseId);
+  const rules = rulesOf(caseRow.pathway_id);
+  if (input.reason !== undefined && typeof input.reason !== "string") fail("reason must be a string.");
+  const reason = typeof input.reason === "string" && input.reason.trim().length > 0 ? input.reason.trim() : null;
+
+  const event = reopenEventFor(caseRow, input.actor.role);
+  if (event === null) {
+    // Refused for the caller's role when some other role could reopen here; otherwise the
+    // stage itself has no way back.
+    const someoneCan = ROLES.some((role) => reopenEventFor(caseRow, role) !== null);
+    if (input.actor.role === "system" || someoneCan) {
+      throw new HttpError(403, "role_not_permitted", `The ${input.actor.role} role may not reopen this case.`);
+    }
+    throw new HttpError(409, "invalid_transition", `A case at stage "${caseRow.stage}" cannot be reopened.`);
   }
+
+  const payload: Record<string, unknown> = {};
+  if (event === rules.reopenEvent) {
+    payload.summary = reason ? `Case reopened: ${reason}` : "Case reopened after clinician review";
+  } else {
+    const { extraction } = await currentReading(db, input.caseId);
+    const findings = extraction
+      ? parseStoredFields(extraction.fields)
+          .filter((field) => field.validated)
+          .map((field) => ({ key: field.key, value: field.value, quote: field.quote }))
+      : [];
+    const why = extraction?.proposal_reason || null;
+    payload.reopened_at_stage = caseRow.stage;
+    payload.summary = `Reopened at closure review: ${[why, reason].filter(Boolean).join("; ") || "examination incomplete"}`;
+    if (reason) payload.reason = reason;
+    if (extraction) {
+      payload.verification = {
+        extraction_id: extraction.id,
+        proposal: extraction.proposal,
+        proposal_reason: extraction.proposal_reason,
+        findings,
+      };
+    }
+  }
+
   return applyEvent(db, {
     caseId: input.caseId,
-    type: reopenEvent,
+    type: event,
     actor: input.actor,
     ownerActorId: input.ownerActorId,
-    payload: { summary: "Case reopened after clinician review" },
+    payload,
   });
+}
+
+function parseStoredFields(json: string): { key: string; value: string; quote: string | null; validated: boolean }[] {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as { key: string; value: string; quote: string | null; validated: boolean }[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+// POST /api/cases/{id}/proposal/reject (TICKET-15). The responsible physician says the AI
+// proposal on the table does not hold, with a short reason. It is an event in the
+// physician's name and nothing else: it never moves, closes or reopens the case. The
+// programme counts it as a divergence between the physician and the AI reading.
+export const PROPOSAL_REJECTED_EVENT = "proposal_rejected";
+
+export async function rejectProposal(
+  db: Db,
+  input: { caseId: string; actor: WriteActor; reason: unknown },
+): Promise<{ recorded: string; caseId: string }> {
+  const engineCase = await loadEngineCase(db, input.caseId);
+  const role = input.actor.role;
+  if (role === "system" || !availableActions(engineCase, role).includes("reject_proposal")) {
+    const allowed = role !== "system" && (rulesOf(engineCase.pathway_id).pathway.actions.reject_proposal?.roles ?? []).includes(role);
+    if (!allowed) throw new HttpError(403, "role_not_permitted", `The ${role} role may not reject a proposal.`);
+    throw new HttpError(409, "invalid_transition", "No closure proposal is waiting on this case.");
+  }
+  if (typeof input.reason !== "string" || input.reason.trim().length < 5) {
+    fail("Say in a few words why the proposal does not hold (at least 5 characters).");
+  }
+  const reason = input.reason.trim();
+  if (reason.length > 500) fail("Keep the reason to 500 characters.");
+
+  const { extraction } = await currentReading(db, input.caseId);
+  const recorded = await appendEvent(db, {
+    caseId: input.caseId,
+    type: PROPOSAL_REJECTED_EVENT,
+    actor: input.actor,
+    payload: {
+      proposal: extraction?.proposal ?? null,
+      proposal_reason: extraction?.proposal_reason ?? null,
+      extraction_id: extraction?.id ?? null,
+      reason,
+      summary: `AI proposal rejected (${(extraction?.proposal ?? "no reading").replace(/_/g, " ")}): ${reason}`,
+    },
+  });
+  return { recorded, caseId: input.caseId };
 }
 
 export const DELAY_REASONS = ["fear", "transport", "cost", "language", "other"] as const;
@@ -1090,14 +1183,20 @@ async function ownershipStatements(
         ),
     );
   } else if (!wasOwned && !isOwned && definition?.sets_provider) {
-    // Moved again while unowned: the open spell continues, the task follows the patient.
+    // Moved again while unowned: the open spell continues, the task follows the patient,
+    // and the new provider's staff get the template's full time to assign an owner.
     out.push(
       db
         .prepare(
-          `UPDATE tasks SET owner_actor_id = ?
+          `UPDATE tasks SET owner_actor_id = ?, due_at = ?
             WHERE case_id = ? AND kind = ? AND status = 'open'`,
         )
-        .bind(await actorAtProvider(db, unowned.assign_owner_role, provider), input.caseId, ASSIGN_OWNER_TASK),
+        .bind(
+          await actorAtProvider(db, unowned.assign_owner_role, provider),
+          addHours(input.now, unowned.assign_owner_hours),
+          input.caseId,
+          ASSIGN_OWNER_TASK,
+        ),
     );
   } else if (!wasOwned && isOwned) {
     const gap = await openGap(db, input.caseId);
@@ -1307,6 +1406,14 @@ export async function answerConsultation(
   if (!rules.consultation) throw new HttpError(409, "invalid_transition", "This pathway has no consultations.");
   if (!availableActions(engineCase, input.actor.role as Role).includes("answer_consultation")) {
     throw new HttpError(403, "role_not_permitted", `The ${input.actor.role} role may not answer a consultation.`);
+  }
+  // A consultation is one question to one named physician: only the addressee answers it.
+  if (consultation.to_actor_id !== null && input.actor.actor_id !== consultation.to_actor_id) {
+    throw new HttpError(
+      403,
+      "role_not_permitted",
+      `This consultation is addressed to ${consultation.to_actor_id}; only they can answer it.`,
+    );
   }
 
   if (!isConsultationAnswer(input.outcome)) {
