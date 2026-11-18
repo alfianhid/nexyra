@@ -29,7 +29,53 @@ export type PathwayEvent = {
   // this stage (the closure endpoint's one-step confirmation).
   finalises_to: string | null;
   moves_stage: boolean;
+  // TICKET-08/11 (all optional in the file): the event sets the case's current provider
+  // from payload.provider_id; it sets the case's latest referral to this status; it is
+  // the answer to a consultation and may only be recorded through the answer endpoint.
+  sets_provider: boolean;
+  referral_status: string | null;
+  consultation_answer: ConsultationAnswer | null;
 };
+
+// --- TICKET-08 / TICKET-11 template blocks --------------------------------------
+
+export const CONSULTATION_ANSWERS = ["accepted", "redirected", "more_data_requested"] as const;
+export type ConsultationAnswer = (typeof CONSULTATION_ANSWERS)[number];
+
+export const REFERRAL_STATUSES = [
+  "pending",
+  "accepted",
+  "rejected",
+  "expired",
+  "redirected",
+] as const;
+
+export type PathwayUnowned = {
+  acceptance_stage: string;
+  unanswered_event: string;
+  moved_event: string;
+  assign_owner_role: Role;
+  assign_owner_hours: number;
+  source: string;
+};
+
+export type PathwayConsultation = {
+  request_roles: readonly Role[];
+  answer_roles: readonly Role[];
+  answer_hours: number;
+  more_data_hours: number;
+  escalation: readonly Role[];
+  source: string;
+};
+
+export type StitchingRule = {
+  resource: string;
+  statuses: readonly string[];
+  document_kind: string | null;
+  event: string | null;
+};
+
+export type PathwayStitching = { source: string; rules: readonly StitchingRule[] };
 
 export type StageExit = { event: string; to: string };
 
@@ -80,6 +126,10 @@ export type Pathway = {
   actions: Readonly<Partial<Record<Action, PathwayAction>>>;
   limits: readonly PathwayLimit[];
   outcomes: readonly PathwayOutcome[];
+  // TICKET-08 / TICKET-11; null when a template has no such block.
+  unowned: PathwayUnowned | null;
+  consultation: PathwayConsultation | null;
+  stitching: PathwayStitching | null;
 };
 
 export class PathwayTemplateError extends Error {
@@ -231,6 +281,9 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
       closure: c.boolean(value, "closure", path),
       finalises_to: c.optionalString(value, "finalises_to", path),
       moves_stage: value.moves_stage === undefined ? true : c.boolean(value, "moves_stage", path),
+      sets_provider: c.boolean(value, "sets_provider", path),
+      referral_status: c.optionalString(value, "referral_status", path),
+      consultation_answer: c.optionalString(value, "consultation_answer", path) as ConsultationAnswer | null,
     };
   }
 
@@ -465,6 +518,8 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
     actions[name as Action] = { roles, event };
   }
 
+  const { unowned, consultation, stitching } = validateOwnershipBlocks(c, raw, events, stageKeys, terminal);
+
   if (c.problems.length > 0) throw new PathwayTemplateError(origin, c.problems);
 
   return deepFreeze({
@@ -479,7 +534,130 @@ export function validatePathway(raw: unknown, origin: string): Pathway {
     actions,
     limits,
     outcomes,
+    unowned,
+    consultation,
+    stitching,
   });
+}
+
+// --- TICKET-08 / TICKET-11 validation ---------------------------------------------
+// The unowned triggers, the consultation rules and the FHIR stitching rules. Each block
+// is optional (a second pathway may have none), but a block that is present must point
+// at real stages and events, or the server does not start.
+function validateOwnershipBlocks(
+  c: Checker,
+  raw: Json,
+  events: Record<string, PathwayEvent>,
+  stageKeys: ReadonlySet<string>,
+  terminal: string,
+): {
+  unowned: PathwayUnowned | null;
+  consultation: PathwayConsultation | null;
+  stitching: PathwayStitching | null;
+} {
+  for (const event of Object.values(events)) {
+    const path = `events.${event.type}`;
+    if (
+      event.referral_status !== null &&
+      !(REFERRAL_STATUSES as readonly string[]).includes(event.referral_status)
+    ) {
+      c.fail(`${path}.referral_status`, `must be one of ${REFERRAL_STATUSES.join(", ")}`);
+    }
+    if (event.consultation_answer !== null) {
+      if (!(CONSULTATION_ANSWERS as readonly string[]).includes(event.consultation_answer)) {
+        c.fail(`${path}.consultation_answer`, `must be one of ${CONSULTATION_ANSWERS.join(", ")}`);
+      }
+      // An answered question always leaves the case with an owner.
+      if (event.owner !== "assign_if_unowned" && event.owner !== "assign") {
+        c.fail(`${path}.owner`, "must assign an owner: a consultation answer never leaves a case unowned");
+      }
+      if (event.roles.includes("system")) {
+        c.fail(`${path}.roles`, "includes system, but a consultation is answered by a person");
+      }
+    }
+  }
+
+  let unowned: PathwayUnowned | null = null;
+  if (raw.unowned !== undefined) {
+    const block = c.object(raw, "unowned", "template");
+    const role = block.assign_owner_role;
+    if (!(ROLES as readonly unknown[]).includes(role)) {
+      c.fail("unowned.assign_owner_role", `must be one of ${ROLES.join(", ")}`);
+    }
+    unowned = {
+      acceptance_stage: c.string(block, "acceptance_stage", "unowned"),
+      unanswered_event: c.string(block, "unanswered_event", "unowned"),
+      moved_event: c.string(block, "moved_event", "unowned"),
+      assign_owner_role: role as Role,
+      assign_owner_hours: c.number(block, "assign_owner_hours", "unowned", "positive"),
+      source: c.string(block, "source", "unowned"),
+    };
+    if (unowned.acceptance_stage && !stageKeys.has(unowned.acceptance_stage)) {
+      c.fail("unowned.acceptance_stage", `names "${unowned.acceptance_stage}", which is not a stage`);
+    }
+    if (unowned.acceptance_stage === terminal) {
+      c.fail("unowned.acceptance_stage", "may not be the terminal stage");
+    }
+    const unanswered = events[unowned.unanswered_event];
+    if (!unanswered) {
+      c.fail("unowned.unanswered_event", `names "${unowned.unanswered_event}", which is not in events`);
+    } else if (unanswered.owner !== "clear" || unanswered.moves_stage || !unanswered.roles.includes("system")) {
+      c.fail("unowned.unanswered_event", "must clear the owner, keep the stage and be writable by system");
+    }
+    const moved = events[unowned.moved_event];
+    if (!moved) {
+      c.fail("unowned.moved_event", `names "${unowned.moved_event}", which is not in events`);
+    } else if (moved.owner !== "clear" || moved.moves_stage || !moved.sets_provider) {
+      c.fail("unowned.moved_event", "must clear the owner, keep the stage and set the provider");
+    }
+  }
+
+  let consultation: PathwayConsultation | null = null;
+  if (raw.consultation !== undefined) {
+    const block = c.object(raw, "consultation", "template");
+    consultation = {
+      request_roles: c.roles(block, "request_roles", "consultation", ROLES),
+      answer_roles: c.roles(block, "answer_roles", "consultation", ROLES),
+      answer_hours: c.number(block, "answer_hours", "consultation", "positive"),
+      more_data_hours: c.number(block, "more_data_hours", "consultation", "positive"),
+      escalation: c.roles(block, "escalation", "consultation", ROLES),
+      source: c.string(block, "source", "consultation"),
+    };
+    for (const answer of CONSULTATION_ANSWERS) {
+      const matching = Object.values(events).filter((e) => e.consultation_answer === answer);
+      if (matching.length !== 1) {
+        c.fail("consultation", `needs exactly one event with consultation_answer "${answer}" (found ${matching.length})`);
+      }
+    }
+  }
+
+  let stitching: PathwayStitching | null = null;
+  if (raw.stitching !== undefined) {
+    const block = c.object(raw, "stitching", "template");
+    const rules: StitchingRule[] = [];
+    c.array(block, "rules", "stitching").forEach((value, index) => {
+      const path = `stitching.rules[${index}]`;
+      if (!isObject(value)) {
+        c.fail(path, "must be an object");
+        return;
+      }
+      const event = value.event === null ? null : c.string(value, "event", path);
+      if (event !== null && event !== "" && !events[event]) {
+        c.fail(`${path}.event`, `names "${event}", which is not in events`);
+      } else if (event && !events[event]?.roles.includes("system")) {
+        c.fail(`${path}.event`, `names "${event}", which the system role may not record`);
+      }
+      rules.push({
+        resource: c.string(value, "resource", path),
+        statuses: c.strings(value, "statuses", path),
+        document_kind: c.optionalString(value, "document_kind", path),
+        event,
+      });
+    });
+    stitching = { source: c.string(block, "source", "stitching"), rules };
+  }
+
+  return { unowned, consultation, stitching };
 }
 
 function deepFreeze<T>(value: T): T {

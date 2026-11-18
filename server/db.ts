@@ -121,8 +121,124 @@ BEGIN
 END;
 `;
 
+// --- TICKET-08 / TICKET-11 ---------------------------------------------------------
+// Providers (with the case's current provider on `cases.provider_id`), referrals in the
+// shape the REF messages carry, the per-case ownership gaps (the "time to owned again"
+// metric), consultations, and the queue of FHIR resources that matched no case.
+// `cases.provider_id`, `cases.patient_identifier` and `actors.provider_id` are added by
+// prepareSchema below, so a file created by an earlier build gains them too.
+const SCHEMA_OWNERSHIP = `
+CREATE TABLE IF NOT EXISTS providers (
+  id    TEXT PRIMARY KEY,
+  name  TEXT NOT NULL,
+  kind  TEXT NOT NULL CHECK (kind IN ('clinic', 'hospital', 'endoscopy_unit', 'laboratory'))
+);
+
+-- One row per referral. status / priority / SNOMED specialty are the attributes the
+-- referral (REF) messages carry; status is updated by the events the template marks
+-- with referral_status, and the event that sent it is kept.
+CREATE TABLE IF NOT EXISTS referrals (
+  id                    TEXT PRIMARY KEY,
+  case_id               TEXT NOT NULL REFERENCES cases(id),
+  from_provider_id      TEXT REFERENCES providers(id),
+  to_provider_id        TEXT NOT NULL REFERENCES providers(id),
+  status                TEXT NOT NULL,
+  priority              TEXT NOT NULL,
+  specialty_system      TEXT NOT NULL,
+  specialty_code        TEXT NOT NULL,
+  specialty_display     TEXT NOT NULL,
+  replaces_referral_id  TEXT,
+  sent_event_id         TEXT NOT NULL,
+  sent_at               TEXT NOT NULL,
+  updated_at            TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS referrals_by_case ON referrals (case_id);
+
+-- One row per unowned spell: opened by the event that cleared the owner, closed by the
+-- event that gave the case an owner again. hours_to_owner is the TICKET-08 metric.
+CREATE TABLE IF NOT EXISTS ownership_gaps (
+  id                       TEXT PRIMARY KEY,
+  case_id                  TEXT NOT NULL REFERENCES cases(id),
+  trigger_event_id         TEXT NOT NULL UNIQUE,
+  trigger_type             TEXT NOT NULL,
+  reason                   TEXT NOT NULL DEFAULT '',
+  previous_owner_actor_id  TEXT,
+  unowned_at               TEXT NOT NULL,
+  owner_event_id           TEXT,
+  owner_event_type         TEXT,
+  owner_actor_id           TEXT,
+  owned_at                 TEXT,
+  hours_to_owner           REAL
+);
+
+CREATE INDEX IF NOT EXISTS ownership_gaps_by_case ON ownership_gaps (case_id, owned_at);
+
+-- TICKET-11. A question from the referring physician to the receiving provider, with
+-- the task that owes the answer and hours_to_answer once it is answered.
+CREATE TABLE IF NOT EXISTS consultations (
+  id                     TEXT PRIMARY KEY,
+  case_id                TEXT NOT NULL REFERENCES cases(id),
+  question               TEXT NOT NULL,
+  requested_by_actor_id  TEXT NOT NULL REFERENCES actors(id),
+  to_provider_id         TEXT REFERENCES providers(id),
+  to_actor_id            TEXT REFERENCES actors(id),
+  referral_id            TEXT,
+  requested_at           TEXT NOT NULL,
+  due_at                 TEXT NOT NULL,
+  task_id                TEXT NOT NULL,
+  status                 TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered')),
+  outcome                TEXT,
+  answer_note            TEXT,
+  answered_by_actor_id   TEXT,
+  answered_at            TEXT,
+  answer_event_id        TEXT,
+  hours_to_answer        REAL
+);
+
+CREATE INDEX IF NOT EXISTS consultations_by_case ON consultations (case_id, status);
+
+-- FHIR resources that matched no open case. Never dropped: a later ingest of the same
+-- resource that does match marks the row stitched.
+CREATE TABLE IF NOT EXISTS unstitched (
+  id                  TEXT PRIMARY KEY,
+  resource_type       TEXT NOT NULL,
+  resource_id         TEXT NOT NULL,
+  source_provider_id  TEXT,
+  patient_identifier  TEXT,
+  referral_id         TEXT,
+  reason_code         TEXT NOT NULL,
+  reason              TEXT NOT NULL,
+  resource            TEXT NOT NULL,
+  received_at         TEXT NOT NULL,
+  recorded_at         TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'stitched')),
+  stitched_case_id    TEXT,
+  UNIQUE (resource_type, resource_id)
+);
+`;
+
+async function addColumnIfMissing(db: Db, table: string, column: string, definition: string) {
+  const columns = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+  if (!columns.some((c) => c.name === column)) {
+    await db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
+async function prepareOwnershipSchema(db: Db): Promise<void> {
+  await db.exec(SCHEMA_OWNERSHIP);
+  await addColumnIfMissing(db, "actors", "provider_id", "TEXT REFERENCES providers(id)");
+  await addColumnIfMissing(db, "cases", "provider_id", "TEXT REFERENCES providers(id)");
+  await addColumnIfMissing(db, "cases", "patient_identifier", "TEXT");
+}
+
 // Children before parents, so foreign keys never block the drop.
 const TABLES = [
+  // TICKET-08 / TICKET-11
+  "unstitched",
+  "consultations",
+  "ownership_gaps",
+  "referrals",
   "extractions",
   "timers",
   "tasks",
@@ -131,6 +247,8 @@ const TABLES = [
   "cases",
   "actors",
   "clocks",
+  // TICKET-08: actors and cases point at providers, so providers go last.
+  "providers",
 ] as const;
 
 type Value = string | number | bigint | null | ArrayBuffer | Uint8Array | boolean;
@@ -244,6 +362,8 @@ async function prepareSchema(db: Db): Promise<void> {
   if (!caseColumns.some((column) => column.name === "final_outcome")) {
     await db.exec("ALTER TABLE cases ADD COLUMN final_outcome TEXT");
   }
+
+  await prepareOwnershipSchema(db);
 }
 
 // A local file path (tests, scripts) or a full target. The schema is created on open.

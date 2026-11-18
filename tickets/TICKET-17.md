@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 18 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-08, TICKET-10, TICKET-15
-- **Status:** not started
+- **Status:** in progress. 18 Nov: case 2 (CX-1002) runs step by step through the API from the seed's unowned start (moved clinic, consultation, new owner, stitched booking); the steps are in `docs/api.md` and tested in `server/consultation.test.ts`. Cases 1 and 3, the UI walk and `docs/demo-script.md` are open.
 
 ## Goal
 

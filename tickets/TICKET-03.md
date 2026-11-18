@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 15 Nov · **Estimate:** 2–3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-02
-- **Status:** done-when met 18 Nov. `rebuildCase` is in `server/events.ts`; tests in `server/caseEngine.test.ts` and `server/db.test.ts`. Deviation: patient fields live on `cases` and there is no `providers` table yet (provider identity arrives with TICKET-08).
+- **Status:** done-when met 18 Nov. `rebuildCase` is in `server/events.ts`; tests in `server/caseEngine.test.ts` and `server/db.test.ts`. Deviation: patient fields live on `cases` (plus `patient_identifier`). The `providers` table and `cases.provider_id` (the current provider, rebuilt from events) arrived with TICKET-08 on 18 Nov.
 
 ## Goal
 

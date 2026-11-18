@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 16 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-05, TICKET-06
-- **Status:** not started
+- **Status:** done-when met 18 Nov (server and API; no screen yet). Tests in `server/unowned.test.ts`, the CX-1002 walk in `server/consultation.test.ts`. Rules are template data (`unowned`, `stitching` blocks in `server/pathways/fit-colonoscopy.json`); writes in `server/events.ts`, matching in `server/ingest.ts`, tick trigger in `server/escalation.ts`. Probabilistic matching is designed in `docs/architecture.md`, not built.
 
 ## Goal
 
@@ -26,11 +26,11 @@ Probabilistic identity matching (designed only, written up in the documentation)
 
 ## Done when
 
-- [ ] A test for each of the three triggers
-- [ ] Test: a colonoscopy performed at another hospital is stitched to the right case
-- [ ] Test: an event with no matching case goes into the "not yet stitched" queue
-- [ ] The list of unowned cases can be fetched with a single query or endpoint
-- [ ] Time until the case has an owner again is recorded per case
+- [x] A test for each of the three triggers (`trigger 1: a rejected referral…`, `fires from tick once the acceptance deadline passes, and only once`, `trigger 3: the patient moving provider…`)
+- [x] Test: a colonoscopy performed at another hospital is stitched to the right case (`stitches a colonoscopy performed at another hospital to the right case`)
+- [x] Test: an event with no matching case goes into the "not yet stitched" queue (`puts an event with no matching case in the not-yet-stitched queue, with its reason`)
+- [x] The list of unowned cases can be fetched with a single query or endpoint (`GET /api/unowned`, one SQL query; test `is one endpoint, ordered server-side…`)
+- [x] Time until the case has an owner again is recorded per case (`ownership_gaps.hours_to_owner`; test `records who handed over and who received, and stores the hours to owned again per case`)
 
 ## Notes
 

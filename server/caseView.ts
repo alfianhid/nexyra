@@ -7,6 +7,7 @@ import {
   REPORTED_LIMIT,
   STAGES,
   availableActions,
+  eventDefinition,
   isAwaitingClosure,
   isClosed,
   nextState,
@@ -18,6 +19,8 @@ import {
   type Role,
 } from "./engine.js";
 import { HttpError } from "./errors.js";
+import { hasOpenConsultation } from "./events.js";
+import { proposedOutcomeFor, type ExtractionField } from "./verify/index.js";
 
 // Reads only. Every rule (which stage, which owner, which actions) comes from
 // server/engine.ts; this file joins the database and formats, it does not decide.
@@ -48,6 +51,10 @@ type CaseRow = {
   stage_entered_at: string | null;
   created_at: string;
   updated_at: string;
+  // TICKET-08
+  provider_id: string | null;
+  provider_name: string | null;
+  patient_identifier: string | null;
 };
 
 type TaskRow = {
@@ -95,9 +102,11 @@ function caseRows(db: Db): Promise<CaseRow[]> {
     .prepare(
       `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage, c.status,
               c.owner_actor_id, c.final_outcome, c.stage_entered_at, c.created_at, c.updated_at,
-              a.display_name AS owner_name, a.role AS owner_role
+              a.display_name AS owner_name, a.role AS owner_role,
+              c.provider_id, p.name AS provider_name, c.patient_identifier
          FROM cases c
-         LEFT JOIN actors a ON a.id = c.owner_actor_id`,
+         LEFT JOIN actors a ON a.id = c.owner_actor_id
+         LEFT JOIN providers p ON p.id = c.provider_id`,
     )
     .all<CaseRow>();
 }
@@ -133,6 +142,7 @@ async function toEngineCase(db: Db, row: CaseRow): Promise<EngineCase> {
     final_outcome: row.final_outcome,
     documents: (await documentsFor(db, row.id)).map((doc) => ({ kind: doc.kind })),
     physician_confirmed: await physicianConfirmed(db, row.id),
+    open_consultation: await hasOpenConsultation(db, row.id),
   };
 }
 
@@ -402,16 +412,28 @@ async function outreachAttemptsFor(db: Db, caseId: string) {
   });
 }
 
+// TICKET-15: the outcome a `propose_closure` asks the physician to confirm, from the same
+// function the POST response uses, so the case view and the closure screen agree.
+function proposedOutcomeOf(proposal: string, fieldsJson: string): string | null {
+  let fields: unknown = [];
+  try {
+    fields = JSON.parse(fieldsJson);
+  } catch {
+    fields = [];
+  }
+  return proposedOutcomeFor(proposal, Array.isArray(fields) ? (fields as ExtractionField[]) : []);
+}
+
 async function verificationSummary(db: Db, caseId: string) {
   const row = await db
     .prepare(
-      "SELECT proposal FROM extractions WHERE case_id = ? ORDER BY created_at DESC LIMIT 1",
+      "SELECT proposal, fields FROM extractions WHERE case_id = ? ORDER BY created_at DESC LIMIT 1",
     )
-    .get<{ proposal: string }>(caseId);
+    .get<{ proposal: string; fields: string }>(caseId);
 
   return row
-    ? { status: "ready", proposal: row.proposal }
-    : { status: "pending", proposal: "needs_human_reading" };
+    ? { status: "ready", proposal: row.proposal, proposed_outcome: proposedOutcomeOf(row.proposal, row.fields) }
+    : { status: "pending", proposal: "needs_human_reading", proposed_outcome: null };
 }
 
 // GET /api/cases/{case_id}/verification. No cached extraction means no report text to
@@ -453,6 +475,7 @@ export async function getVerification(db: Db, caseId: string) {
         fields: [],
         proposal: "needs_human_reading",
         proposal_reason: "No report has been read for this case yet.",
+        proposed_outcome: null,
       },
     };
   }
@@ -472,6 +495,7 @@ export async function getVerification(db: Db, caseId: string) {
       fields,
       proposal: extraction.proposal,
       proposal_reason: extraction.proposal_reason,
+      proposed_outcome: proposedOutcomeOf(extraction.proposal, extraction.fields),
     },
   };
 }
@@ -501,6 +525,8 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
         display_name: row.patient_name,
         age: row.patient_age,
         language: row.patient_language,
+        // TICKET-08: what incoming FHIR resources are matched on.
+        identifier: row.patient_identifier,
       },
       stage: row.stage,
       stage_label: stageLabel(row.stage),
@@ -544,5 +570,284 @@ export async function getCaseDetail(db: Db, caseId: string, role: Role) {
     outreach_attempts: await outreachAttemptsFor(db, caseId),
     available_actions: availableActions(engineCase, role),
     verification: await verificationSummary(db, caseId),
+    // TICKET-08 / TICKET-11
+    ...(await ownershipView(db, row)),
+  };
+}
+
+// ===========================================================================
+// TICKET-08 / TICKET-11 reads: the case's provider, ownership gaps, referrals and
+// consultations; the unowned list; the unstitched queue.
+// ===========================================================================
+
+type GapRow = {
+  id: string;
+  trigger_event_id: string;
+  trigger_type: string;
+  reason: string;
+  previous_owner_actor_id: string | null;
+  unowned_at: string;
+  owner_event_type: string | null;
+  owner_actor_id: string | null;
+  owned_at: string | null;
+  hours_to_owner: number | null;
+};
+
+function gapView(gap: GapRow) {
+  return {
+    trigger: {
+      event_id: gap.trigger_event_id,
+      type: gap.trigger_type,
+      label: eventDefinition(gap.trigger_type)?.label ?? gap.trigger_type,
+      reason: gap.reason,
+    },
+    previous_owner_actor_id: gap.previous_owner_actor_id,
+    unowned_at: gap.unowned_at,
+    owned_at: gap.owned_at,
+    owner_actor_id: gap.owner_actor_id,
+    owner_event_type: gap.owner_event_type,
+    hours_to_owner: gap.hours_to_owner,
+  };
+}
+
+function providerOf(id: string | null, name: string | null) {
+  return id === null ? null : { provider_id: id, name: name ?? id };
+}
+
+async function ownershipView(db: Db, row: CaseRow) {
+  const gaps = await db
+    .prepare(
+      `SELECT id, trigger_event_id, trigger_type, reason, previous_owner_actor_id, unowned_at,
+              owner_event_type, owner_actor_id, owned_at, hours_to_owner
+         FROM ownership_gaps WHERE case_id = ? ORDER BY rowid`,
+    )
+    .all<GapRow>(row.id);
+  const open = gaps.find((gap) => gap.owned_at === null) ?? null;
+
+  const referrals = await db
+    .prepare(
+      `SELECT r.id, r.to_provider_id, p.name AS to_provider_name, r.from_provider_id, r.status,
+              r.priority, r.specialty_system, r.specialty_code, r.specialty_display,
+              r.replaces_referral_id, r.sent_at, r.updated_at
+         FROM referrals r LEFT JOIN providers p ON p.id = r.to_provider_id
+        WHERE r.case_id = ? ORDER BY r.rowid`,
+    )
+    .all<{
+      id: string;
+      to_provider_id: string;
+      to_provider_name: string | null;
+      from_provider_id: string | null;
+      status: string;
+      priority: string;
+      specialty_system: string;
+      specialty_code: string;
+      specialty_display: string;
+      replaces_referral_id: string | null;
+      sent_at: string;
+      updated_at: string;
+    }>(row.id);
+
+  const consultations = await db
+    .prepare(
+      `SELECT k.id, k.question, k.requested_by_actor_id, k.to_provider_id, p.name AS to_provider_name,
+              k.to_actor_id, k.referral_id, k.requested_at, k.due_at, k.task_id, k.status, k.outcome,
+              k.answer_note, k.answered_by_actor_id, k.answered_at, k.hours_to_answer
+         FROM consultations k LEFT JOIN providers p ON p.id = k.to_provider_id
+        WHERE k.case_id = ? ORDER BY k.rowid`,
+    )
+    .all<{
+      id: string;
+      question: string;
+      requested_by_actor_id: string;
+      to_provider_id: string | null;
+      to_provider_name: string | null;
+      to_actor_id: string | null;
+      referral_id: string | null;
+      requested_at: string;
+      due_at: string;
+      task_id: string;
+      status: string;
+      outcome: string | null;
+      answer_note: string | null;
+      answered_by_actor_id: string | null;
+      answered_at: string | null;
+      hours_to_answer: number | null;
+    }>(row.id);
+
+  return {
+    provider: providerOf(row.provider_id, row.provider_name),
+    ownership: {
+      state: row.owner_actor_id === null ? "unowned" : "owned",
+      unowned_since: row.owner_actor_id === null ? (open?.unowned_at ?? null) : null,
+      gaps: gaps.map(gapView),
+    },
+    referrals: referrals.map((r) => ({
+      referral_id: r.id,
+      from_provider_id: r.from_provider_id,
+      to_provider: providerOf(r.to_provider_id, r.to_provider_name),
+      status: r.status,
+      priority: r.priority,
+      specialty: { system: r.specialty_system, code: r.specialty_code, display: r.specialty_display },
+      replaces_referral_id: r.replaces_referral_id,
+      sent_at: r.sent_at,
+      updated_at: r.updated_at,
+    })),
+    consultations: consultations.map((k) => ({
+      consultation_id: k.id,
+      question: k.question,
+      requested_by_actor_id: k.requested_by_actor_id,
+      to_provider: providerOf(k.to_provider_id, k.to_provider_name),
+      to_actor_id: k.to_actor_id,
+      referral_id: k.referral_id,
+      requested_at: k.requested_at,
+      due_at: k.due_at,
+      task_id: k.task_id,
+      status: k.status,
+      outcome: k.outcome,
+      answer_note: k.answer_note,
+      answered_by_actor_id: k.answered_by_actor_id,
+      answered_at: k.answered_at,
+      hours_to_answer: k.hours_to_answer,
+    })),
+  };
+}
+
+// GET /api/unowned: one query. Every open case without an owner, with the spell that
+// made it unowned and the assign-owner task, longest unowned first.
+export async function listUnowned(db: Db, now: string) {
+  const rows = await db
+    .prepare(
+      `SELECT c.id, c.patient_name, c.patient_age, c.patient_language, c.stage,
+              c.provider_id, p.name AS provider_name,
+              COALESCE(g.unowned_at, c.stage_entered_at, c.created_at) AS unowned_since,
+              g.trigger_event_id, g.trigger_type, g.reason, g.previous_owner_actor_id,
+              prev.display_name AS previous_owner_name,
+              t.id AS task_id, t.owner_actor_id AS task_owner_id, ta.display_name AS task_owner_name,
+              ta.role AS task_owner_role, t.due_at AS task_due_at
+         FROM cases c
+         LEFT JOIN providers p ON p.id = c.provider_id
+         LEFT JOIN ownership_gaps g ON g.id = (
+                SELECT id FROM ownership_gaps WHERE case_id = c.id AND owned_at IS NULL
+                 ORDER BY rowid DESC LIMIT 1)
+         LEFT JOIN actors prev ON prev.id = g.previous_owner_actor_id
+         LEFT JOIN tasks t ON t.id = (
+                SELECT id FROM tasks WHERE case_id = c.id AND kind = 'assign_owner' AND status = 'open'
+                 ORDER BY rowid DESC LIMIT 1)
+         LEFT JOIN actors ta ON ta.id = t.owner_actor_id
+        WHERE c.owner_actor_id IS NULL AND c.status != 'closed'
+        ORDER BY unowned_since, c.id`,
+    )
+    .all<{
+      id: string;
+      patient_name: string;
+      patient_age: number;
+      patient_language: string;
+      stage: string;
+      provider_id: string | null;
+      provider_name: string | null;
+      unowned_since: string;
+      trigger_event_id: string | null;
+      trigger_type: string | null;
+      reason: string | null;
+      previous_owner_actor_id: string | null;
+      previous_owner_name: string | null;
+      task_id: string | null;
+      task_owner_id: string | null;
+      task_owner_name: string | null;
+      task_owner_role: string | null;
+      task_due_at: string | null;
+    }>();
+
+  return {
+    clock: await embeddedClock(db),
+    count: rows.length,
+    cases: rows.map((r) => {
+      const hours = Math.round(hoursBetween(r.unowned_since, now));
+      return {
+        case_id: r.id,
+        patient: { display_name: r.patient_name, age: r.patient_age, language: r.patient_language },
+        stage: r.stage,
+        stage_label: stageLabel(r.stage),
+        provider: providerOf(r.provider_id, r.provider_name),
+        unowned_since: r.unowned_since,
+        hours_unowned: hours,
+        unowned_label: `Unowned ${hours}h`,
+        trigger:
+          r.trigger_type === null
+            ? null
+            : {
+                event_id: r.trigger_event_id,
+                type: r.trigger_type,
+                label: eventDefinition(r.trigger_type)?.label ?? r.trigger_type,
+                reason: r.reason ?? "",
+              },
+        previous_owner:
+          r.previous_owner_actor_id === null
+            ? null
+            : { actor_id: r.previous_owner_actor_id, display_name: r.previous_owner_name ?? r.previous_owner_actor_id },
+        assign_owner_task:
+          r.task_id === null
+            ? null
+            : {
+                task_id: r.task_id,
+                owner:
+                  r.task_owner_id === null
+                    ? null
+                    : {
+                        actor_id: r.task_owner_id,
+                        role: (r.task_owner_role ?? "coordination_staff") as Role,
+                        display_name: r.task_owner_name ?? r.task_owner_id,
+                      },
+                due_at: r.task_due_at,
+              },
+      };
+    }),
+  };
+}
+
+// GET /api/ingest/unstitched: the queue, oldest first. `status` is queued (default),
+// stitched or all.
+export async function listUnstitched(db: Db, status: "queued" | "stitched" | "all") {
+  const rows = await db
+    .prepare(
+      `SELECT u.id, u.resource_type, u.resource_id, u.source_provider_id, p.name AS source_provider_name,
+              u.patient_identifier, u.referral_id, u.reason_code, u.reason, u.received_at,
+              u.recorded_at, u.status, u.stitched_case_id
+         FROM unstitched u LEFT JOIN providers p ON p.id = u.source_provider_id
+        WHERE (? = 'all' OR u.status = ?)
+        ORDER BY u.received_at, u.rowid`,
+    )
+    .all<{
+      id: string;
+      resource_type: string;
+      resource_id: string;
+      source_provider_id: string | null;
+      source_provider_name: string | null;
+      patient_identifier: string | null;
+      referral_id: string | null;
+      reason_code: string;
+      reason: string;
+      received_at: string;
+      recorded_at: string;
+      status: string;
+      stitched_case_id: string | null;
+    }>(status, status);
+
+  return {
+    count: rows.length,
+    items: rows.map((r) => ({
+      unstitched_id: r.id,
+      resource_type: r.resource_type,
+      resource_id: r.resource_id,
+      source_provider: providerOf(r.source_provider_id, r.source_provider_name),
+      patient_identifier: r.patient_identifier,
+      referral_id: r.referral_id,
+      reason_code: r.reason_code,
+      reason: r.reason,
+      received_at: r.received_at,
+      recorded_at: r.recorded_at,
+      status: r.status,
+      stitched_case_id: r.stitched_case_id,
+    })),
   };
 }

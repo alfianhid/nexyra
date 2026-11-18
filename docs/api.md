@@ -35,6 +35,29 @@ Two events do not move the stage the usual way: `case_created` (the trigger, wri
 
 Event types outside the template (`outreach_attempted`, `task_completed`, `deadline_missed`, `extraction_completed`, and anything a later ticket adds) are history: they appear in the timeline but do not change the stage, owner or outcome.
 
+**Ownership and consultation events (TICKET-08, TICKET-11).** Template events that do not move the stage but change the owner or the provider:
+
+| Event | Effect | Who records it |
+|---|---|---|
+| `referral_unanswered` | Owner cleared (unowned trigger 2); latest referral `expired` | system only, from `tick` |
+| `patient_moved_provider` | Owner cleared (unowned trigger 3); `payload.provider_id` becomes the case's provider | system, coordination staff, navigator |
+| `consultation_accepted` | `patient_notified`/`referral_sent` → `referral_accepted`; latest referral `accepted` | responsible physician, through the answer endpoint only |
+| `consultation_redirected` | `patient_notified`/`referral_sent` → `referral_sent` with a new referral; old one `redirected` | same |
+| `consultation_more_data_requested` | Stage unchanged; a `supply_referral_data` task for the physician who asked | same |
+
+Every event marked `owner: "clear"` (`referral_rejected` is trigger 1) records `previous_owner_actor_id`. The three consultation answers assign an owner if the case has none (`owner_actor_id` in the answer, else the physician who asked). Posting a consultation answer to `POST /events` fails with `409 invalid_transition`. History events added: `consultation_requested`, `consultation_overdue`, `fhir_resource_stitched`.
+
+**Referral payload.** An event that moves the case into `referral_sent` (`referral_sent` itself, and a redirected answer) may carry the referral in the shape the referral (REF) messages use under DoH Circular 144/2026: status, priority, SNOMED-coded specialty.
+
+```json
+{ "type": "referral_sent", "payload": { "referral": {
+  "referral_id": "REF-4377-1", "to_provider_id": "prov_hospital_b",
+  "status": "pending", "priority": "routine",
+  "specialty": { "system": "http://snomed.info/sct", "code": "394584008", "display": "Gastroenterology" } } } }
+```
+
+`priority` is `routine`, `asap` or `stat` (the HL7 v2 referral priorities); `status` is `pending` (default), `accepted`, `rejected`, `expired` or `redirected`; `specialty.system` must be SNOMED CT and `code` a concept id. `referral_id` is optional (generated as `REF-<case>-<n>`). Any other shape fails with `400 validation_failed`. The referral is what stitching matches on. Status changes come from the events the template marks with `referral_status`; the client never sets them. Nexyra keeps the referral to know who owns the screening result. It does not replace e-Referral's own status tracking.
+
 ## Actor and trust model
 
 There is no login. The prototype still needs the server to know *who* is acting, because `TICKET-05` forbids closure by the `system` role or by coordination staff, and `TICKET-09`/`TICKET-15` require the server to reject a call made directly even when the UI hides the button.
@@ -62,6 +85,8 @@ A JSON object, because the role picker switches all three fields together. The s
 | Record an incomplete examination (`procedure_incomplete`) | no | no | yes | no |
 | Record patient outreach outcome | yes | yes | no | no |
 | Assign owner to an unowned case | yes | yes | yes | no |
+| Record that the patient moved provider (`patient_moved_provider`) | yes | yes | no | no |
+| Ask a consultation (`request_consultation`) | no | no | yes | no |
 | Answer a consultation | no | no | yes | no |
 | Confirm closure | no | no | yes | no |
 | Reopen a case | no | no | yes | no |
@@ -141,9 +166,20 @@ Everything the case detail page needs in one call (`TICKET-09`): timeline, stage
     { "n": 1, "at": "17 Nov 10:05", "channel": "call", "result": "No answer", "minutes": 3 }
   ],
   "available_actions": ["confirm_closure", "reopen_case", "reject_proposal"],
-  "verification": { "status": "ready", "proposal": "reopen" }
+  "verification": { "status": "ready", "proposal": "reopen", "proposed_outcome": null },
+  "provider": { "provider_id": "prov_clinic_b", "name": "Clinic B" },
+  "ownership": { "state": "owned", "unowned_since": null, "gaps": [
+    { "trigger": { "event_id": "e_1002_4", "type": "referral_rejected", "label": "Receiving provider rejected the referral", "reason": "Colonoscopy request incomplete (hospital B)" },
+      "previous_owner_actor_id": "act_001", "unowned_at": "2026-11-16T15:40:00+07:00",
+      "owned_at": "2026-11-18T11:42:00+07:00", "owner_actor_id": "act_005", "owner_event_type": "consultation_accepted", "hours_to_owner": 44 } ] },
+  "referrals": [ { "referral_id": "REF-4377-1", "from_provider_id": "prov_clinic_a", "to_provider": { "provider_id": "prov_hospital_b", "name": "Hospital B" }, "status": "accepted", "priority": "routine", "specialty": { "system": "http://snomed.info/sct", "code": "394584008", "display": "Gastroenterology" }, "replaces_referral_id": null, "sent_at": "...", "updated_at": "..." } ],
+  "consultations": [ { "consultation_id": "k_1dbeb6be", "question": "...", "requested_by_actor_id": "act_003", "to_provider": { }, "to_actor_id": "act_006", "referral_id": "REF-4377-1", "requested_at": "...", "due_at": "...", "task_id": "t_...", "status": "answered", "outcome": "accepted", "answer_note": "...", "answered_by_actor_id": "act_006", "answered_at": "...", "hours_to_answer": 24 } ]
 }
 ```
+
+`verification.proposed_outcome` is the outcome a `propose_closure` asks the physician to confirm (`proposedOutcomeFor` in `server/verify/`), otherwise `null`; `GET /verification` carries the same field inside `extraction`.
+
+`provider`, `ownership`, `referrals` and `consultations` are TICKET-08/11. `ownership.gaps` is the per-case metric "time from trigger to owned again": one row per unowned spell, `hours_to_owner` stored when an owner returns, `null` while the case is still unowned. `case.patient.identifier` is the identifier incoming FHIR resources are matched on. `available_actions` may include `request_consultation` (a stage the template marks `consultation`, no consultation open) and `answer_consultation` (one is open).
 
 `available_actions` is computed by the engine from the caller's role plus the case state. This is what stops the UI and the guards from drifting apart: one function produces both.
 
@@ -180,7 +216,30 @@ The two-pane closure screen (`TICKET-15`): report text plus extraction fields wi
 
 ### `GET /api/unowned`
 
-The dedicated unowned list (`TICKET-08`), one query, no client-side filtering. Each row carries `unowned_since` and the trigger that caused it.
+The dedicated unowned list (`TICKET-08`), one query, no client-side filtering. Every open case without an owner, longest unowned first. Each row carries `unowned_since` (the start of the open spell, so a later move does not reset it) and the trigger that caused it. No role is required; a present `X-Nexyra-Actor` header is still validated.
+
+```json
+{
+  "clock": { "now": "2026-11-17T11:42:00+07:00", "is_demo": true, "day": 0 },
+  "count": 1,
+  "cases": [ {
+    "case_id": "CX-1002",
+    "patient": { "display_name": "R. Kumar", "age": 47, "language": "en" },
+    "stage": "patient_notified", "stage_label": "Patient notified",
+    "provider": { "provider_id": "prov_clinic_a", "name": "Clinic A" },
+    "unowned_since": "2026-11-16T15:40:00+07:00", "hours_unowned": 20, "unowned_label": "Unowned 20h",
+    "trigger": { "event_id": "e_1002_4", "type": "referral_rejected", "label": "Receiving provider rejected the referral", "reason": "Colonoscopy request incomplete (hospital B)" },
+    "previous_owner": { "actor_id": "act_001", "display_name": "R. Haddad" },
+    "assign_owner_task": { "task_id": "t_1002_owner", "owner": { "actor_id": "act_001", "role": "coordination_staff", "display_name": "R. Haddad" }, "due_at": "2026-11-17T15:40:00+07:00" }
+  } ]
+}
+```
+
+**The three triggers.** (1) `referral_rejected`. (2) `referral_unanswered`, written by `tick` when a case is still owned and still at `referral_sent` past that stage's deadline (the acceptance deadline); a timer row keyed `referral_sent#unanswered` makes it fire once per deadline. (3) `patient_moved_provider` on an open case. Each trigger opens an ownership gap and an `assign_owner` task for coordination staff at the case's current provider (the referring provider for 1 and 2, the provider the patient moved to for 3), due `unowned.assign_owner_hours` (24) later. A move on a case that is already unowned keeps the spell open and hands the task to the new provider's coordination staff. Any event that gives the case an owner again (`owner_assigned`, a consultation answer, `reopened`, `procedure_incomplete`) closes the gap with `hours_to_owner` and completes the task. `owner_assigned` and the other assigning events record `handed_over_by` (the owner before, or the last owner before the case went unowned), `received_by` and `assigned_by` in their payload.
+
+### `GET /api/providers`
+
+`{ "providers": [ { "provider_id": "prov_clinic_a", "name": "Clinic A", "kind": "clinic" } ] }`. For pickers (move, redirect).
 
 ### `GET /api/program/summary`
 
@@ -213,7 +272,18 @@ Funnel numbers are computed from the `events` table at request time, never store
 
 ### `GET /api/ingest/unstitched`
 
-Events that matched no case (`TICKET-08`), so they are visible instead of silently dropped.
+Events that matched no case (`TICKET-08`), so they are visible instead of silently dropped. Oldest first. `?status=queued` (default), `stitched` or `all`: a queued resource that is re-sent once its case exists is stitched and its row marked `stitched`.
+
+```json
+{ "count": 1, "items": [ {
+  "unstitched_id": "u_3c1f0a2e", "resource_type": "Procedure", "resource_id": "proc-x",
+  "source_provider": { "provider_id": "prov_hospital_b", "name": "Hospital B" },
+  "patient_identifier": "NX-P-9999", "referral_id": "REF-UNKNOWN",
+  "reason_code": "unknown_referral", "reason": "No case carries the referral REF-UNKNOWN.",
+  "received_at": "2026-11-18T11:42:00+07:00", "recorded_at": "...", "status": "queued", "stitched_case_id": null } ] }
+```
+
+`reason_code` is one of `no_patient_identifier`, `no_referral_reference`, `unknown_referral`, `patient_mismatch`, `case_closed`.
 
 ### `GET /api/clock`
 
@@ -284,7 +354,7 @@ Requires the `X-Nexyra-Actor` header (any human role). Optional body `{ "documen
 
 What it writes: one `extractions` row (keyed by the sha256 of the report text) and one `extraction_completed` event with `actor_role: "system"` and a payload of `{ prompt_version, model, proposal, proposal_reason, document_id, text_hash, extraction_id, requested_by }`. Both are written only when the model actually read the report: a cache hit and an unavailable result write nothing. It never touches the case row, so no extraction result can move, propose or close a case; closure stays `POST /closure/confirm` under `TICKET-05`'s rules.
 
-The `POST` response adds two fields to the `GET` shape: `proposed_outcome` (the outcome key a `propose_closure` asks the physician to confirm, otherwise `null`) and `origin` (`model`, `cache`, `unavailable`, or `no_report`).
+The `POST` response adds `origin` (`model`, `cache`, `unavailable`, or `no_report`) to the `GET` shape, plus `proposed_outcome` (the outcome key a `propose_closure` asks the physician to confirm, otherwise `null`). Since TICKET-15's follow-up the `GET` carries `extraction.proposed_outcome` too, computed by the same `proposedOutcomeFor`.
 
 **Fields.** Always these six, in this order. A field whose citation fails validation is `unknown` with `validated: false` and `quote: null`.
 
@@ -322,6 +392,57 @@ The patient page, unauthenticated by design. Body: `{ "response": "understood" }
 
 Batch of FHIR resources (`TICKET-07`, `TICKET-08`). Returns per-resource outcome: `created_case`, `stitched`, `queued_unstitched`, or `rejected` with a reason. Nothing is silently discarded.
 
+Requires the `X-Nexyra-Actor` header (any human role; recorded as `ingested_by`). The body is one resource or a `Bundle` (its `entry[].resource`, in order). Optional top-level `source_provider_id` names the sender when a resource does not.
+
+**What this ingest stitches (TICKET-08):** `Appointment`, `Procedure` and `DiagnosticReport`, FHIR R4-shaped JSON. A resource is matched to a case by **both** keys, exactly:
+
+- the patient identifier: `subject.identifier.value` (Procedure, DiagnosticReport) or the Patient participant's `actor.identifier.value` (Appointment), falling back to a `Patient/<id>` reference; compared with `case.patient.identifier`;
+- the originating referral: `basedOn[]` → `ServiceRequest/<referral_id>` (or `basedOn[].identifier.value`), a referral recorded on the case.
+
+The sender is read from `meta.source` (`urn:nexyra:provider:<id>`) or a `performer` Organization reference. It is informational and not a matching key.
+
+A matched resource is stitched. When the template's `stitching.rules` map it to an event that is a legal next step, the system role records that event and the case moves: `Appointment` `booked` → `colonoscopy_booked`, `Procedure` `completed` → `colonoscopy_performed`, pathology `DiagnosticReport` (`category` SP, or a code that says pathology) `final`/`amended` → `pathology_received`. Otherwise (the case is not at that step yet, a colonoscopy report, a cancelled appointment) it is stitched as a `fhir_resource_stitched` history event with `not_moved_reason`. A `DiagnosticReport` with text (`presentedForm[].data` base64, else `conclusion`) is attached as a document of its kind. A resource already stitched is answered `stitched` with `duplicate: true` and writes nothing. Unmatched resources go to the unstitched queue. A malformed resource or an unsupported type is `rejected`. `created_case` is reserved for the positive-FIT ingest (TICKET-07) and is always `0` here.
+
+```json
+{ "results": [
+    { "resource_type": "Appointment", "resource_id": "appt-4377-1", "outcome": "stitched", "case_id": "CX-1002", "event_id": "e_...", "stage": "colonoscopy_booked", "stage_moved": true, "document_id": null },
+    { "resource_type": "Procedure", "resource_id": "proc-x", "outcome": "queued_unstitched", "unstitched_id": "u_...", "reason_code": "unknown_referral", "reason": "No case carries the referral REF-UNKNOWN." } ],
+  "counts": { "created_case": 0, "stitched": 1, "queued_unstitched": 1, "rejected": 0 } }
+```
+
+Matching is exact. Probabilistic identity matching is out of scope (`docs/architecture.md`).
+
+### `POST /api/cases/{case_id}/consultations`
+
+`TICKET-11`. The referring physician asks the receiving provider one short question. Body: `{ "question": "...", "to_provider_id": "prov_hospital_b", "to_actor_id": "act_006" }`. `to_provider_id` defaults to the case's latest referral's receiving provider, and `to_actor_id` to the first physician there. Allowed where `available_actions` has `request_consultation`: responsible physician, a stage the template marks `consultation` (`patient_notified`, `referral_sent`, `pathology_received`, `closure_proposed`), and no other consultation open. Otherwise the call fails with `403 role_not_permitted` (role) or `409 invalid_transition` (stage, or one already open). An empty question gets `400`, and so does one over 500 characters.
+
+Writes, in one batch, a `consultation_requested` event, a `consultations` row and an `answer_consultation` task owned by the receiving physician, due `consultation.answer_hours` (48) later. Returns the case view plus `recorded` and `consultation_id`.
+
+### `POST /api/consultations/{consultation_id}/answer`
+
+Body: `{ "outcome": "accepted" | "redirected" | "more_data_requested", "note": "...", "owner_actor_id": "act_005", "redirect_to_provider_id": "prov_endo_e" }`. Responsible physician only (`answer_consultation`). The outcome selects the template event:
+
+- `accepted` → `consultation_accepted`: the case moves to `referral_accepted`; the latest referral is `accepted`.
+- `redirected` → `consultation_redirected`: needs `redirect_to_provider_id`. The case moves to `referral_sent` with a new referral to that provider (same priority and specialty unless `referral` overrides them), so the acceptance deadline restarts. The old referral is `redirected`.
+- `more_data_requested` → `consultation_more_data_requested`: the stage stays; a `supply_referral_data` task goes to the physician who asked, due `consultation.more_data_hours` (72) later.
+
+An answer that is not a legal step from the case's stage (for example `accepted` at `closure_proposed`) fails with `409` and the consultation stays open. On an unowned case the answer assigns `owner_actor_id`, or else the physician who asked. The consultation row records `outcome` and `hours_to_answer` (the TICKET-11 metric). The task completes and the consultation's timers are cancelled. A second answer fails with `409`. `POST /api/tasks/{id}/complete` refuses an `answer_consultation` task.
+
+**Unanswered consultations escalate** through `tick` like stage deadlines: a `consultation_overdue` event, an `escalation` task and a timer row keyed `consultation:<id>`. Level *n* goes to the *n*-th role of the template's `consultation.escalation` (responsible physician, then program manager). Level 1 goes to the physician who owes the answer. The same spacing and idempotency apply, and these alerts count in `escalations` and `escalations_per_role`.
+
+**In production the messages travel over Malaffi e-Referral.** DoH Circular 144/2026 makes e-Referral the channel between referrer and receiver. This endpoint pair stands in for that exchange in the prototype; deployed, Nexyra would only read the consultation status from e-Referral and keep the owner, the deadline and the escalation. It is not a new messaging channel.
+
+### Demo case 2 through the API (CX-1002)
+
+The seed starts CX-1002 unowned after its rejected referral. The walk below is tested in `server/consultation.test.ts`:
+
+1. `GET /api/unowned`: CX-1002, trigger `referral_rejected`, task with R. Haddad (clinic A).
+2. `POST /api/cases/CX-1002/events` as S. Al Ali: `{ "type": "patient_moved_provider", "payload": { "provider_id": "prov_clinic_b" } }`. Still unowned, provider clinic B, task now with S. Al Ali.
+3. `POST /api/cases/CX-1002/consultations` as Dr. Fulan: `{ "question": "Missing FIT date and history now attached. Can you accept the referral?" }`. Task for Dr. Fulana at hospital B, due in 48 h.
+4. `POST /api/clock/advance` `{ "days": 1 }`.
+5. `POST /api/consultations/{id}/answer` as Dr. Fulana: `{ "outcome": "accepted", "owner_actor_id": "act_005" }`. Stage `referral_accepted`, owner S. Al Ali, `hours_to_answer` 24, `hours_to_owner` 44, and the case leaves `GET /api/unowned`.
+6. `POST /api/ingest/fhir` with hospital B's `Appointment` (`basedOn` `ServiceRequest/REF-4377-1`, patient `NX-P-1002`): stitched, stage `colonoscopy_booked`.
+
 ### `POST /api/clock/advance`
 
 Body: `{ "days": 1 }` or `{ "until": "next_deadline" }` (`TICKET-06`). Runs `tick(now)` and returns the new clock plus a count of what changed. Repeated calls at the same `now` must produce no additional escalations; the guard lives in the engine, and the test calls this endpoint twice.
@@ -336,6 +457,8 @@ Body: `{ "days": 1 }` or `{ "until": "next_deadline" }` (`TICKET-06`). Runs `tic
 ```
 
 `escalations_per_role` answers the alert-fatigue question `TICKET-06` asks for: how many alerts one role received from one advance.
+
+`unowned_triggered` (TICKET-08) counts the cases this tick made unowned because their referral went unanswered past the acceptance deadline. `POST /api/clock/tick` returns it too.
 
 `cases_advanced` is always `0` in this prototype: time escalates a case, it never moves it through the pathway. Advancing the clock must not advance a stage, or the demo would show the engine closing work it cannot close.
 

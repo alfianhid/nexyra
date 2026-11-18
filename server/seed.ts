@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import type { InStatement } from "@libsql/client";
 import { databaseLabel, getDb, type Db } from "./db.js";
-import { foldEvents, type CaseState, type RecordedEvent } from "./engine.js";
+import { eventDefinition, foldEvents, type CaseState, type RecordedEvent } from "./engine.js";
+import { ownershipGaps } from "./ownership.js";
 
 // TICKET-17: three cases, all fictional. Running this file twice must not duplicate
 // anything, so every row has a fixed id and every write is an upsert.
@@ -9,14 +10,32 @@ import { foldEvents, type CaseState, type RecordedEvent } from "./engine.js";
 const NOW = "2026-11-17T11:42:00+07:00";
 const DEMO_DAY_ZERO = "2026-11-17T11:42:00+07:00";
 
-const ACTORS = [
-  { id: "act_001", role: "coordination_staff", display_name: "R. Haddad" },
-  { id: "act_002", role: "navigator", display_name: "Nur H." },
-  { id: "act_003", role: "responsible_physician", display_name: "Dr. Fulan" },
-  { id: "act_004", role: "program_manager", display_name: "A. Al Suwaidi" },
-  { id: "act_005", role: "coordination_staff", display_name: "S. Al Ali" },
-  { id: "act_system", role: "system", display_name: "system" },
+// TICKET-08: fictional providers. Clinic A is where CX-1002 started, clinic B where its
+// patient moved; hospital B received (and rejected) its referral.
+const PROVIDERS = [
+  { id: "prov_clinic_a", name: "Clinic A", kind: "clinic" },
+  { id: "prov_clinic_b", name: "Clinic B", kind: "clinic" },
+  { id: "prov_hospital_b", name: "Hospital B", kind: "hospital" },
+  { id: "prov_endo_e", name: "Endoscopy Unit E", kind: "endoscopy_unit" },
 ];
+
+const ACTORS = [
+  { id: "act_001", role: "coordination_staff", display_name: "R. Haddad", provider_id: "prov_clinic_a" },
+  { id: "act_002", role: "navigator", display_name: "Nur H.", provider_id: "prov_clinic_b" },
+  { id: "act_003", role: "responsible_physician", display_name: "Dr. Fulan", provider_id: "prov_clinic_b" },
+  { id: "act_004", role: "program_manager", display_name: "A. Al Suwaidi", provider_id: null },
+  { id: "act_005", role: "coordination_staff", display_name: "S. Al Ali", provider_id: "prov_clinic_b" },
+  // TICKET-11: the receiving physician a consultation on CX-1002 is addressed to.
+  { id: "act_006", role: "responsible_physician", display_name: "Dr. Fulana", provider_id: "prov_hospital_b" },
+  { id: "act_system", role: "system", display_name: "system", provider_id: null },
+];
+
+// The specialty a colonoscopy referral is addressed to, as a SNOMED CT coding.
+const GASTROENTEROLOGY = {
+  system: "http://snomed.info/sct",
+  code: "394584008",
+  display: "Gastroenterology",
+};
 
 type SeedEvent = {
   id: string;
@@ -34,6 +53,8 @@ type SeedCase = {
   patient_name: string;
   patient_age: number;
   patient_language: string;
+  // TICKET-08: what incoming FHIR resources are matched on. Fictional by construction.
+  patient_identifier: string;
   // What the story says the case looks like at day 0. The seed does not write these: it
   // replays `events` through the engine and refuses to run if the replay disagrees, so
   // the cached columns are always what rebuildCase would produce (TICKET-03).
@@ -53,6 +74,7 @@ const CASES: SeedCase[] = [
     patient_name: "Y. Al Hammadi",
     patient_age: 58,
     patient_language: "ar",
+    patient_identifier: "NX-P-1001",
     expect: { stage: "result_received", owner_actor_id: "act_005", final_outcome: null },
     events: [
       {
@@ -61,7 +83,7 @@ const CASES: SeedCase[] = [
         actor_id: "act_system",
         at: "2026-11-15T09:12:00+07:00",
         summary: "Case created from FIT result 4412/26",
-        payload: { owner_actor_id: "act_005" },
+        payload: { owner_actor_id: "act_005", provider_id: "prov_clinic_b" },
       },
       {
         id: "e_1001_2",
@@ -73,12 +95,15 @@ const CASES: SeedCase[] = [
     ],
   },
   {
-    // 2. Referral rejected by the receiving hospital while the patient moves clinic: the
-    // case goes back to the step before the referral with no owner (TICKET-08 trigger 1).
+    // 2. Referral rejected by the receiving hospital: the case goes back to the step
+    // before the referral with no owner (TICKET-08 trigger 1). The demo then records the
+    // patient's move to clinic B, asks hospital B a consultation and answers it, which
+    // gives the case an owner again (docs/api.md, "Demo case 2 through the API").
     id: "CX-1002",
     patient_name: "R. Kumar",
     patient_age: 47,
     patient_language: "en",
+    patient_identifier: "NX-P-1002",
     expect: { stage: "patient_notified", owner_actor_id: null, final_outcome: null },
     events: [
       {
@@ -87,7 +112,7 @@ const CASES: SeedCase[] = [
         actor_id: "act_system",
         at: "2026-11-12T08:00:00+07:00",
         summary: "Case created from FIT result 4377/26 at clinic A",
-        payload: { owner_actor_id: "act_001" },
+        payload: { owner_actor_id: "act_001", provider_id: "prov_clinic_a" },
       },
       {
         id: "e_1002_2",
@@ -102,13 +127,27 @@ const CASES: SeedCase[] = [
         actor_id: "act_001",
         at: "2026-11-14T10:00:00+07:00",
         summary: "Referral sent to hospital B through e-Referral",
+        payload: {
+          referral: {
+            referral_id: "REF-4377-1",
+            from_provider_id: "prov_clinic_a",
+            to_provider_id: "prov_hospital_b",
+            status: "pending",
+            priority: "routine",
+            specialty: GASTROENTEROLOGY,
+          },
+        },
       },
       {
         id: "e_1002_4",
         type: "referral_rejected",
         actor_id: "act_system",
         at: "2026-11-16T15:40:00+07:00",
-        summary: "Referral rejected by hospital B: colonoscopy request incomplete; patient moved to clinic B",
+        summary: "Referral rejected by hospital B: colonoscopy request incomplete",
+        payload: {
+          previous_owner_actor_id: "act_001",
+          reason: "Colonoscopy request incomplete (hospital B)",
+        },
       },
     ],
   },
@@ -120,6 +159,7 @@ const CASES: SeedCase[] = [
     patient_name: "L. Fernandes",
     patient_age: 52,
     patient_language: "en",
+    patient_identifier: "NX-P-1003",
     expect: {
       stage: "closure_proposed",
       owner_actor_id: "act_003",
@@ -132,7 +172,7 @@ const CASES: SeedCase[] = [
         actor_id: "act_system",
         at: "2026-10-14T09:00:00+07:00",
         summary: "Case created from FIT result 4302/26",
-        payload: { owner_actor_id: "act_005" },
+        payload: { owner_actor_id: "act_005", provider_id: "prov_clinic_b" },
       },
       {
         id: "e_1003_2",
@@ -147,6 +187,16 @@ const CASES: SeedCase[] = [
         actor_id: "act_005",
         at: "2026-10-16T09:00:00+07:00",
         summary: "Referral sent to the endoscopy unit through e-Referral",
+        payload: {
+          referral: {
+            referral_id: "REF-4302-1",
+            from_provider_id: "prov_clinic_b",
+            to_provider_id: "prov_endo_e",
+            status: "pending",
+            priority: "routine",
+            specialty: GASTROENTEROLOGY,
+          },
+        },
       },
       {
         id: "e_1003_4",
@@ -238,6 +288,90 @@ function replay(c: SeedCase): CaseState {
   return state;
 }
 
+// TICKET-08: the referral rows and ownership gaps a seed history implies, computed from
+// its events the way the write path produces them (referral payloads insert, events the
+// template marks with referral_status update the latest referral, ownershipGaps folds).
+function ownershipRows(db: Db, c: SeedCase): InStatement[] {
+  const out: InStatement[] = [];
+  const referrals: Record<string, unknown>[] = [];
+
+  for (const e of c.events) {
+    const status = eventDefinition(e.type)?.referral_status ?? null;
+    const latest = referrals.at(-1);
+    if (status !== null && latest) {
+      latest.status = status;
+      latest.updated_at = e.at;
+    }
+    const referral = e.payload?.referral as
+      | { referral_id: string; from_provider_id: string | null; to_provider_id: string; status: string; priority: string; specialty: { system: string; code: string; display: string } }
+      | undefined;
+    if (referral) {
+      referrals.push({
+        id: referral.referral_id,
+        case_id: c.id,
+        from_provider_id: referral.from_provider_id,
+        to_provider_id: referral.to_provider_id,
+        status: referral.status,
+        priority: referral.priority,
+        specialty_system: referral.specialty.system,
+        specialty_code: referral.specialty.code,
+        specialty_display: referral.specialty.display,
+        replaces_referral_id: (latest?.id as string | undefined) ?? null,
+        sent_event_id: e.id,
+        sent_at: e.at,
+        updated_at: e.at,
+      });
+    }
+  }
+
+  const upsertReferral = db.prepare(
+    `INSERT INTO referrals (
+       id, case_id, from_provider_id, to_provider_id, status, priority, specialty_system,
+       specialty_code, specialty_display, replaces_referral_id, sent_event_id, sent_at, updated_at
+     ) VALUES (
+       @id, @case_id, @from_provider_id, @to_provider_id, @status, @priority, @specialty_system,
+       @specialty_code, @specialty_display, @replaces_referral_id, @sent_event_id, @sent_at, @updated_at
+     )
+     ON CONFLICT(id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`,
+  );
+  for (const row of referrals) out.push(upsertReferral.bind(row as Record<string, string | null>));
+
+  const upsertGap = db.prepare(
+    `INSERT INTO ownership_gaps (
+       id, case_id, trigger_event_id, trigger_type, reason, previous_owner_actor_id, unowned_at,
+       owner_event_id, owner_event_type, owner_actor_id, owned_at, hours_to_owner
+     ) VALUES (
+       @id, @case_id, @trigger_event_id, @trigger_type, @reason, @previous_owner_actor_id, @unowned_at,
+       @owner_event_id, @owner_event_type, @owner_actor_id, @owned_at, @hours_to_owner
+     )
+     ON CONFLICT(id) DO UPDATE SET
+       owner_event_id = excluded.owner_event_id, owner_event_type = excluded.owner_event_type,
+       owner_actor_id = excluded.owner_actor_id, owned_at = excluded.owned_at,
+       hours_to_owner = excluded.hours_to_owner`,
+  );
+  for (const gap of ownershipGaps(c.events.map(recorded))) {
+    const trigger = c.events[gap.trigger_index];
+    if (!trigger) continue;
+    out.push(
+      upsertGap.bind({
+        id: `g_${trigger.id}`,
+        case_id: c.id,
+        trigger_event_id: trigger.id,
+        trigger_type: gap.trigger_type,
+        reason: gap.reason,
+        previous_owner_actor_id: gap.previous_owner_actor_id,
+        unowned_at: gap.unowned_at,
+        owner_event_id: gap.owner_index === null ? null : (c.events[gap.owner_index]?.id ?? null),
+        owner_event_type: gap.owner_event_type,
+        owner_actor_id: gap.owner_actor_id,
+        owned_at: gap.owned_at,
+        hours_to_owner: gap.hours_to_owner,
+      }),
+    );
+  }
+  return out;
+}
+
 const REPORT_TEXT =
   "Procedure: colonoscopy. Preparation was inadequate. The cecum was not reached. " +
   "No polyp identified in the examined segment. Recommend repeat examination.";
@@ -290,20 +424,31 @@ export async function seed(
   const db = target ?? (await getDb());
   const statements: InStatement[] = [];
 
+  const upsertProvider = db.prepare(
+    `INSERT INTO providers (id, name, kind) VALUES (@id, @name, @kind)
+     ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind`,
+  );
+
   const upsertActor = db.prepare(
-    `INSERT INTO actors (id, role, display_name) VALUES (@id, @role, @display_name)
-     ON CONFLICT(id) DO UPDATE SET role = excluded.role, display_name = excluded.display_name`,
+    `INSERT INTO actors (id, role, display_name, provider_id)
+     VALUES (@id, @role, @display_name, @provider_id)
+     ON CONFLICT(id) DO UPDATE SET role = excluded.role, display_name = excluded.display_name,
+       provider_id = excluded.provider_id`,
   );
 
   const upsertCase = db.prepare(
     `INSERT INTO cases (
        id, patient_name, patient_age, patient_language, pathway_id,
-       owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at
+       owner_actor_id, stage, status, final_outcome, stage_entered_at, created_at, updated_at,
+       provider_id, patient_identifier
      ) VALUES (
        @id, @patient_name, @patient_age, @patient_language, @pathway_id,
-       @owner_actor_id, @stage, @status, @final_outcome, @stage_entered_at, @created_at, @updated_at
+       @owner_actor_id, @stage, @status, @final_outcome, @stage_entered_at, @created_at, @updated_at,
+       @provider_id, @patient_identifier
      )
      ON CONFLICT(id) DO UPDATE SET
+       provider_id = excluded.provider_id,
+       patient_identifier = excluded.patient_identifier,
        patient_name = excluded.patient_name,
        patient_age = excluded.patient_age,
        patient_language = excluded.patient_language,
@@ -354,11 +499,14 @@ export async function seed(
 
   // One atomic batch: a seed that fails halfway leaves the database as it was.
   {
+    for (const p of PROVIDERS) statements.push(upsertProvider.bind(p));
     for (const a of ACTORS) statements.push(upsertActor.bind(a));
 
     for (const c of CASES) {
       const state = replay(c);
       statements.push(upsertCase.bind({
+        provider_id: state.provider_id ?? null,
+        patient_identifier: c.patient_identifier,
         id: c.id,
         patient_name: c.patient_name,
         patient_age: c.patient_age,
@@ -386,6 +534,9 @@ export async function seed(
           payload: JSON.stringify(event.payload),
         }));
       }
+
+      // TICKET-08 rows derived from the same history the engine replays.
+      statements.push(...ownershipRows(db, c));
     }
 
     statements.push(upsertDocument.bind({
@@ -418,12 +569,14 @@ export async function seed(
       due_at: "2026-11-18T09:00:00+07:00",
       status: "open",
     }));
+    // TICKET-08: the assign-owner task a rejected referral opens, for coordination staff
+    // at the case's provider (clinic A), due the template's 24 hours after the trigger.
     statements.push(upsertTask.bind({
       id: "t_1002_owner",
       case_id: "CX-1002",
       kind: "assign_owner",
-      owner_actor_id: null,
-      due_at: "2026-11-18T12:00:00+07:00",
+      owner_actor_id: "act_001",
+      due_at: "2026-11-17T15:40:00+07:00",
       status: "open",
     }));
     statements.push(upsertTask.bind({
