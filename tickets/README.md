@@ -114,8 +114,8 @@ Read from the ticket files and the code (317 tests pass in 26 files). "Human" me
 | 10 Outreach ladder | done | Arabic native-speaker review (human); Urdu, Hindi, Tagalog empty |
 | 11 Consultation monitoring | done | Answers enforced to the addressed physician (403 otherwise); Dr. Fulana and Nur H. act through forms on the case page |
 | 12 Labelled test set | in progress (human) | A person must check `labels.json` before the evaluation runs |
-| 13 Report extraction | done in code | Not run against a real model |
-| 14 Closure verification evaluation | in progress | Harness ready; needs a model key and the checked labels. `[EVAL RESULTS PENDING — TICKET-14]` |
+| 13 Report extraction | done | Run against a real model on 18 Nov (TICKET-14) |
+| 14 Closure verification evaluation | done (18 Nov) | 0 of 14 must-not-close reports proposed for closure; 4 of 10 closable proposed, 6 of 10 held back; see `docs/evaluation-results.md`. Labels not yet checked by a clinician |
 | 15 Closure confirmation screen | done | `proposal/reject` (`proposal_rejected`), Reopen case (`procedure_incomplete`) and the `ai_divergence` count are built; the closure review reads the latest report |
 | 16 Program view | done | Check the delay-reason count after a logged call (see `docs/demo-script.md`) |
 | 17 Demo cases and reset | in progress | Demo walk done; a timed rehearsal remains (video path about 2:35) |

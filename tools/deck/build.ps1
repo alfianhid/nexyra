@@ -156,8 +156,8 @@ $s6 = S 6
 [void](Add-Text $s6 'Answer' $L $TOP1 $tw ($BOT - $TOP1) @(
   'H|Two kinds of measure: the mechanism now, programme outcomes in a pilot.',
   'S|Measured now, on synthetic data',
-  'B|**Closure verification:** for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. The harness is built (npm run eval) but has not yet been run against a live model, so no accuracy figure is claimed.',
-  'B|**Behaviour of the engine:** 317 automated tests in 26 files, including the whole demo replayed through the API. The live extraction path is tested with a fake model only.',
+  'B|**Closure verification, measured 18 Nov (Muse Spark 1.3, 24 labelled synthetic reports, prompt not tuned on them):** 0 of 14 must-not-close reports proposed for closure; 4 of 10 closable reports proposed, 6 held for human reading (mostly bowel prep given only as a score). Field agreement 15 to 24 of 24; 1 citation rejected.',
+  'B|**Behaviour of the engine:** 321 automated tests, including the whole demo replayed through the API.',
   'S|Proposed for a pilot, to be agreed with the programme and clinicians',
   'B|Share of positive results with a named owner within a set time.',
   'B|Share of cases with a colonoscopy within 31 days of referral (HAAD standard: within 31 days for over 90% of people).',
@@ -178,7 +178,7 @@ $s6 = S 6
   'B|**Abu Dhabi, Almansoori, Alzaabi, Alketbi, BMC Cancer 2021;21:897 (doi:10.1186/s12885-021-08623-9):** in ambulatory clinics in 2015 to 2016, 30.5% (436) of people with a positive FIT/gFOBT had the follow-up colonoscopy; 12% were never told their result. The HAAD standard the paper cites: colonoscopy within 31 days of referral for over 90% of people.',
   'B|**DoH Circular 144/2026:** all referral transactions go to Malaffi as HL7 REF messages by 31 August 2026; e-Referral is for referral management, status tracking and referrer-receiver communication.',
   'B|**What follows for the design:** an outreach ladder that starts early, escalation to people, no risk model. We do not claim that risk-targeted navigation works.',
-  'B|**Prior testing:** 317 automated tests. The evaluation of report reading on 24 labelled synthetic reports is built but not yet run against a live model.'
+  'B|**Prior testing:** 321 automated tests. Report reading on 24 labelled synthetic reports with a live model (Muse Spark 1.3): 0 of 14 unsafe closures proposed; 4 of 10 safe closures proposed, the rest sent to a human.'
 ) 12 11)
 
 # ---------------- Slide 8 (table) ----------------
@@ -226,15 +226,15 @@ $iw9 = 140; $ix9 = 700 - $iw9
 $script:GAP = 1.5
 [void](Add-Text $s9 'Answer' $L $TOP2 $W ($BOT - $TOP2) @(
   'H|Responsible AI: AI reads and proposes, a physician decides, and every claim is checkable.',
-  'B|**Human oversight:** AI never closes a case; the system role is blocked in code and in tests. Only the responsible physician''s confirmation closes one, with a valid outcome and attached evidence. Proposals are labelled as AI proposals; the physician can reopen the case or reject a proposal with a reason (proposal_rejected never moves the case). The programme view counts physician-AI divergence.',
+  'B|**Human oversight:** AI never closes a case (blocked in code and tests). Only the responsible physician closes one, with a valid outcome and attached evidence. AI proposals are labelled as such; the physician can reopen or reject one with a reason, and the programme view counts physician-AI divergence.',
   'B|**Explainability:** every extracted answer carries a quote, which code checks is in the report (if not, the field becomes unknown). Rules in code, not the model, make the proposal. Cancer never yields a closure proposal.',
   'B|**Failure modes:** a doubt ends as "needs human reading"; a case staying open is the safe direction of error. No model key, no model call. A model can quote correctly yet choose the wrong value, so the physician reads the quote.',
   'B|**Bias:** no risk score; no patient features beyond age and language in invented cases. Real-data bias, including Arabic reports, is untested.',
   'B|**Privacy and security:** no personal data. No login, security review or privacy assessment yet; a pilot needs them first.',
   'B|**Misuse:** a user can confirm closure wrongly; the audit trail records who did. Consultation answers are enforced to the addressed physician (server 403 otherwise). Roles are self-declared: no login.',
-  'B|**Demo readings:** both readings stored for case 3 are stored demo readings, not model output: the first has a model label that was not a verified live call; the second is hand-written ("no model call"). The live path is tested with a fake model only.',
+  'B|**Demo readings:** the two readings stored for case 3 (offline demo) are not live model output; the second is hand-written. Live calls are measured in the evaluation.',
   'B|**Patient wording:** Arabic not reviewed by a native speaker; Urdu, Hindi and Tagalog are empty drafts; no clinician has reviewed English or Arabic.',
-  'B|**Not yet done, stated plainly:** the report-reading evaluation has not been run against a live model, and no clinician has reviewed the pathway, deadlines, closure rules or test labels. Both come before any pilot. No clinician is on the team.'
+  'B|**Evaluation, live model:** 0 of 14 unsafe closures proposed; errors fall on the safe side (6 of 10 closable reports sent to a human). Synthetic reports, small set. **Not yet done:** no clinician has reviewed the pathway, deadlines, closure rules or test labels; this comes before any pilot.'
 ) 11 11)
 $script:GAP = 2
 # slide 9 screenshots (case3-2-closure-reopen, case3-3-reopened) left out: the full text needs the whole width at 11 pt
@@ -307,7 +307,7 @@ $sw15 = 160; $script:GAP = 1; $script:HGAP = 3; $sh15 = $sw15 * 0.625; $sy15 = $
   'B|Hosted at https://nexyra-health.vercel.app, resets itself every day.',
   'P|**Demonstration only:** mammography pathway, not clinically reviewed.',
   'P|**Assumptions:** deadlines other than the 31-day limit are team assumptions; drop-off rates are inputs, not findings; the scenario panel applies one trial''s effect size and is labelled an assumption.',
-  'P|**Not done:** the report-reading evaluation against a live model, clinical review, Malaffi connection, real messaging, login, security review.',
+  'P|**Measured:** live-model report reading, 0 of 14 unsafe closures proposed, 4 of 10 safe ones (docs/evaluation-results.md). **Not done:** clinical review, Malaffi connection, real messaging, login, security review.',
   'P|Nexyra is not a referral tracker and not a messaging channel, and it builds no risk model.'
 ) 12 11)
 $script:GAP = 2; $script:HGAP = 5

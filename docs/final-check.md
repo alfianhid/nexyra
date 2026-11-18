@@ -132,3 +132,7 @@ Status key: **met**, **not yet**, **human** (a person must do it).
 
 - **`npm test` timeouts fixed.** `vite.config.ts` now caps Vitest at 4 forks and raises hook/test timeouts to 60 s. On the main machine `npm test` then passed 317/317 twice in a row (65 s and 67 s).
 - **npm audit, production dependencies only (`npm audit --omit=dev`):** 2 moderate findings in `react-router` / `react-router-dom` (client-side routing). The fix needs a major-version upgrade; not done two days before the deadline. The critical findings reported by a full `npm audit` are in development tooling, not in the deployed app.
+
+## Later on 18 Nov: evaluation run
+
+The evaluation listed above as pending was run against a live model (`muse-spark-1.3`, prompt `extract-v1`, 24 reports, none unavailable): 0 of 14 must-not-close reports proposed for closure; 4 of 10 closable reports proposed, 6 held for human reading. Full results in `docs/evaluation-results.md`. The deck and documents now state these figures.

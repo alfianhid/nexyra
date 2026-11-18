@@ -707,7 +707,7 @@ No read or tick runs a query per case any more: tick loads each table once for a
 
 ## Model and provider
 
-`NEXYRA_MODEL` defaults to `deepseek/deepseek-v4.1-flash-1017`, called through an OpenAI-compatible chat completions endpoint (`LLM_BASE_URL`, `LLM_API_KEY`). Not Anthropic. Whatever model string is live is recorded, with the prompt version, in `docs/evaluation-results.md` (`TICKET-14`), so the published numbers name the model that produced them.
+`NEXYRA_MODEL` defaults to `deepseek/deepseek-v4.1-flash-1017`, called through an OpenAI-compatible chat completions endpoint (`LLM_BASE_URL`, `LLM_API_KEY`). Not Anthropic. Whatever model string is live is recorded, with the prompt version, in `docs/evaluation-results.md` (`TICKET-14`), so the published numbers name the model that produced them. The 18 Nov 2026 evaluation used `muse-spark-1.3` (Meta Model API) with prompt `extract-v1`; the call takes about 50 s per report, so `LLM_TIMEOUT_MS` was set to 180000 for that run.
 
 ### `POST /api/ingest/hl7v2`
 

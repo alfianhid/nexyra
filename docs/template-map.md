@@ -13,7 +13,7 @@ Status key: **ready** = the text is written from material in the repository. **p
 | 3 | Team Capability Summary* | `Maximum 1,000 characters` | `limitations.md` (no clinician on the team). Skills of the two members. | ready |
 | 4 | Architecture or workflow diagram* | (title only) | `architecture.md`, `README.md` ("What is in the build"), screenshots in `docs/shots/` | ready |
 | 5 | Target users and intended outcome* | (title only) | `PRODUCT.md`, `evidence.md`, `docs/demo-script.md` | ready |
-| 6 | How will success be measured?* | (title only) | `responsible-ai.md` (evaluation), `assumptions.md`. Pilot measures are proposals. No accuracy figure is claimed. | ready |
+| 6 | How will success be measured?* | (title only) | `responsible-ai.md` (evaluation), `assumptions.md`. Pilot measures are proposals. Evaluation of 18 Nov: 0 of 14 must-not-close reports proposed for closure; 4 of 10 closable proposed, 6 of 10 held back (synthetic, 24 reports). | ready |
 | 7 | Evidence supporting the approach* | `Citations, studies, benchmarks, or prior testing.` | `evidence.md`; prior testing: 317 automated tests. Full citation of the 30.5% figure is in `evidence.md`. | ready |
 | 8 | Data sources and legal right to use them* | `List source, type, owner, sensitivity, permissions, and whether personal data is used.` | `data-sources.md` | ready |
 | 9 | Risks and safeguards* | `Privacy; security; bias; explainability; misuse; human oversight; failure modes.` | `responsible-ai.md`, `limitations.md`. No security review exists. | partial |
@@ -37,7 +37,7 @@ Status key: **ready** = the text is written from material in the repository. **p
 
 ## Items that wait on other tickets
 
-- Evaluation numbers: none. The harness has not been run against a live model and no accuracy figure is claimed (slides 6, 7, 9).
+- Evaluation numbers (slides 6, 7, 9): run on 18 Nov 2026 with `muse-spark-1.3`, prompt `extract-v1`, 24 synthetic reports. Dangerous error first: 0 of 14 must-not-close reports proposed for closure (14 of 14 held back). 4 of 10 closable reports proposed, 6 of 10 held back (false alarms). Fields: 24 of 24 complete exam and pathology available, 23 of 24 next step, 20 of 24 tissue taken, 16 of 24 outcome category, 15 of 24 adequate preparation. 1 citation rejected. Source: `docs/evaluation-results.md`.
 - Clinical review status: not done, no clinician on the team; comes before any pilot (slides 3, 9, 12).
 - Deployment URL: https://nexyra-health.vercel.app (slides 4, 11, 15). Video link: `[PENDING — TICKET-21]`.
 - Screenshots `case1-*`, `case3-*`, `programme-*`, `patient-ar.png`: being captured (see `deck-content.md`).

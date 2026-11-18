@@ -94,8 +94,8 @@ Screenshots: `docs/shots/case1-1-ladder.png` (outreach ladder for a silent patie
 Heading: **Two kinds of measure: the mechanism now, programme outcomes in a pilot.**
 
 Measured now, on synthetic data:
-- Closure verification: for 24 labelled synthetic reports, how many fields and closure decisions match the labels, reported as fractions with denominators, wrong closures first, every error listed, with date, model and prompt version. The harness exists (`npm run eval`) but has not been run against a live model, so no accuracy figure is claimed.
-- Behaviour of the engine: 317 automated tests in 26 files, including the whole demo replayed through the API. The live extraction path is tested with a fake model only.
+- Closure verification (run 18 Nov 2026, `muse-spark-1.3`, prompt `extract-v1`, 24 labelled synthetic reports): wrong closures first, 0 of 14 reports that must not be closed were proposed for closure (14 of 14 held back). Of 10 reports that may be closed, 4 of 10 were proposed and 6 of 10 were held back for a human (false alarms, mostly bowel preparation written as a score only). Field agreement: complete exam 24 of 24, pathology available 24 of 24, next step 23 of 24, tissue taken 20 of 24, outcome category 16 of 24, adequate preparation 15 of 24. 1 citation rejected by the quote check. 0 prompt changes after seeing results. Synthetic, team-written, 24 is small, labels not checked by a clinician. Source: `docs/evaluation-results.md`.
+- Behaviour of the engine: 317 automated tests in 26 files, including the whole demo replayed through the API. The live model path is verified end to end with real calls (the 18 Nov evaluation); the tests use a fake model.
 
 Proposed for a pilot, to be agreed with the programme and clinicians:
 - Share of positive results with a named owner within a set time.
@@ -121,7 +121,7 @@ Heading: **Outreach drove follow-up in the trials; risk prediction did not chang
 - Abu Dhabi: Almansoori A, Alzaabi M, Alketbi L. Colorectal Cancer screening in ambulatory healthcare service clinics in Abu Dhabi, United Arab Emirates in 2015–2016. BMC Cancer. 2021;21:897. doi:10.1186/s12885-021-08623-9. Of people screened with FIT or gFOBT, 13.5% were positive; 30.5% (436) of those had the follow-up colonoscopy and 933 did not; 12% were never told their positive result. The paper cites the HAAD Standard for Colorectal Cancer Screening (2014): colonoscopy within 31 days of referral after a positive FIT, for over 90% of people.
 - DoH Circular 144/2026: all referral transactions go to Malaffi as HL7 REF messages by 31 August 2026; e-Referral is for referral management, status tracking and referrer-receiver communication.
 - What follows for the design: an outreach ladder that starts early, escalation to people, no risk model. We do not claim that risk-targeted navigation works.
-- Prior testing: 317 automated tests. The evaluation of report reading has not been run against a live model, so no accuracy figure is claimed.
+- Prior testing: 317 automated tests. Evaluation of report reading, 18 Nov 2026: 0 of 14 must-not-close reports proposed for closure; 4 of 10 closable reports proposed, 6 of 10 held back for a human (24 synthetic reports, labels not checked by a clinician).
 
 Screenshot: none (text slide).
 
@@ -157,9 +157,9 @@ Heading: **Responsible AI: AI reads and proposes, a physician decides, and every
 - Bias: no risk score and no patient features beyond age and language in invented cases. Real-data bias, including Arabic reports, is untested.
 - Privacy and security: no personal data. No login, security review or privacy assessment yet; a pilot needs them first.
 - Misuse: a user can confirm closure wrongly; the audit trail records who did. Consultation answers are enforced to the addressed physician (server 403 otherwise). The role is still self-declared: no login.
-- Demo readings: the two readings stored for case 3 are stored demo readings, not model output. The first has a model label that was not a verified live call; the second is hand-written (`hand-written demo reading (no model call)`). The live path is tested with a fake model only.
+- Demo readings: the two readings stored for case 3 are stored demo readings, not model output. The first has a model label that was not a verified live call; the second is hand-written (`hand-written demo reading (no model call)`). The live model path was verified with real calls in the 18 Nov evaluation; these stored readings are not output of those calls.
 - Patient wording: Arabic not reviewed by a native speaker; Urdu, Hindi and Tagalog are empty drafts; English and Arabic not reviewed by a clinician.
-- Evaluation: the harness has not been run against a live model; no accuracy figure is claimed. Clinical review: no clinician is on the team, and the pathway, deadlines, closure rules, test labels and patient wording have not been reviewed by one. That comes before any pilot.
+- Evaluation: run 18 Nov 2026 on 24 synthetic reports; 0 of 14 must-not-close reports proposed for closure, 4 of 10 closable reports proposed, 6 of 10 held back; labels not checked by a clinician. Clinical review: no clinician is on the team, and the pathway, deadlines, closure rules, test labels and patient wording have not been reviewed by one. That comes before any pilot.
 
 Screenshots: `docs/shots/case3-2-closure-reopen.png` (AI proposal, not a decision: reopen, with quotes), `docs/shots/case3-3-reopened.png` (case reopened by the physician, reasons recorded).
 
@@ -248,7 +248,7 @@ Demonstration only: mammography pathway, not clinically reviewed.
 
 Assumptions: deadlines other than the 31-day limit are team assumptions; drop-off rates are inputs, not findings; the scenario panel applies one trial's effect size and is labelled an assumption.
 
-Not done: evaluation run against a live model (no model key; no live model call verified; no accuracy figure is claimed), clinical review (no clinician on the team; comes before any pilot), Malaffi connection, real messaging, login, security review.
+Not done: clinical review (no clinician on the team, labels not checked by a clinician; comes before any pilot), Malaffi connection, real messaging, login, security review.
 
 Nexyra is not a referral tracker and not a messaging channel, and it builds no risk model.
 

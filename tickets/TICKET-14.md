@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 17 Nov · **Estimate:** 2 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-12, TICKET-13
-- **Status:** in progress
+- **Status:** done (18 Nov 2026). Run with `muse-spark-1.3` (Meta Model API), prompt `extract-v1`, 24 synthetic reports, each read fresh. Must-not-close: 14 of 14 held back, 0 of 14 proposed for closure (no dangerous error). May-be-closed: 4 of 10 proposed, 6 of 10 held back (false alarms). Fields: complete_exam 24 of 24, pathology_available 24 of 24, next_step 23 of 24, tissue_taken 20 of 24, outcome_category 16 of 24, adequate_prep 15 of 24. 1 citation rejected. 0 prompt changes after seeing results. Results: `docs/evaluation-results.md`. Labels not yet checked by a clinician.
 
 ## Goal
 
@@ -26,10 +26,10 @@ Tuning the prompt over and over until the numbers are perfect on the same set.
 
 ## Done when
 
-- [ ] `npm run eval` runs from start to finish and writes `docs/evaluation-results.md`
-- [ ] The results reported are the real results, errors included
-- [ ] If any report that must not be closed slips through as `propose_closure`, that is written at the very top of the results and brought to the team
-- [ ] A limitations sentence is present in the results file: synthetic test reports, team-written, small in number
+- [x] `npm run eval` runs from start to finish and writes `docs/evaluation-results.md`
+- [x] The results reported are the real results, errors included
+- [x] (none slipped: 0 of 14) If any report that must not be closed slips through as `propose_closure`, that is written at the very top of the results and brought to the team
+- [x] A limitations sentence is present in the results file: synthetic test reports, team-written, small in number
 
 ## Notes
 

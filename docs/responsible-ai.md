@@ -41,7 +41,7 @@ AI is also not used for anything else in the product. Deadlines, escalation, own
 
 ## Demo readings are not model output
 
-The two readings stored for demo case 3 are demo data. The first carries a `deepseek/...` model label but was not produced by a verified live model call. The second was written by hand and is labelled `hand-written demo reading (no model call)`. Do not describe either as a model result. The live extraction path is tested with a fake model only.
+The two readings stored for demo case 3 are demo data. The first carries a `deepseek/...` model label but was not produced by a verified live model call. The second was written by hand and is labelled `hand-written demo reading (no model call)`. Do not describe either as a model result. They are not output of the 18 Nov evaluation calls either: the live model path is verified end to end by those real calls (`muse-spark-1.3`), while the offline demo uses these stored readings.
 
 ## Planned, not in the code
 
@@ -57,8 +57,8 @@ The two readings stored for demo case 3 are demo data. The first carries a `deep
 
 ## Known risks
 
-- A model can misread a report. The design aims for a misread to keep a case open longer, not close one that should stay open. This is a design aim until the evaluation has run.
-- The test reports are written with AI help and read by AI, so the evaluation will be easier than real reports. They are English only and 24 in number.
+- A model can misread a report. The design aims for a misread to keep a case open longer, not close one that should stay open. In the 18 Nov evaluation, 0 of 14 reports that must not be closed were proposed for closure; that is a measurement on 24 synthetic reports, not a guarantee.
+- The test reports are written with AI help and read by AI, so the evaluation is likely easier than real reports. They are English only and 24 in number.
 - A model can quote correctly and still choose the wrong value, for example read "no polyps" as normal when the report also describes a mass. The quote check proves the words exist; the physician has to read them.
 - Bias: the prototype has no patient features beyond age and language in invented cases, and no risk score. Bias in real data, including in Arabic reports, has not been tested.
 - Human oversight depends on the physician reading the report text and the quote, not on trusting a label.
@@ -67,7 +67,7 @@ The two readings stored for demo case 3 are demo data. The first carries a `deep
 
 ## Evaluation results
 
-The harness is ready: `npm run eval` reads 24 labelled synthetic reports with no cache, compares every field and the closure decision with `data/test-reports/labels.json`, and writes `docs/evaluation-results.md`. It reports fractions with denominators, wrong closures first, every error listed, with date, model and prompt version (`extract-v1`). It has not been run because no model key was available, so no accuracy figure is claimed. If a model key is added later, results go in `docs/evaluation-results.md`. The labels were frozen on 18 Nov before any extraction and have not been checked by a clinician.
+The harness (`npm run eval`) reads 24 labelled synthetic reports with no cache, compares every field and the closure decision with `data/test-reports/labels.json`, and writes `docs/evaluation-results.md`, with fractions and denominators, wrong closures first, every error listed, with date, model and prompt version. On 18 Nov 2026 the harness was run for real (`muse-spark-1.3` through the Meta Model API, prompt `extract-v1`, 24 labelled synthetic reports, each read fresh, none unavailable). Reports that must not be closed: 14 of 14 held back, 0 of 14 proposed for closure (no dangerous error). Reports that may be closed: 4 of 10 proposed for closure, 6 of 10 held back for human reading (false alarms). Field agreement: complete_exam 24 of 24, pathology_available 24 of 24, next_step 23 of 24, tissue_taken 20 of 24, outcome_category 16 of 24, adequate_prep 15 of 24. 1 citation was rejected by the quote check. The main cause of false alarms is bowel preparation written as a score (for example BBPS) without a word such as "adequate": the prompt treats a score alone as unknown, so these go to a human. Most outcome-category disagreements are reports labelled "not stated" where the model named an outcome. The prompt was not changed after seeing the results (0 prompt changes). Full table and every disagreement: `docs/evaluation-results.md`. This measures the mechanism on synthetic reports written by the team with AI help; 24 is a small set; the labels have not been checked by a clinician. It is not clinical accuracy. Only the 24 synthetic reports were sent to the model.
 
 ## Clinical review
 
