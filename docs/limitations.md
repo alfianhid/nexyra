@@ -47,3 +47,7 @@ Not in the code:
 - Malaffi message formats beyond the circular's description of HL7 REF messages have not been seen first-hand.
 - The demo works because the clock is controlled from the screen. Real timing behaviour at scale has not been tested.
 - Security, privacy impact assessment, and data protection review have not been done.
+
+## Synthetic cohort
+
+Drop-off rates in the synthetic cohort are inputs, not findings. They are never presented as Nexyra results. The cohort (`npm run seed:cohort`) is generated from `data/generator-assumptions.json`; most values there are labelled "team guess", and the only literature anchor is the 30.5% Abu Dhabi colonoscopy follow-up figure (2015 to 2016), used to calibrate the product of the stage drop-offs. Time to run against Turso is unknown; it has only been measured against a local file.

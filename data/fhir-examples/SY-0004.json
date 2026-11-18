@@ -1,0 +1,374 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "id": "SY-0004-bundle",
+  "meta": {
+    "tag": [
+      {
+        "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+        "code": "SYNTHETIC",
+        "display": "Synthetic data, not a real patient"
+      }
+    ]
+  },
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "SY-0004-pt",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "identifier": [
+          {
+            "system": "https://nexyra.example/synthetic-id",
+            "value": "SYN-0004"
+          }
+        ],
+        "name": [
+          {
+            "text": "Test Patient 0004",
+            "family": "Patient 0004",
+            "given": [
+              "Test"
+            ]
+          }
+        ],
+        "birthDate": "1974-08-29",
+        "communication": [
+          {
+            "language": {
+              "coding": [
+                {
+                  "system": "urn:ietf:bcp:47",
+                  "code": "ur",
+                  "display": "Urdu"
+                }
+              ]
+            },
+            "preferred": true
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "SY-0004-fit",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "final",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "2335-8",
+              "display": "Hemoglobin.gastrointestinal [Presence] in Stool by Immunoassay"
+            }
+          ],
+          "text": "Faecal immunochemical test (FIT)"
+        },
+        "subject": {
+          "reference": "Patient/SY-0004-pt",
+          "display": "Test Patient 0004"
+        },
+        "effectiveDateTime": "2026-06-14T11:03:00+07:00",
+        "issued": "2026-06-14T11:03:00+07:00",
+        "valueCodeableConcept": {
+          "text": "Positive"
+        },
+        "interpretation": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
+                "code": "POS",
+                "display": "Positive"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "ServiceRequest",
+        "id": "SY-0004-sr1",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "active",
+        "intent": "order",
+        "code": {
+          "coding": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+              "code": "colonoscopy-referral"
+            }
+          ],
+          "text": "Referral for colonoscopy"
+        },
+        "subject": {
+          "reference": "Patient/SY-0004-pt",
+          "display": "Test Patient 0004"
+        },
+        "authoredOn": "2026-06-17T13:03:00+07:00",
+        "requester": {
+          "display": "Test Coordinator"
+        },
+        "performer": [
+          {
+            "display": "Test Endoscopy Unit 04"
+          }
+        ],
+        "extension": [
+          {
+            "url": "https://nexyra.example/fhir/StructureDefinition/referral-kind",
+            "valueString": "initial"
+          },
+          {
+            "url": "https://nexyra.example/fhir/StructureDefinition/referral-accepted-at",
+            "valueDateTime": "2026-06-20T19:03:00+07:00"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Appointment",
+        "id": "SY-0004-appt1",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "fulfilled",
+        "created": "2026-06-23T18:03:00+07:00",
+        "start": "2026-07-04T20:03:00+07:00",
+        "basedOn": [
+          {
+            "reference": "ServiceRequest/SY-0004-sr1"
+          }
+        ],
+        "participant": [
+          {
+            "actor": {
+              "display": "Test Endoscopy Unit 04"
+            },
+            "status": "accepted"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "SY-0004-proc1",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+              "code": "colonoscopy"
+            }
+          ],
+          "text": "Colonoscopy"
+        },
+        "subject": {
+          "reference": "Patient/SY-0004-pt",
+          "display": "Test Patient 0004"
+        },
+        "performedDateTime": "2026-07-04T20:03:00+07:00",
+        "performer": [
+          {
+            "actor": {
+              "display": "Dr. Test Endoscopist 04"
+            }
+          }
+        ],
+        "outcome": {
+          "text": "complete"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "DiagnosticReport",
+        "id": "SY-0004-colrep1",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+                "code": "colonoscopy"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+              "code": "colonoscopy-report"
+            }
+          ],
+          "text": "Colonoscopy report"
+        },
+        "subject": {
+          "reference": "Patient/SY-0004-pt",
+          "display": "Test Patient 0004"
+        },
+        "issued": "2026-07-04T20:03:00+07:00",
+        "performer": [
+          {
+            "display": "Dr. Test Endoscopist 04"
+          }
+        ],
+        "conclusion": "Synthetic report: complete examination to the caecum, adequate preparation.",
+        "conclusionCode": [
+          {
+            "text": "complete"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "ServiceRequest",
+        "id": "SY-0004-sr-path",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "active",
+        "intent": "order",
+        "code": {
+          "coding": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+              "code": "pathology-order"
+            }
+          ],
+          "text": "Pathology order"
+        },
+        "subject": {
+          "reference": "Patient/SY-0004-pt",
+          "display": "Test Patient 0004"
+        },
+        "authoredOn": "2026-07-04T23:03:00+07:00",
+        "requester": {
+          "display": "Dr. Test Endoscopist 04"
+        },
+        "performer": [
+          {
+            "display": "Test Pathology Lab 01"
+          }
+        ],
+        "extension": []
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "DiagnosticReport",
+        "id": "SY-0004-pathrep",
+        "meta": {
+          "tag": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/data-origin",
+              "code": "SYNTHETIC",
+              "display": "Synthetic data, not a real patient"
+            }
+          ]
+        },
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+                "code": "pathology"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+              "code": "pathology-report"
+            }
+          ],
+          "text": "Pathology report"
+        },
+        "subject": {
+          "reference": "Patient/SY-0004-pt",
+          "display": "Test Patient 0004"
+        },
+        "issued": "2026-07-20T07:03:00+07:00",
+        "performer": [
+          {
+            "display": "Test Pathology Lab 01"
+          }
+        ],
+        "conclusion": "Synthetic pathology: no significant pathology.",
+        "conclusionCode": [
+          {
+            "coding": [
+              {
+                "system": "https://nexyra.example/fhir/CodeSystem/synthetic-codes",
+                "code": "returned_to_routine_screening"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

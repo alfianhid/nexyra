@@ -1,0 +1,60 @@
+{
+  "title": "Synthetic cohort generator assumptions (TICKET-07)",
+  "warning": "Every value here is an input to the generator. None of it is a finding. Drop-off rates in the synthetic cohort are inputs, not findings, and are never presented as Nexyra results.",
+  "synthetic": true,
+  "parameters": [
+    { "name": "cohort_size", "value": 1000, "unit": "cases", "source": "TICKET-07 scope (about 1,000 positive FIT cases)" },
+    { "name": "random_seed", "value": 20261117, "unit": "mulberry32 seed", "source": "team choice: fixed so two runs give identical data" },
+    { "name": "fit_window_days", "value": 365, "unit": "days", "source": "team guess: FIT results are spread evenly over the 365 days before demo day 0 (17 Nov 2026)" },
+    { "name": "age_min", "value": 45, "unit": "years", "source": "team guess: screening age band, needs clinical review" },
+    { "name": "age_max", "value": 75, "unit": "years", "source": "team guess: screening age band, needs clinical review" },
+
+    { "name": "dropoff_result_to_notified", "value": 0.12, "unit": "share of cases reaching the stage", "source": "team guess, calibrated with the other drop-offs so that the share reaching a colonoscopy is near the 30.5% anchor" },
+    { "name": "dropoff_notified_to_referral", "value": 0.25, "unit": "share of cases reaching the stage", "source": "team guess, calibrated against the 30.5% anchor" },
+    { "name": "dropoff_referral_unanswered", "value": 0.15, "unit": "share of referrals", "source": "team guess: referral sent, receiving provider never answers" },
+    { "name": "referral_rejection_share", "value": 0.12, "unit": "share of referrals", "source": "team guess: receiving provider rejects the referral (for example insufficient data)" },
+    { "name": "provider_change_share", "value": 0.05, "unit": "share of referrals", "source": "team guess: patient moves to another provider, so the referral is rejected" },
+    { "name": "rereferral_after_rejection", "value": 0.65, "unit": "share of rejected referrals", "source": "team guess: staff re-own the case and send a new referral; the rest stay unowned at 'patient notified'" },
+    { "name": "max_referral_attempts", "value": 3, "unit": "referrals per case", "source": "team guess: simplifying limit on the rejection loop" },
+    { "name": "dropoff_accepted_to_booked", "value": 0.2, "unit": "share of cases reaching the stage", "source": "team guess, calibrated against the 30.5% anchor" },
+    { "name": "dropoff_booked_no_show", "value": 0.25, "unit": "share of booked colonoscopies", "source": "team guess, calibrated against the 30.5% anchor" },
+    { "name": "incomplete_procedure_share", "value": 0.08, "unit": "share of first colonoscopies", "source": "team guess: examination incomplete, a new referral is needed" },
+    { "name": "repeat_procedure_incomplete_share", "value": 0.3, "unit": "share of repeat colonoscopies", "source": "team guess: a repeat examination that is again incomplete stalls the case" },
+    { "name": "dropoff_performed_to_pathology_ordered", "value": 0.03, "unit": "share of cases reaching the stage", "source": "team guess: handover from the endoscopy unit is missed" },
+    { "name": "dropoff_pathology_ordered_to_received", "value": 0.05, "unit": "share of cases reaching the stage", "source": "team guess: specimen or result lost between lab and programme" },
+    { "name": "dropoff_pathology_to_closure_proposed", "value": 0.06, "unit": "share of cases reaching the stage", "source": "team guess: result sits without a closure proposal" },
+    { "name": "dropoff_closure_proposed_to_confirmed", "value": 0.1, "unit": "share of cases reaching the stage", "source": "team guess: physician has not confirmed yet" },
+
+    { "name": "language_mix_ar", "value": 0.35, "unit": "share of patients", "source": "team guess: no source for the Abu Dhabi screening population; needs a real source" },
+    { "name": "language_mix_en", "value": 0.25, "unit": "share of patients", "source": "team guess: no source for the Abu Dhabi screening population; needs a real source" },
+    { "name": "language_mix_ur", "value": 0.15, "unit": "share of patients", "source": "team guess: no source for the Abu Dhabi screening population; needs a real source" },
+    { "name": "language_mix_hi", "value": 0.12, "unit": "share of patients", "source": "team guess: no source for the Abu Dhabi screening population; needs a real source" },
+    { "name": "language_mix_ml", "value": 0.08, "unit": "share of patients", "source": "team guess: no source for the Abu Dhabi screening population; needs a real source" },
+    { "name": "language_mix_tl", "value": 0.05, "unit": "share of patients", "source": "team guess: no source for the Abu Dhabi screening population; needs a real source" },
+
+    { "name": "pathology_mix_returned_to_routine_screening", "value": 0.6, "unit": "share of pathology results", "source": "team guess, order of magnitude only; needs clinical review (TICKET-19)" },
+    { "name": "pathology_mix_surveillance_scheduled", "value": 0.34, "unit": "share of pathology results", "source": "team guess, order of magnitude only; needs clinical review (TICKET-19)" },
+    { "name": "pathology_mix_oncology_accepted_therapy_started", "value": 0.06, "unit": "share of pathology results", "source": "team guess, order of magnitude only; needs clinical review (TICKET-19)" },
+
+    { "name": "time_result_to_notified", "value": { "median_hours": 36, "sigma": 0.8 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_notified_to_referral", "value": { "median_hours": 72, "sigma": 0.7 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_referral_to_response", "value": { "median_hours": 48, "sigma": 0.8 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_rejection_to_reowned", "value": { "median_hours": 24, "sigma": 0.6 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_reowned_to_rereferral", "value": { "median_hours": 72, "sigma": 0.7 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_accepted_to_booked", "value": { "median_hours": 96, "sigma": 0.7 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_booked_to_performed", "value": { "median_hours": 336, "sigma": 0.6 }, "unit": "hours, log-normal", "source": "team guess; the only published deadline is the 31-day referral-to-colonoscopy standard (HAAD, cited in BMC Cancer 2021), used as a reference and not as a parameter" },
+    { "name": "time_performed_to_handover", "value": { "median_hours": 2, "sigma": 0.5 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_handover_to_pathology_ordered", "value": { "median_hours": 4, "sigma": 0.5 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_pathology_ordered_to_received", "value": { "median_hours": 168, "sigma": 0.5 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_pathology_to_closure_proposed", "value": { "median_hours": 72, "sigma": 0.7 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_closure_proposed_to_confirmed", "value": { "median_hours": 48, "sigma": 0.7 }, "unit": "hours, log-normal", "source": "team guess" },
+    { "name": "time_performed_to_incomplete", "value": { "median_hours": 6, "sigma": 0.5 }, "unit": "hours, log-normal", "source": "team guess" }
+  ],
+  "references": [
+    { "name": "reference_colonoscopy_followup_abu_dhabi", "value": 0.305, "unit": "share of positive FIT", "source": "Abu Dhabi colonoscopy follow-up after a positive FIT, 2015 to 2016 data (docs/evidence.md; full paper citation still to be added by a team member). Used only as a calibration anchor for the product of the stage drop-offs, not as a result." },
+    { "name": "reference_followup_usual_care_atlas", "value": 0.229, "unit": "share", "source": "Atlas et al., JAMA 2023, usual-care arm (docs/evidence.md). Reference only; not used by the generator." },
+    { "name": "reference_followup_outreach_atlas", "value": 0.31, "unit": "share", "source": "Atlas et al., JAMA 2023, reminder + letter + phone outreach arm (docs/evidence.md). Reference only; not used by the generator." },
+    { "name": "reference_followup_outreach_navigator_atlas", "value": 0.314, "unit": "share", "source": "Atlas et al., JAMA 2023, outreach plus patient navigator arm (docs/evidence.md). Reference only; not used by the generator." },
+    { "name": "reference_referral_to_colonoscopy_limit_days", "value": 31, "unit": "days", "source": "HAAD standard, cited in BMC Cancer 2021 (docs/evidence.md). Reference only." }
+  ]
+}

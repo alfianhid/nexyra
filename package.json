@@ -9,6 +9,7 @@
     "preview": "vite preview --port 4173",
     "server": "tsx watch server/index.ts",
     "seed": "tsx server/seed.ts",
+    "seed:cohort": "tsx scripts/generate/cohort.ts",
     "test": "vitest run",
     "typecheck:server": "tsc -p tsconfig.server.json",
     "demo:reset": "tsx server/reset.ts",

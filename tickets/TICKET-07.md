@@ -2,7 +2,7 @@
 
 - **Priority:** P0 · **Day:** 16 Nov · **Estimate:** 3 hours · **Assignee:** Claude Code
 - **Depends on:** TICKET-03, TICKET-04
-- **Status:** not started
+- **Status:** done (the command is `npm run seed:cohort`, run after `npm run demo:reset`; `npm run seed` is still the three-case demo seed). Clinical sources for the pathology mix and screening age band are still team guesses, awaiting TICKET-19.
 
 ## Goal
 
@@ -22,11 +22,11 @@ Synthea, because it does not model patients who drop out midway through the FIT 
 
 ## Done when
 
-- [ ] `npm run seed` twice produces exactly the same data
-- [ ] Every seeded case passes `rebuildCase` (TICKET-03) without errors
-- [ ] `data/generator-assumptions.json` is complete and every parameter has a `source`
-- [ ] Changing one drop-off parameter changes the funnel in the expected direction
-- [ ] No name, identity number, or address resembles a real person
+- [x] `npm run seed:cohort` twice (after a reset) produces exactly the same data
+- [x] Every seeded case passes `rebuildCase` (TICKET-03) without errors
+- [x] `data/generator-assumptions.json` is complete and every parameter has a `source`
+- [x] Changing one drop-off parameter changes the funnel in the expected direction
+- [x] No name, identity number, or address resembles a real person
 
 ## Notes
 
