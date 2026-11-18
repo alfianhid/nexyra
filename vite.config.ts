@@ -8,7 +8,12 @@ export default defineConfig({
     // server/db.ts closeDb() forces a GC so libSQL releases temp database files on
     // Windows; the tests delete those files right after closing them.
     pool: "forks",
-    poolOptions: { forks: { execArgv: ["--expose-gc"] } },
+    // Several suites build the 1,000-case demo state in beforeAll. With one fork per core
+    // they starve each other and hit the default 10 s hook timeout (seen on a 14-core
+    // machine in the TICKET-23 check), so forks are capped and timeouts raised.
+    poolOptions: { forks: { execArgv: ["--expose-gc"], maxForks: 4, minForks: 1 } },
+    hookTimeout: 60_000,
+    testTimeout: 60_000,
     // Agent worktrees live under .claude/ and carry their own copies of the tests.
     exclude: ["**/node_modules/**", "**/dist/**", ".claude/**", "arsip-itmam/**"],
   },
