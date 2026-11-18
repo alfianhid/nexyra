@@ -244,26 +244,36 @@ describe("TICKET-16 done-when", () => {
 
   it("missing unstitched table gives an empty list, not an error", async () => {
     const { programmeSummary } = await import("./programme.js");
-    // TICKET-08 adds the table; this test removes it so it keeps proving the fallback.
-    await db.exec("DROP TABLE IF EXISTS unstitched");
-    const result = await programmeSummary(db, "program_manager");
-    expect(result.unstitched).toEqual({ available: false, count: 0, rows: [] });
+    // TICKET-08 creates the table; hiding it keeps proving the fallback for an older
+    // database without it, and renaming back leaves the schema intact for later tests.
+    await db.exec("ALTER TABLE unstitched RENAME TO unstitched_hidden");
+    try {
+      const result = await programmeSummary(db, "program_manager");
+      expect(result.unstitched).toEqual({ available: false, count: 0, rows: [] });
+    } finally {
+      await db.exec("ALTER TABLE unstitched_hidden RENAME TO unstitched");
+    }
   });
 
-  it("an unstitched table, once it exists, lights the section up", async () => {
+  it("queued unstitched resources light the section up; stitched ones do not", async () => {
     const { programmeSummary } = await import("./programme.js");
-    await db.exec("DROP TABLE IF EXISTS unstitched");
-    await db.exec(
-      "CREATE TABLE unstitched (id TEXT PRIMARY KEY, received_at TEXT, reason TEXT, summary TEXT, stitched_case_id TEXT)",
+    const insert = db.prepare(
+      `INSERT INTO unstitched
+         (id, resource_type, resource_id, reason_code, reason, resource, received_at, recorded_at,
+          status, stitched_case_id)
+       VALUES (?, ?, ?, ?, ?, '{}', ?, ?, ?, ?)`,
     );
-    await db
-      .prepare("INSERT INTO unstitched VALUES ('u_1', ?, 'No identifier match', 'ORU^R01 pathology', NULL), ('u_2', ?, 'x', 'y', 'F-1')")
-      .run(dayAt(39), dayAt(39));
-    const result = await programmeSummary(db, "program_manager");
-    expect(result.unstitched.available).toBe(true);
-    expect(result.unstitched.rows.map((r) => r.id)).toEqual(["u_1"]);
-    expect(result.unstitched.rows[0]?.reason).toBe("No identifier match");
-    await db.exec("DROP TABLE unstitched");
+    await insert.run("u_1", "DiagnosticReport", "dr-77", "no_match", "No identifier match", dayAt(39), dayAt(39), "queued", null);
+    await insert.run("u_2", "Procedure", "proc-9", "no_match", "x", dayAt(39), dayAt(39), "stitched", "F-1");
+    try {
+      const result = await programmeSummary(db, "program_manager");
+      expect(result.unstitched.available).toBe(true);
+      expect(result.unstitched.rows.map((r) => r.id)).toEqual(["u_1"]);
+      expect(result.unstitched.rows[0]?.reason).toBe("No identifier match");
+      expect(result.unstitched.rows[0]?.summary).toBe("DiagnosticReport dr-77");
+    } finally {
+      await db.exec("DELETE FROM unstitched WHERE id IN ('u_1', 'u_2')");
+    }
   });
 });
 

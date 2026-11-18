@@ -205,29 +205,30 @@ async function unstitchedQueue(db: Db) {
     .get<{ name: string }>();
   if (!table) return { available: false, count: 0, rows: [] as UnstitchedRow[] };
 
-  const raw = await db.prepare("SELECT rowid AS _rowid, * FROM unstitched").all<Record<string, unknown>>();
-  const text = (row: Record<string, unknown>, ...keys: string[]): string | null => {
-    for (const key of keys) {
-      const value = row[key];
-      if (typeof value === "string" && value.length > 0) return value;
-      if (typeof value === "number") return String(value);
-    }
-    return null;
-  };
+  // Schema from TICKET-08 (server/db.ts). A row matched to a case later is 'stitched'
+  // and is no longer an exception.
+  const raw = await db
+    .prepare(
+      `SELECT id, resource_type, resource_id, reason, received_at
+         FROM unstitched
+        WHERE status = 'queued'
+        ORDER BY received_at, id`,
+    )
+    .all<{
+      id: string;
+      resource_type: string;
+      resource_id: string;
+      reason: string;
+      received_at: string | null;
+    }>();
 
-  const rows: UnstitchedRow[] = raw
-    // A row that has since been matched to a case is no longer an exception.
-    .filter((row) => !text(row, "stitched_case_id", "case_id", "stitched_at", "resolved_at"))
-    .map((row) => {
-      const receivedAt = text(row, "received_at", "recorded_at", "occurred_at", "created_at");
-      return {
-        id: text(row, "id", "event_id") ?? `row_${String(row._rowid)}`,
-        received_at: receivedAt,
-        received_label: receivedAt ? formatDue(receivedAt) : "—",
-        reason: text(row, "reason", "status") ?? "Matched no case",
-        summary: text(row, "summary", "resource_type", "kind", "type", "source") ?? "—",
-      };
-    });
+  const rows: UnstitchedRow[] = raw.map((row) => ({
+    id: row.id,
+    received_at: row.received_at,
+    received_label: row.received_at ? formatDue(row.received_at) : "—",
+    reason: row.reason || "Matched no case",
+    summary: `${row.resource_type} ${row.resource_id}`,
+  }));
   return { available: true, count: rows.length, rows };
 }
 
